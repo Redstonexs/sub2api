@@ -138,3 +138,8 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
+# Local bundle / patch files
+*.bundle
+*.patch
+.omo/
