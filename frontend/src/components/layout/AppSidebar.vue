@@ -9,11 +9,11 @@
     <!-- Logo/Brand -->
     <div class="sidebar-header" :class="{ 'sidebar-header-collapsed': sidebarCollapsed }">
       <!-- Custom Logo or Default Logo -->
-      <div class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl shadow-glow">
+      <div class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
         <img v-if="settingsLoaded" :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
       </div>
       <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
-        <span class="sidebar-brand-title text-lg font-bold text-gray-900 dark:text-white">
+        <span class="sidebar-brand-title font-serif text-lg font-bold text-gray-900 dark:text-white">
           {{ siteName }}
         </span>
         <!-- Version Badge -->
@@ -962,14 +962,14 @@ onMounted(() => {
   right: 0.75rem;
   top: 50%;
   height: 1px;
-  background: rgb(229 231 235);
+  background: rgb(231 227 216);
   opacity: 0;
   transform: translateY(-50%);
   transition: opacity 0.18s ease;
 }
 
 .dark .sidebar-section-title::after {
-  background: rgb(55 65 81);
+  background: rgb(57 53 46);
 }
 
 .sidebar-section-title-text-collapsed {

@@ -6,11 +6,11 @@
       <!-- Logo & Title -->
       <div class="mb-8 text-center">
         <div
-          class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg"
+          class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-600 shadow-card"
         >
           <Icon name="cog" size="xl" class="text-white" />
         </div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ t('setup.title') }}</h1>
+        <h1 class="font-serif text-3xl font-bold text-gray-900 dark:text-white">{{ t('setup.title') }}</h1>
         <p class="mt-2 text-gray-500 dark:text-dark-400">{{ t('setup.description') }}</p>
       </div>
 

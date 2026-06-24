@@ -13,7 +13,7 @@
       >
         <div class="flex items-center gap-3">
           <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600"
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600"
           >
             <Icon name="chartBar" size="md" class="text-white" />
           </div>
