@@ -5,51 +5,70 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 主色调 - Teal/Cyan 青色系
+        // 主色调 - Clay/Terracotta 陶土色系 (Anthropic editorial)
         primary: {
-          50: '#f0fdfa',
-          100: '#ccfbf1',
-          200: '#99f6e4',
-          300: '#5eead4',
-          400: '#2dd4bf',
-          500: '#14b8a6',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
-          950: '#042f2e'
+          50: '#FBF3EF',
+          100: '#F5E1D7',
+          200: '#EBC3AF',
+          300: '#DFA184',
+          400: '#D98E6A',
+          500: '#CC785C',
+          600: '#B05C40',
+          700: '#8F4A34',
+          800: '#73402F',
+          900: '#5E3728',
+          950: '#331B14'
         },
-        // 辅助色 - 深蓝灰
+        // 中性色覆盖 - Warm Stone 暖石色系 (覆盖 Tailwind 内置 gray)
+        gray: {
+          50: '#FAF9F5',
+          100: '#F3F1EA',
+          200: '#E7E3D8',
+          300: '#D5CFC0',
+          400: '#ABA493',
+          500: '#827B6C',
+          600: '#605A4E',
+          700: '#45413A',
+          800: '#2B2823',
+          900: '#1A1815',
+          950: '#100F0C'
+        },
+        // 辅助色 - 暖炭/暖褐 (镜像 dark)
         accent: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617'
+          50: '#F8F6F0',
+          100: '#EDEAE1',
+          200: '#DAD5C9',
+          300: '#BBB4A6',
+          400: '#938C7E',
+          500: '#6E685C',
+          600: '#4C473E',
+          700: '#39352E',
+          800: '#2A2722',
+          900: '#211F1A',
+          950: '#1A1814'
         },
-        // 深色模式背景
+        // 深色模式背景 - Warm Charcoal 暖炭色系
         dark: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617'
+          50: '#F8F6F0',
+          100: '#EDEAE1',
+          200: '#DAD5C9',
+          300: '#BBB4A6',
+          400: '#938C7E',
+          500: '#6E685C',
+          600: '#4C473E',
+          700: '#39352E',
+          800: '#2A2722',
+          900: '#211F1A',
+          950: '#1A1814'
         }
       },
       fontFamily: {
+        // 衬线展示字体 - Fraunces (标题/展示)
+        serif: ['Fraunces', 'Fraunces Variable', 'Georgia', 'Songti SC', 'SimSun', 'serif'],
+        // 无衬线 UI 字体 - Inter 优先, 保留 CJK 系统回退
         sans: [
+          'Inter',
+          'Inter Variable',
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
@@ -65,22 +84,24 @@ export default {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
       },
       boxShadow: {
-        glass: '0 8px 32px rgba(0, 0, 0, 0.08)',
-        'glass-sm': '0 4px 16px rgba(0, 0, 0, 0.06)',
-        glow: '0 0 20px rgba(20, 184, 166, 0.25)',
-        'glow-lg': '0 0 40px rgba(20, 184, 166, 0.35)',
-        card: '0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 10px 40px rgba(0, 0, 0, 0.08)',
-        'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+        // 扁平化的暖色阴影 (保留 token 名以免引用失效)
+        glass: '0 1px 2px rgba(20, 15, 10, 0.04)',
+        'glass-sm': '0 1px 2px rgba(20, 15, 10, 0.03)',
+        glow: '0 1px 2px rgba(20, 15, 10, 0.04)',
+        'glow-lg': '0 6px 20px rgba(20, 15, 10, 0.06)',
+        card: '0 1px 2px rgba(20, 15, 10, 0.04)',
+        'card-hover': '0 6px 20px rgba(20, 15, 10, 0.06)',
+        'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.08)'
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
-        'gradient-dark': 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #CC785C 0%, #B05C40 100%)',
+        'gradient-dark': 'linear-gradient(135deg, #2A2722 0%, #1A1814 100%)',
         'gradient-glass':
-          'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+          'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+        // 几乎无形的暖奶油色微光
         'mesh-gradient':
-          'radial-gradient(at 40% 20%, rgba(20, 184, 166, 0.12) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(6, 182, 212, 0.08) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(20, 184, 166, 0.08) 0px, transparent 50%)'
+          'radial-gradient(at 40% 20%, rgba(204, 120, 92, 0.05) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(176, 92, 64, 0.03) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(204, 120, 92, 0.03) 0px, transparent 50%)'
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
@@ -118,8 +139,8 @@ export default {
           '100%': { backgroundPosition: '200% 0' }
         },
         glow: {
-          '0%': { boxShadow: '0 0 20px rgba(20, 184, 166, 0.25)' },
-          '100%': { boxShadow: '0 0 30px rgba(20, 184, 166, 0.4)' }
+          '0%': { boxShadow: '0 1px 2px rgba(20, 15, 10, 0.04)' },
+          '100%': { boxShadow: '0 6px 20px rgba(20, 15, 10, 0.08)' }
         }
       },
       backdropBlur: {

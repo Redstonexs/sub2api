@@ -1,5 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+// Self-hosted fonts (bundled by Vite, served same-origin → CSP-safe, offline-friendly)
+import '@fontsource-variable/inter'
+import '@fontsource-variable/fraunces'
 import App from './App.vue'
 import router from './router'
 import i18n, { initI18n } from './i18n'

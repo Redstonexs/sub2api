@@ -2,16 +2,6 @@
   <div
     class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-4 dark:bg-dark-950"
   >
-    <!-- Background Decoration -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        class="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-primary-400/10 blur-3xl"
-      ></div>
-      <div
-        class="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-primary-500/10 blur-3xl"
-      ></div>
-    </div>
-
     <div class="relative z-10 w-full max-w-md text-center">
       <!-- 404 Display -->
       <div class="mb-8">
@@ -21,7 +11,7 @@
           >
           <div class="absolute inset-0 flex items-center justify-center">
             <div
-              class="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30"
+              class="flex h-24 w-24 items-center justify-center rounded-2xl bg-primary-600 shadow-card"
             >
               <svg
                 class="h-12 w-12 text-white"
