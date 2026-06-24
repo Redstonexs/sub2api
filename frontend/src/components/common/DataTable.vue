@@ -752,7 +752,7 @@ defineExpose({
 }
 
 .dark .table-wrapper .table-header {
-  background-color: rgb(31 41 55);
+  background-color: #2A2722; /* dark-800，与 thead 的 dark:bg-dark-800 一致 */
 }
 
 /* 表体保持在表头下方 */
@@ -770,7 +770,7 @@ defineExpose({
 }
 
 .dark .sticky-header-cell {
-  background-color: rgb(31 41 55);
+  background-color: #2A2722; /* dark-800 */
 }
 
 /* Sticky 列基础样式 */
@@ -810,7 +810,7 @@ tbody .sticky-col {
 }
 
 .dark tbody .sticky-col {
-  background-color: rgb(17 24 39);
+  background-color: #211F1A; /* dark-900，与表体 dark:bg-dark-900 一致 */
 }
 
 /* hover 状态保持 */
@@ -819,7 +819,7 @@ tbody tr:hover .sticky-col {
 }
 
 .dark tbody tr:hover .sticky-col {
-  background-color: rgb(31 41 55);
+  background-color: #2A2722; /* dark-800，与行 hover 的 dark:hover:bg-dark-800 一致 */
 }
 
 /* 阴影只在可滚动时显示 */
