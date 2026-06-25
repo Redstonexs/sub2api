@@ -36,9 +36,9 @@ func ToSafeHTML(content string) string {
 		}
 		escaped := html.EscapeString(block)
 		escaped = strings.ReplaceAll(escaped, "\n", "<br>")
-		b.WriteString("<p>")
-		b.WriteString(escaped)
-		b.WriteString("</p>")
+		_, _ = b.WriteString("<p>")
+		_, _ = b.WriteString(escaped)
+		_, _ = b.WriteString("</p>")
 	}
 	return b.String()
 }
