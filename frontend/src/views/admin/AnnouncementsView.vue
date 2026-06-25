@@ -82,10 +82,12 @@
                 'badge',
                 row.notify_mode === 'popup'
                   ? 'badge-warning'
-                  : 'badge-gray'
+                  : row.notify_mode === 'email'
+                    ? 'badge-primary'
+                    : 'badge-gray'
               ]"
             >
-              {{ row.notify_mode === 'popup' ? t('admin.announcements.notifyModeLabels.popup') : t('admin.announcements.notifyModeLabels.silent') }}
+              {{ t(`admin.announcements.notifyModeLabels.${row.notify_mode || 'silent'}`) }}
             </span>
           </template>
 
@@ -304,7 +306,8 @@ const statusOptions = computed(() => [
 
 const notifyModeOptions = computed(() => [
   { value: 'silent', label: t('admin.announcements.notifyModeLabels.silent') },
-  { value: 'popup', label: t('admin.announcements.notifyModeLabels.popup') }
+  { value: 'popup', label: t('admin.announcements.notifyModeLabels.popup') },
+  { value: 'email', label: t('admin.announcements.notifyModeLabels.email') }
 ])
 
 const columns = computed<Column[]>(() => [

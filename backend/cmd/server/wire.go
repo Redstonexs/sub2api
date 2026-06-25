@@ -100,6 +100,7 @@ func provideCleanup(
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
 	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
+	announcementBroadcastService *service.AnnouncementBroadcastService,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -194,6 +195,12 @@ func provideCleanup(
 			}},
 			{"EmailQueueService", func() error {
 				emailQueue.Stop()
+				return nil
+			}},
+			{"AnnouncementBroadcastService", func() error {
+				if announcementBroadcastService != nil {
+					announcementBroadcastService.Stop()
+				}
 				return nil
 			}},
 			{"BillingCacheService", func() error {

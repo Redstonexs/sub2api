@@ -16,6 +16,8 @@ const (
 const (
 	AnnouncementNotifyModeSilent = "silent"
 	AnnouncementNotifyModePopup  = "popup"
+	// AnnouncementNotifyModeEmail broadcasts the announcement as an email to all targeted users.
+	AnnouncementNotifyModeEmail = "email"
 )
 
 const (

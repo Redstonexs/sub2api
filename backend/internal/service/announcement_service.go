@@ -16,6 +16,7 @@ type AnnouncementService struct {
 	readRepo         AnnouncementReadRepository
 	userRepo         UserRepository
 	userSubRepo      UserSubscriptionRepository
+	broadcaster      *AnnouncementBroadcastService
 }
 
 func NewAnnouncementService(
@@ -23,12 +24,30 @@ func NewAnnouncementService(
 	readRepo AnnouncementReadRepository,
 	userRepo UserRepository,
 	userSubRepo UserSubscriptionRepository,
+	broadcaster *AnnouncementBroadcastService,
 ) *AnnouncementService {
 	return &AnnouncementService{
 		announcementRepo: announcementRepo,
 		readRepo:         readRepo,
 		userRepo:         userRepo,
 		userSubRepo:      userSubRepo,
+		broadcaster:      broadcaster,
+	}
+}
+
+// maybeBroadcastEmail dispatches an email broadcast when the saved announcement is
+// active with the email notify mode and just transitioned into that state.
+// prevActiveEmail reports whether it was already active+email before the save (always
+// false for newly created announcements). Re-publishing is harmless regardless because
+// delivery dedup prevents double-sends, but gating on the transition avoids re-scanning
+// every user on unrelated edits.
+func (s *AnnouncementService) maybeBroadcastEmail(a *Announcement, prevActiveEmail bool) {
+	if s.broadcaster == nil || a == nil {
+		return
+	}
+	nowActiveEmail := a.Status == AnnouncementStatusActive && a.NotifyMode == AnnouncementNotifyModeEmail
+	if nowActiveEmail && !prevActiveEmail {
+		s.broadcaster.Dispatch(a)
 	}
 }
 
@@ -126,6 +145,7 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 	if err := s.announcementRepo.Create(ctx, a); err != nil {
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
+	s.maybeBroadcastEmail(a, false)
 	return a, nil
 }
 
@@ -138,6 +158,10 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 	if err != nil {
 		return nil, err
 	}
+
+	// Capture pre-update state so we only broadcast when the announcement transitions
+	// into active+email (not on every subsequent edit while already published).
+	prevActiveEmail := a.Status == AnnouncementStatusActive && a.NotifyMode == AnnouncementNotifyModeEmail
 
 	if input.Title != nil {
 		title := strings.TrimSpace(*input.Title)
@@ -197,6 +221,7 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 	if err := s.announcementRepo.Update(ctx, a); err != nil {
 		return nil, fmt.Errorf("update announcement: %w", err)
 	}
+	s.maybeBroadcastEmail(a, prevActiveEmail)
 	return a, nil
 }
 
@@ -398,7 +423,7 @@ func isValidAnnouncementStatus(status string) bool {
 
 func isValidAnnouncementNotifyMode(mode string) bool {
 	switch mode {
-	case AnnouncementNotifyModeSilent, AnnouncementNotifyModePopup:
+	case AnnouncementNotifyModeSilent, AnnouncementNotifyModePopup, AnnouncementNotifyModeEmail:
 		return true
 	default:
 		return false
