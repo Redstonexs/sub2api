@@ -72,5 +72,5 @@ volumes:
 
 ## Links
 
-- [GitHub Repository](https://github.com/weishaw/sub2api)
-- [Documentation](https://github.com/weishaw/sub2api#readme)
+- [GitHub Repository](https://github.com/Redstonexs/sub2api)
+- [Documentation](https://github.com/Redstonexs/sub2api#readme)
