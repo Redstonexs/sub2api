@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -799,6 +800,24 @@ type GatewayConfig struct {
 	// UserMessageQueue: 用户消息串行队列配置
 	// 对 role:"user" 的真实用户消息实施账号级串行化 + RPM 自适应延迟
 	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
+
+	// ErrorMessages: 网关返回给客户端的错误提示自定义映射。
+	// key 为 HTTP 状态码字符串（如 "429"、"502"），value 为覆盖后的用户提示。
+	// 未配置或值为空/空白时，使用各错误点的默认提示。
+	ErrorMessages map[string]string `mapstructure:"error_messages"`
+}
+
+// GatewayErrorMessage 返回指定 HTTP 状态码对应的自定义用户提示。
+// 如果未配置、不存在或值为空/空白，则返回 defaultMessage。
+func GatewayErrorMessage(cfg *Config, code int, defaultMessage string) string {
+	if cfg == nil {
+		return defaultMessage
+	}
+	msg, ok := cfg.Gateway.ErrorMessages[strconv.Itoa(code)]
+	if !ok || strings.TrimSpace(msg) == "" {
+		return defaultMessage
+	}
+	return msg
 }
 
 // GatewayOpenAIHTTP2Config OpenAI HTTP 上游协议配置。
@@ -1826,6 +1845,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.failover_on_400", false)
 	viper.SetDefault("gateway.max_account_switches", 10)
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
+	// 网关返回给客户端的错误提示自定义映射（key 为状态码字符串，如 "429"、"502"）
+	viper.SetDefault("gateway.error_messages", map[string]string{})
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)

@@ -1500,7 +1500,7 @@ func (h *GatewayHandler) calculateSubscriptionRemaining(group *service.Group, su
 
 // handleConcurrencyError handles concurrency-related acquire errors.
 func (h *GatewayHandler) handleConcurrencyError(c *gin.Context, err error, slotType string, streamStarted bool) {
-	status, errType, message := concurrencyErrorResponse(err, slotType)
+	status, errType, message := concurrencyErrorResponse(h.cfg, err, slotType)
 	h.handleStreamingAwareError(c, status, errType, message, streamStarted)
 }
 
@@ -1556,17 +1556,23 @@ func (h *GatewayHandler) handleFailoverExhaustedSimple(c *gin.Context, statusCod
 func (h *GatewayHandler) mapUpstreamError(statusCode int) (int, string, string) {
 	switch statusCode {
 	case 401:
-		return http.StatusBadGateway, "upstream_error", "Upstream authentication failed, please contact administrator"
+		return http.StatusBadGateway, "upstream_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusBadGateway, "Upstream authentication failed, please contact administrator")
 	case 403:
-		return http.StatusBadGateway, "upstream_error", "Upstream access forbidden, please contact administrator"
+		return http.StatusBadGateway, "upstream_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusBadGateway, "Upstream access forbidden, please contact administrator")
 	case 429:
-		return http.StatusTooManyRequests, "rate_limit_error", "Upstream rate limit exceeded, please retry later"
+		return http.StatusTooManyRequests, "rate_limit_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusTooManyRequests, "Upstream rate limit exceeded, please retry later")
 	case 529:
-		return http.StatusServiceUnavailable, "overloaded_error", "Upstream service overloaded, please retry later"
+		return http.StatusServiceUnavailable, "overloaded_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusServiceUnavailable, "Upstream service overloaded, please retry later")
 	case 500, 502, 503, 504:
-		return http.StatusBadGateway, "upstream_error", "Upstream service temporarily unavailable"
+		return http.StatusBadGateway, "upstream_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusBadGateway, "Upstream service temporarily unavailable")
 	default:
-		return http.StatusBadGateway, "upstream_error", "Upstream request failed"
+		return http.StatusBadGateway, "upstream_error",
+			config.GatewayErrorMessage(h.cfg, http.StatusBadGateway, "Upstream request failed")
 	}
 }
 
@@ -1612,7 +1618,8 @@ func (h *GatewayHandler) ensureForwardErrorResponse(c *gin.Context, streamStarte
 	if c.Writer.Written() {
 		streamStarted = true
 	}
-	h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed", streamStarted)
+	h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error",
+		config.GatewayErrorMessage(h.cfg, http.StatusBadGateway, "Upstream request failed"), streamStarted)
 	return true
 }
 

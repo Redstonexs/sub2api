@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -158,4 +160,33 @@ func TestHandleOpenAIUpstreamTransportError_DeadlineExceeded_StillFailsOver(t *t
 
 	var fo *UpstreamFailoverError
 	require.True(t, errors.As(err, &fo), "context.DeadlineExceeded must still return *UpstreamFailoverError")
+}
+
+func TestHandleOpenAIUpstreamTransportError_Custom502Message(t *testing.T) {
+	svc := &OpenAIGatewayService{
+		accountRepo: nil,
+		cfg: &config.Config{
+			Gateway: config.GatewayConfig{
+				ErrorMessages: map[string]string{
+					"502": "Friendly upstream outage, please retry later.",
+				},
+			},
+		},
+	}
+	account := &Account{ID: 80, Name: "custom-msg", Platform: PlatformOpenAI}
+	c, _ := newOpenAITransportErrTestContext()
+
+	err := svc.handleOpenAIUpstreamTransportError(context.Background(), c, account,
+		context.DeadlineExceeded, false)
+
+	var fo *UpstreamFailoverError
+	require.True(t, errors.As(err, &fo), "must return *UpstreamFailoverError")
+	require.Equal(t, http.StatusBadGateway, fo.StatusCode)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(fo.ResponseBody, &body))
+	errorObj, ok := body["error"].(map[string]any)
+	require.True(t, ok, "response body must contain error object")
+	require.Equal(t, "upstream_error", errorObj["type"])
+	require.Equal(t, "Friendly upstream outage, please retry later.", errorObj["message"])
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -214,6 +215,78 @@ func TestLoadOpenAIResponseHeaderTimeoutFromEnv(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, 1800, cfg.Gateway.OpenAIResponseHeaderTimeout)
+}
+
+func TestLoadDefaultGatewayErrorMessages(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Gateway.ErrorMessages)
+	require.Empty(t, cfg.Gateway.ErrorMessages)
+}
+
+func TestGatewayErrorMessage(t *testing.T) {
+	defaultMessage := "default message"
+	statusCode := 429
+	statusCodeKey := strconv.Itoa(statusCode)
+
+	tests := []struct {
+		name     string
+		cfg      *Config
+		code     int
+		fallback string
+		want     string
+	}{
+		{
+			name:     "nil config returns default",
+			cfg:      nil,
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     defaultMessage,
+		},
+		{
+			name:     "nil map returns default",
+			cfg:      &Config{},
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     defaultMessage,
+		},
+		{
+			name:     "empty map returns default",
+			cfg:      &Config{Gateway: GatewayConfig{ErrorMessages: map[string]string{}}},
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     defaultMessage,
+		},
+		{
+			name:     "configured code returns override",
+			cfg:      &Config{Gateway: GatewayConfig{ErrorMessages: map[string]string{statusCodeKey: "too many requests"}}},
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     "too many requests",
+		},
+		{
+			name:     "missing key returns default",
+			cfg:      &Config{Gateway: GatewayConfig{ErrorMessages: map[string]string{"500": "server error"}}},
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     defaultMessage,
+		},
+		{
+			name:     "blank configured value returns default",
+			cfg:      &Config{Gateway: GatewayConfig{ErrorMessages: map[string]string{statusCodeKey: "   "}}},
+			code:     statusCode,
+			fallback: defaultMessage,
+			want:     defaultMessage,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, GatewayErrorMessage(tt.cfg, tt.code, tt.fallback))
+		})
+	}
 }
 
 func TestLoadOpenAIWSStickyTTLCompatibility(t *testing.T) {
