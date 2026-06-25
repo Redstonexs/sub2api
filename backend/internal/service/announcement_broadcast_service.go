@@ -144,6 +144,7 @@ func (s *AnnouncementBroadcastService) Dispatch(ann *Announcement) {
 func (s *AnnouncementBroadcastService) resolveAndEnqueue(annID int64, title, contentHTML string, targeting AnnouncementTargeting) {
 	now := time.Now()
 	enqueued := 0
+	suppressed := 0
 
 	for page := 1; ; page++ {
 		select {
@@ -179,6 +180,19 @@ func (s *AnnouncementBroadcastService) resolveAndEnqueue(annID int64, title, con
 				name = emailRecipientName(email)
 			}
 
+			unsubscribeCtx, unsubscribeCancel := context.WithTimeout(context.Background(), announcementBroadcastListTimeout)
+			unsubscribed, err := s.notificationEmailService.IsUnsubscribed(unsubscribeCtx, email, NotificationEmailEventAnnouncementBroadcast)
+			unsubscribeCancel()
+			if err != nil {
+				logger.LegacyPrintf("service.announcement_broadcast",
+					"[AnnouncementBroadcast] unsubscribe lookup failed for announcement %d recipient %s: %v", annID, email, err)
+				continue
+			}
+			if unsubscribed {
+				suppressed++
+				continue
+			}
+
 			job := announcementBroadcastJob{
 				announcementID: annID,
 				title:          title,
@@ -201,7 +215,7 @@ func (s *AnnouncementBroadcastService) resolveAndEnqueue(annID int64, title, con
 	}
 
 	logger.LegacyPrintf("service.announcement_broadcast",
-		"[AnnouncementBroadcast] enqueued %d recipients for announcement %d", enqueued, annID)
+		"[AnnouncementBroadcast] enqueued %d recipients, suppressed %d recipients for announcement %d", enqueued, suppressed, annID)
 }
 
 // Stop stops the worker pool and waits for in-flight sends to finish.

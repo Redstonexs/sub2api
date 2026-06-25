@@ -92,4 +92,53 @@ describe('AnnouncementReadStatusDialog', () => {
 
     expect(getReadStatus).toHaveBeenCalledTimes(1)
   })
+
+  it('renders email unsubscribe status badge for each user', async () => {
+    getReadStatus.mockResolvedValue({
+      items: [
+        { user_id: 1, email: 'alice@example.com', username: 'alice', balance: 10, eligible: true, announcement_email_unsubscribed: true, read_at: null },
+        { user_id: 2, email: 'bob@example.com', username: 'bob', balance: 5, eligible: false, announcement_email_unsubscribed: false, read_at: null },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const DataTableStub = {
+      props: ['columns', 'data', 'loading', 'serverSideSort', 'defaultSortKey', 'defaultSortOrder'],
+      emits: ['sort'],
+      template: `
+        <div class="data-table-stub">
+          <div v-for="(row, i) in data" :key="i" class="row">
+            <div v-for="col in columns" :key="col.key" class="cell" :data-col="col.key">
+              <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">{{ row[col.key] }}</slot>
+            </div>
+          </div>
+        </div>
+      `,
+    }
+
+    const wrapper = mount(AnnouncementReadStatusDialog, {
+      props: {
+        show: false,
+        announcementId: 1,
+      },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          DataTable: DataTableStub,
+          Pagination: true,
+          Icon: true,
+        },
+      },
+    })
+
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    const html = wrapper.html()
+    expect(html).toContain('admin.announcements.emailUnsubscribed')
+    expect(html).toContain('admin.announcements.emailSubscribed')
+  })
 })

@@ -358,6 +358,7 @@ export interface AnnouncementUserReadStatus {
   username: string
   balance: number
   eligible: boolean
+  announcement_email_unsubscribed: boolean
   read_at?: string
 }
 

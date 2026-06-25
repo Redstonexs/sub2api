@@ -44,6 +44,12 @@
           </span>
         </template>
 
+        <template #cell-announcement_email_unsubscribed="{ value }">
+          <span :class="['badge', value ? 'badge-warning' : 'badge-success']">
+            {{ value ? t('admin.announcements.emailUnsubscribed') : t('admin.announcements.emailSubscribed') }}
+          </span>
+        </template>
+
         <template #cell-read_at="{ value }">
           <span class="text-sm text-gray-500 dark:text-dark-400">
             {{ value ? formatDateTime(value) : t('admin.announcements.unread') }}
@@ -118,6 +124,7 @@ const columns = computed<Column[]>(() => [
   { key: 'username', label: t('admin.users.columns.username'), sortable: true },
   { key: 'balance', label: t('common.balance'), sortable: true },
   { key: 'eligible', label: t('admin.announcements.eligible') },
+  { key: 'announcement_email_unsubscribed', label: t('admin.announcements.emailUnsubscribedLabel') },
   { key: 'read_at', label: t('admin.announcements.readAt') }
 ])
 

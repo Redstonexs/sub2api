@@ -17,6 +17,7 @@ type AnnouncementService struct {
 	userRepo         UserRepository
 	userSubRepo      UserSubscriptionRepository
 	broadcaster      *AnnouncementBroadcastService
+	notificationEmailService *NotificationEmailService
 }
 
 func NewAnnouncementService(
@@ -25,6 +26,7 @@ func NewAnnouncementService(
 	userRepo UserRepository,
 	userSubRepo UserSubscriptionRepository,
 	broadcaster *AnnouncementBroadcastService,
+	notificationEmailService *NotificationEmailService,
 ) *AnnouncementService {
 	return &AnnouncementService{
 		announcementRepo: announcementRepo,
@@ -32,6 +34,7 @@ func NewAnnouncementService(
 		userRepo:         userRepo,
 		userSubRepo:      userSubRepo,
 		broadcaster:      broadcaster,
+		notificationEmailService: notificationEmailService,
 	}
 }
 
@@ -79,12 +82,13 @@ type UserAnnouncement struct {
 }
 
 type AnnouncementUserReadStatus struct {
-	UserID   int64      `json:"user_id"`
-	Email    string     `json:"email"`
-	Username string     `json:"username"`
-	Balance  float64    `json:"balance"`
-	Eligible bool       `json:"eligible"`
-	ReadAt   *time.Time `json:"read_at,omitempty"`
+	UserID                        int64      `json:"user_id"`
+	Email                         string     `json:"email"`
+	Username                      string     `json:"username"`
+	Balance                       float64    `json:"balance"`
+	Eligible                      bool       `json:"eligible"`
+	AnnouncementEmailUnsubscribed bool       `json:"announcement_email_unsubscribed"`
+	ReadAt                        *time.Time `json:"read_at,omitempty"`
 }
 
 func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncementInput) (*Announcement, error) {
@@ -399,13 +403,22 @@ func (s *AnnouncementService) ListUserReadStatus(
 			ptr = &t
 		}
 
+		announcementEmailUnsubscribed := false
+		if s.notificationEmailService != nil && strings.TrimSpace(u.Email) != "" {
+			announcementEmailUnsubscribed, err = s.notificationEmailService.IsUnsubscribed(ctx, u.Email, NotificationEmailEventAnnouncementBroadcast)
+			if err != nil {
+				return nil, nil, fmt.Errorf("check unsubscribe status: %w", err)
+			}
+		}
+
 		out = append(out, AnnouncementUserReadStatus{
-			UserID:   u.ID,
-			Email:    u.Email,
-			Username: u.Username,
-			Balance:  u.Balance,
-			Eligible: domain.AnnouncementTargeting(ann.Targeting).Matches(u.Balance, activeGroupIDs),
-			ReadAt:   ptr,
+			UserID:                        u.ID,
+			Email:                         u.Email,
+			Username:                      u.Username,
+			Balance:                       u.Balance,
+			Eligible:                      domain.AnnouncementTargeting(ann.Targeting).Matches(u.Balance, activeGroupIDs),
+			AnnouncementEmailUnsubscribed: announcementEmailUnsubscribed,
+			ReadAt:                        ptr,
 		})
 	}
 
