@@ -6487,6 +6487,7 @@
                 </p>
               </div>
               <button
+                v-if="form.email_provider === 'smtp'"
                 type="button"
                 @click="testSmtpConnection"
                 :disabled="testingSmtp || loadFailed"
@@ -6520,7 +6521,88 @@
               </button>
             </div>
             <div class="space-y-6 p-6">
-              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <!-- Sending method (provider) -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.email.provider") }}
+                </label>
+                <select v-model="form.email_provider" class="input">
+                  <option value="smtp">
+                    {{ t("admin.settings.email.providerSmtp") }}
+                  </option>
+                  <option value="resend">
+                    {{ t("admin.settings.email.providerResend") }}
+                  </option>
+                  <option value="cyberpanel">
+                    {{ t("admin.settings.email.providerCyberPanel") }}
+                  </option>
+                </select>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.email.providerHint") }}
+                </p>
+              </div>
+
+              <!-- API provider credentials (resend / cyberpanel) -->
+              <div
+                v-if="form.email_provider !== 'smtp'"
+                class="grid grid-cols-1 gap-6 md:grid-cols-2"
+              >
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.email.apiBaseUrl") }}
+                  </label>
+                  <input
+                    v-model="form.email_api_base_url"
+                    type="text"
+                    class="input"
+                    :placeholder="
+                      form.email_provider === 'cyberpanel'
+                        ? t('admin.settings.email.apiBaseUrlPlaceholderCyberPanel')
+                        : t('admin.settings.email.apiBaseUrlPlaceholderResend')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.email.apiBaseUrlHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.email.apiKey") }}
+                  </label>
+                  <input
+                    v-model="form.email_api_key"
+                    type="password"
+                    class="input"
+                    autocomplete="new-password"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    :placeholder="
+                      form.email_api_key_configured
+                        ? t('admin.settings.email.apiKeyConfiguredPlaceholder')
+                        : t('admin.settings.email.apiKeyPlaceholder')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      form.email_api_key_configured
+                        ? t("admin.settings.email.apiKeyConfiguredHint")
+                        : t("admin.settings.email.apiKeyHint")
+                    }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- SMTP credentials -->
+              <div
+                v-if="form.email_provider === 'smtp'"
+                class="grid grid-cols-1 gap-6 md:grid-cols-2"
+              >
                 <div>
                   <label
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -6591,6 +6673,10 @@
                     }}
                   </p>
                 </div>
+              </div>
+
+              <!-- Sender identity (shared by all providers) -->
+              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   <label
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -6619,8 +6705,9 @@
                 </div>
               </div>
 
-              <!-- Use TLS Toggle -->
+              <!-- Use TLS Toggle (SMTP only) -->
               <div
+                v-if="form.email_provider === 'smtp'"
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
               >
                 <div>
@@ -7620,6 +7707,7 @@ type SettingsForm = Omit<
   | "wechat_connect_mobile_enabled"
 > & {
   smtp_password: string;
+  email_api_key: string;
   turnstile_secret_key: string;
   linuxdo_connect_client_secret: string;
   dingtalk_connect_client_secret: string;
@@ -7719,6 +7807,10 @@ const form = reactive<SettingsForm>({
   smtp_from_email: "",
   smtp_from_name: "",
   smtp_use_tls: true,
+  email_provider: "smtp",
+  email_api_base_url: "",
+  email_api_key: "",
+  email_api_key_configured: false,
   // Cloudflare Turnstile
   turnstile_enabled: false,
   turnstile_site_key: "",
@@ -8496,6 +8588,7 @@ async function loadSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.email_api_key = "";
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";
@@ -8849,6 +8942,9 @@ async function saveSettings() {
       smtp_from_email: form.smtp_from_email,
       smtp_from_name: form.smtp_from_name,
       smtp_use_tls: form.smtp_use_tls,
+      email_provider: form.email_provider,
+      email_api_base_url: form.email_api_base_url,
+      email_api_key: form.email_api_key || undefined,
       turnstile_enabled: form.turnstile_enabled,
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
@@ -9074,6 +9170,7 @@ async function saveSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.email_api_key = "";
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";

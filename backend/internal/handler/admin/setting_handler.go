@@ -139,6 +139,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		SMTPFrom:                               settings.SMTPFrom,
 		SMTPFromName:                           settings.SMTPFromName,
 		SMTPUseTLS:                             settings.SMTPUseTLS,
+		EmailProvider:                          settings.EmailProvider,
+		EmailAPIBaseURL:                        settings.EmailAPIBaseURL,
+		EmailAPIKeyConfigured:                  settings.EmailAPIKeyConfigured,
 		TurnstileEnabled:                       settings.TurnstileEnabled,
 		TurnstileSiteKey:                       settings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:           settings.TurnstileSecretKeyConfigured,
@@ -410,6 +413,11 @@ type UpdateSettingsRequest struct {
 	SMTPFrom     string `json:"smtp_from_email"`
 	SMTPFromName string `json:"smtp_from_name"`
 	SMTPUseTLS   bool   `json:"smtp_use_tls"`
+
+	// 邮件发送渠道（smtp|resend|cyberpanel）及 API 凭据
+	EmailProvider   string `json:"email_provider"`
+	EmailAPIBaseURL string `json:"email_api_base_url"`
+	EmailAPIKey     string `json:"email_api_key"`
 
 	// Cloudflare Turnstile 设置
 	TurnstileEnabled   bool   `json:"turnstile_enabled"`
@@ -1503,6 +1511,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SMTPFrom:                         req.SMTPFrom,
 		SMTPFromName:                     req.SMTPFromName,
 		SMTPUseTLS:                       req.SMTPUseTLS,
+		EmailProvider:                    req.EmailProvider,
+		EmailAPIBaseURL:                  req.EmailAPIBaseURL,
+		EmailAPIKey:                      req.EmailAPIKey,
 		TurnstileEnabled:                 req.TurnstileEnabled,
 		TurnstileSiteKey:                 req.TurnstileSiteKey,
 		TurnstileSecretKey:               req.TurnstileSecretKey,
@@ -1981,6 +1992,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SMTPFrom:                               updatedSettings.SMTPFrom,
 		SMTPFromName:                           updatedSettings.SMTPFromName,
 		SMTPUseTLS:                             updatedSettings.SMTPUseTLS,
+		EmailProvider:                          updatedSettings.EmailProvider,
+		EmailAPIBaseURL:                        updatedSettings.EmailAPIBaseURL,
+		EmailAPIKeyConfigured:                  updatedSettings.EmailAPIKeyConfigured,
 		TurnstileEnabled:                       updatedSettings.TurnstileEnabled,
 		TurnstileSiteKey:                       updatedSettings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:           updatedSettings.TurnstileSecretKeyConfigured,
@@ -2266,6 +2280,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.SMTPUseTLS != after.SMTPUseTLS {
 		changed = append(changed, "smtp_use_tls")
+	}
+	if before.EmailProvider != after.EmailProvider {
+		changed = append(changed, "email_provider")
+	}
+	if before.EmailAPIBaseURL != after.EmailAPIBaseURL {
+		changed = append(changed, "email_api_base_url")
+	}
+	if req.EmailAPIKey != "" {
+		changed = append(changed, "email_api_key")
 	}
 	if before.TurnstileEnabled != after.TurnstileEnabled {
 		changed = append(changed, "turnstile_enabled")
@@ -2977,6 +3000,21 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 	req.SMTPFrom = strings.TrimSpace(req.SMTPFrom)
 	req.SMTPFromName = strings.TrimSpace(req.SMTPFromName)
 
+	ctx := c.Request.Context()
+	siteName := h.settingService.GetSiteName(ctx)
+	subject := "[" + siteName + "] Test Email"
+	body := buildTestEmailBody(siteName)
+
+	// API 渠道（resend/cyberpanel）：使用已保存的渠道配置直接发送，无需 SMTP 主机。
+	if h.emailService.ResolveProvider(ctx) != service.EmailProviderSMTP {
+		if err := h.emailService.SendEmail(ctx, req.Email, subject, body); err != nil {
+			response.BadRequest(c, "Failed to send test email: "+err.Error())
+			return
+		}
+		response.Success(c, gin.H{"message": "Test email sent successfully"})
+		return
+	}
+
 	var savedConfig *service.SMTPConfig
 	if cfg, err := h.emailService.GetSMTPConfig(c.Request.Context()); err == nil && cfg != nil {
 		savedConfig = cfg
@@ -3020,9 +3058,17 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 		UseTLS:   req.SMTPUseTLS,
 	}
 
-	siteName := h.settingService.GetSiteName(c.Request.Context())
-	subject := "[" + siteName + "] Test Email"
-	body := `
+	if err := h.emailService.SendEmailWithConfig(config, req.Email, subject, body); err != nil {
+		response.BadRequest(c, "Failed to send test email: "+err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"message": "Test email sent successfully"})
+}
+
+// buildTestEmailBody 渲染“测试邮件”的 HTML 正文。
+func buildTestEmailBody(siteName string) string {
+	return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -3044,7 +3090,7 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
         <div class="content">
             <div class="success">✓</div>
             <h2>Email Configuration Successful!</h2>
-            <p>This is a test email to verify your SMTP settings are working correctly.</p>
+            <p>This is a test email to verify your email settings are working correctly.</p>
         </div>
         <div class="footer">
             <p>This is an automated test message.</p>
@@ -3053,13 +3099,6 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 </body>
 </html>
 `
-
-	if err := h.emailService.SendEmailWithConfig(config, req.Email, subject, body); err != nil {
-		response.BadRequest(c, "Failed to send test email: "+err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Test email sent successfully"})
 }
 
 // GetAdminAPIKey 获取管理员 API Key 状态

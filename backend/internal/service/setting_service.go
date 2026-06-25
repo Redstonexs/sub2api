@@ -1777,6 +1777,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeySMTPFromName] = settings.SMTPFromName
 	updates[SettingKeySMTPUseTLS] = strconv.FormatBool(settings.SMTPUseTLS)
 
+	// 邮件发送渠道（API Key 仅在非空时更新，避免覆盖已保存的密钥）
+	updates[SettingKeyEmailProvider] = NormalizeEmailProvider(settings.EmailProvider)
+	updates[SettingKeyEmailAPIBaseURL] = strings.TrimSpace(settings.EmailAPIBaseURL)
+	if settings.EmailAPIKey != "" {
+		updates[SettingKeyEmailAPIKey] = settings.EmailAPIKey
+	}
+
 	// Cloudflare Turnstile 设置（只有非空才更新密钥）
 	updates[SettingKeyTurnstileEnabled] = strconv.FormatBool(settings.TurnstileEnabled)
 	updates[SettingKeyTurnstileSiteKey] = settings.TurnstileSiteKey
@@ -2910,6 +2917,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyForceEmailOnThirdPartySignup:              "false",
 		SettingKeySMTPPort:                                  "587",
 		SettingKeySMTPUseTLS:                                "false",
+		SettingKeyEmailProvider:                             string(EmailProviderSMTP),
 		// Model fallback defaults
 		SettingKeyEnableModelFallback:      "false",
 		SettingKeyFallbackModelAnthropic:   "claude-3-5-sonnet-20241022",
@@ -2998,6 +3006,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		SMTPFromName:                     settings[SettingKeySMTPFromName],
 		SMTPUseTLS:                       settings[SettingKeySMTPUseTLS] == "true",
 		SMTPPasswordConfigured:           settings[SettingKeySMTPPassword] != "",
+		EmailProvider:                    NormalizeEmailProvider(settings[SettingKeyEmailProvider]),
+		EmailAPIBaseURL:                  settings[SettingKeyEmailAPIBaseURL],
+		EmailAPIKeyConfigured:            settings[SettingKeyEmailAPIKey] != "",
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
@@ -3069,6 +3080,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
 	result.TurnstileSecretKey = settings[SettingKeyTurnstileSecretKey]
+	result.EmailAPIKey = settings[SettingKeyEmailAPIKey]
 
 	// LinuxDo Connect 设置：
 	// - 兼容 config.yaml/env（避免老部署因为未迁移到数据库设置而被意外关闭）

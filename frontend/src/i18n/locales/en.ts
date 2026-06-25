@@ -6089,6 +6089,22 @@ export default {
         enabled: 'Enable Subscription Expiry Reminder',
         enabledHint: 'When enabled, the system sends reminders 7, 3, and 1 day before expiry.'
       },
+      email: {
+        provider: 'Sending Method',
+        providerHint: 'How outbound email is delivered. API methods (Resend / CyberPanel) send over HTTPS and bypass cloud SMTP port blocks (e.g. DigitalOcean blocking 25/465/587).',
+        providerSmtp: 'SMTP',
+        providerResend: 'Resend API',
+        providerCyberPanel: 'CyberPanel API',
+        apiBaseUrl: 'API Base URL',
+        apiBaseUrlHint: 'CyberPanel: your mail server base URL. Resend: optional, defaults to https://api.resend.com.',
+        apiBaseUrlPlaceholderResend: 'https://api.resend.com (optional)',
+        apiBaseUrlPlaceholderCyberPanel: 'https://mail.yourdomain.com',
+        apiKey: 'API Key',
+        apiKeyPlaceholder: 'Bearer token (e.g. re_... or sk_live_...)',
+        apiKeyHint: 'Sent as an Authorization: Bearer header.',
+        apiKeyConfiguredPlaceholder: '********',
+        apiKeyConfiguredHint: 'API key configured. Leave empty to keep the current value.'
+      },
       smtp: {
         title: 'SMTP Settings',
         description: 'Configure email sending for verification codes',

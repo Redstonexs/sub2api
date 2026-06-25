@@ -1,15 +1,20 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"net"
+	"net/http"
 	"net/smtp"
 	"net/url"
 	"strconv"
@@ -92,6 +97,45 @@ type SMTPConfig struct {
 	UseTLS   bool
 }
 
+// EmailProvider 邮件发送渠道。API 渠道(resend/cyberpanel)通过 HTTPS(443) 发送，
+// 可绕过 DigitalOcean 等云厂商对 SMTP 端口(25/465/587)的默认封锁。
+type EmailProvider string
+
+const (
+	EmailProviderSMTP       EmailProvider = "smtp"
+	EmailProviderResend     EmailProvider = "resend"
+	EmailProviderCyberPanel EmailProvider = "cyberpanel"
+)
+
+// defaultResendBaseURL 是 Resend 官方 API 地址。
+const defaultResendBaseURL = "https://api.resend.com"
+
+// NormalizeEmailProvider 归一化渠道取值，未知/空值回退到 smtp。
+func NormalizeEmailProvider(v string) string {
+	switch EmailProvider(strings.ToLower(strings.TrimSpace(v))) {
+	case EmailProviderResend:
+		return string(EmailProviderResend)
+	case EmailProviderCyberPanel:
+		return string(EmailProviderCyberPanel)
+	default:
+		return string(EmailProviderSMTP)
+	}
+}
+
+// EmailDeliveryConfig 是解析后的发送渠道配置（发件人身份 + 渠道凭据）。
+type EmailDeliveryConfig struct {
+	Provider EmailProvider
+	From     string
+	FromName string
+
+	// API 渠道（resend / cyberpanel）
+	APIBaseURL string
+	APIKey     string
+
+	// SMTP 渠道
+	SMTP *SMTPConfig
+}
+
 // EmailService 邮件服务
 type EmailService struct {
 	settingRepo              SettingRepository
@@ -171,13 +215,80 @@ func (s *EmailService) GetSMTPConfig(ctx context.Context) (*SMTPConfig, error) {
 	}, nil
 }
 
-// SendEmail 发送邮件（使用数据库中保存的配置）
+// ResolveProvider 返回当前配置的发送渠道（默认 smtp）。
+func (s *EmailService) ResolveProvider(ctx context.Context) EmailProvider {
+	v, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyEmailProvider})
+	if err != nil {
+		return EmailProviderSMTP
+	}
+	return EmailProvider(NormalizeEmailProvider(v[SettingKeyEmailProvider]))
+}
+
+// GetEmailDeliveryConfig 解析当前发送渠道及其凭据。
+func (s *EmailService) GetEmailDeliveryConfig(ctx context.Context) (*EmailDeliveryConfig, error) {
+	settings, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyEmailProvider,
+		SettingKeyEmailAPIBaseURL,
+		SettingKeyEmailAPIKey,
+		SettingKeySMTPFrom,
+		SettingKeySMTPFromName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get email settings: %w", err)
+	}
+
+	cfg := &EmailDeliveryConfig{
+		Provider: EmailProvider(NormalizeEmailProvider(settings[SettingKeyEmailProvider])),
+		From:     strings.TrimSpace(settings[SettingKeySMTPFrom]),
+		FromName: strings.TrimSpace(settings[SettingKeySMTPFromName]),
+	}
+
+	switch cfg.Provider {
+	case EmailProviderResend, EmailProviderCyberPanel:
+		cfg.APIKey = strings.TrimSpace(settings[SettingKeyEmailAPIKey])
+		cfg.APIBaseURL = strings.TrimRight(strings.TrimSpace(settings[SettingKeyEmailAPIBaseURL]), "/")
+		if cfg.APIKey == "" || cfg.From == "" {
+			return nil, ErrEmailNotConfigured
+		}
+		if cfg.APIBaseURL == "" {
+			if cfg.Provider == EmailProviderResend {
+				cfg.APIBaseURL = defaultResendBaseURL
+			} else {
+				// CyberPanel 必须提供自有域名的 API 地址。
+				return nil, ErrEmailNotConfigured
+			}
+		}
+	default:
+		smtpCfg, err := s.GetSMTPConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cfg.SMTP = smtpCfg
+		if cfg.From == "" {
+			cfg.From = smtpCfg.From
+		}
+		if cfg.FromName == "" {
+			cfg.FromName = smtpCfg.FromName
+		}
+	}
+	return cfg, nil
+}
+
+// SendEmail 发送邮件（使用数据库中保存的配置，按渠道自动路由）。
 func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string) error {
-	config, err := s.GetSMTPConfig(ctx)
+	cfg, err := s.GetEmailDeliveryConfig(ctx)
 	if err != nil {
 		return err
 	}
-	return s.SendEmailWithConfig(config, to, subject, body)
+
+	switch cfg.Provider {
+	case EmailProviderResend:
+		return s.sendViaResend(ctx, cfg, to, subject, body)
+	case EmailProviderCyberPanel:
+		return s.sendViaCyberPanel(ctx, cfg, to, subject, body)
+	default:
+		return s.SendEmailWithConfig(cfg.SMTP, to, subject, body)
+	}
 }
 
 const smtpDialTimeout = 10 * time.Second
@@ -197,115 +308,241 @@ func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
 		from, to, subject, body)
 
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
+	auth := smtpAuth(config)
 
-	if config.UseTLS {
-		return s.sendMailTLS(addr, auth, config.From, to, []byte(msg), config.Host)
-	}
-
-	return s.sendMailPlain(addr, auth, config.From, to, []byte(msg), config.Host)
-}
-
-// sendMailPlain sends mail without TLS using a dialer with timeout.
-func (s *EmailService) sendMailPlain(addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
-	dialer := &net.Dialer{Timeout: smtpDialTimeout}
-	conn, err := dialer.Dial("tcp", addr)
+	client, err := dialSMTPClient(config)
 	if err != nil {
-		return fmt.Errorf("smtp dial: %w", err)
-	}
-	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
-	defer func() { _ = conn.Close() }()
-
-	client, err := smtp.NewClient(conn, host)
-	if err != nil {
-		return fmt.Errorf("new smtp client: %w", err)
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	// Opportunistic STARTTLS: upgrade to encrypted connection if the server supports it.
-	// This mirrors the behavior of smtp.SendMail which we replaced for timeout support.
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err = client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-			return fmt.Errorf("starttls: %w", err)
+	return smtpDeliver(client, auth, config.From, to, []byte(msg))
+}
+
+// smtpSecurity describes how the SMTP transport is encrypted.
+type smtpSecurity int
+
+const (
+	// smtpSecuritySTARTTLS connects in cleartext and upgrades to TLS via the
+	// STARTTLS command when the server advertises it (submission ports 587/25/2525).
+	smtpSecuritySTARTTLS smtpSecurity = iota
+	// smtpSecurityImplicitTLS performs the TLS handshake immediately on connect,
+	// i.e. SMTPS (port 465).
+	smtpSecurityImplicitTLS
+)
+
+func (m smtpSecurity) String() string {
+	if m == smtpSecurityImplicitTLS {
+		return "implicit TLS"
+	}
+	return "STARTTLS"
+}
+
+// resolveSMTPSecurity decides the transport security for a config.
+//
+// The well-known submission ports have unambiguous, standardized semantics
+// (RFC 8314 / RFC 6409), so they are honored regardless of the UseTLS flag:
+//
+//	465              -> implicit TLS (never speaks cleartext)
+//	25 / 587 / 2525  -> STARTTLS     (never speaks implicit TLS)
+//
+// Pinning these prevents the most common misconfiguration — e.g. enabling
+// "Use TLS" on port 587 — which otherwise makes the client attempt a TLS
+// handshake against a server waiting to send a plaintext greeting, hanging
+// until the deadline fires and surfacing as an "i/o timeout". For any other
+// (non-standard) port, the explicit UseTLS flag is honored.
+func resolveSMTPSecurity(config *SMTPConfig) smtpSecurity {
+	switch config.Port {
+	case 465:
+		return smtpSecurityImplicitTLS
+	case 25, 587, 2525:
+		return smtpSecuritySTARTTLS
+	default:
+		if config.UseTLS {
+			return smtpSecurityImplicitTLS
 		}
+		return smtpSecuritySTARTTLS
+	}
+}
+
+// smtpAuth builds the AUTH mechanism, or nil when no username is configured so
+// that unauthenticated relays remain supported.
+func smtpAuth(config *SMTPConfig) smtp.Auth {
+	if strings.TrimSpace(config.Username) == "" {
+		return nil
+	}
+	return smtp.PlainAuth("", config.Username, config.Password, config.Host)
+}
+
+// dialSMTPClient establishes an SMTP session with dial + I/O timeouts and, on
+// the STARTTLS transport, upgrades the connection before returning. The caller
+// owns the returned client and must Close it.
+func dialSMTPClient(config *SMTPConfig) (*smtp.Client, error) {
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	security := resolveSMTPSecurity(config)
+	if config.UseTLS != (security == smtpSecurityImplicitTLS) {
+		slog.Warn("smtp: overriding UseTLS to match the standard semantics of the configured port",
+			"port", config.Port, "use_tls", config.UseTLS, "resolved", security.String())
 	}
 
-	if err = client.Auth(auth); err != nil {
-		return fmt.Errorf("smtp auth: %w", err)
+	dialer := &net.Dialer{Timeout: smtpDialTimeout}
+
+	var conn net.Conn
+	var err error
+	if security == smtpSecurityImplicitTLS {
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+			ServerName: config.Host,
+			MinVersion: tls.VersionTLS12, // 强制 TLS 1.2+，避免协议降级。
+		})
+	} else {
+		conn, err = dialer.Dial("tcp", addr)
 	}
-	if err = client.Mail(from); err != nil {
-		return fmt.Errorf("smtp mail: %w", err)
+	if err != nil {
+		return nil, smtpDialError(addr, security, err)
 	}
-	if err = client.Rcpt(to); err != nil {
-		return fmt.Errorf("smtp rcpt: %w", err)
+	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
+
+	client, err := smtp.NewClient(conn, config.Host)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("new smtp client for %s: %w", addr, err)
+	}
+
+	if security == smtpSecuritySTARTTLS {
+		if err := startTLS(client, config.Host); err != nil {
+			_ = client.Close()
+			return nil, err
+		}
+	}
+	return client, nil
+}
+
+// startTLS upgrades a cleartext SMTP connection when the server advertises the
+// STARTTLS extension (the EHLO required to populate the capability list is sent
+// implicitly by Extension). If STARTTLS is offered, the handshake must succeed —
+// we fail loudly rather than silently continuing in cleartext.
+func startTLS(client *smtp.Client, host string) error {
+	ok, _ := client.Extension("STARTTLS")
+	if !ok {
+		return nil
+	}
+	if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
+		return fmt.Errorf("starttls upgrade with %s failed: %w", host, err)
+	}
+	return nil
+}
+
+// smtpDeliver runs the AUTH/MAIL/RCPT/DATA exchange over an established client.
+func smtpDeliver(client *smtp.Client, auth smtp.Auth, from, to string, msg []byte) error {
+	if auth != nil {
+		if ok, _ := client.Extension("AUTH"); ok {
+			if err := client.Auth(auth); err != nil {
+				return fmt.Errorf("smtp auth: %w", err)
+			}
+		}
+	}
+	if err := client.Mail(from); err != nil {
+		return fmt.Errorf("smtp mail from %q: %w", from, err)
+	}
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("smtp rcpt to %q: %w", to, err)
 	}
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("smtp data: %w", err)
 	}
-	if _, err = w.Write(msg); err != nil {
-		return fmt.Errorf("write msg: %w", err)
+	if _, err := w.Write(msg); err != nil {
+		return fmt.Errorf("write message body: %w", err)
 	}
-	if err = w.Close(); err != nil {
-		return fmt.Errorf("close writer: %w", err)
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("complete message: %w", err)
 	}
+	// The message is committed once the Data writer closes; some servers emit a
+	// non-standard reply to QUIT, so its error is not treated as a failure.
 	_ = client.Quit()
 	return nil
 }
 
-// sendMailTLS 使用TLS发送邮件
-func (s *EmailService) sendMailTLS(addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
-	tlsConfig := &tls.Config{
-		ServerName: host,
-		// 强制 TLS 1.2+，避免协议降级导致的弱加密风险。
-		MinVersion: tls.VersionTLS12,
+// smtpDialError annotates connection failures with actionable guidance. A
+// timeout during connect (while ICMP/ping to the host still succeeds) almost
+// always means the hosting provider blocks outbound SMTP: DigitalOcean — and
+// most clouds (AWS, GCP, Oracle, Vultr...) — filter ports 25/465/587 by default
+// to curb spam, and only the TCP SMTP ports are blocked, so ping is unaffected.
+func smtpDialError(addr string, security smtpSecurity, err error) error {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return fmt.Errorf("timed out establishing a %s connection to %s: the host is reachable but the SMTP port never accepted the connection. "+
+			"This is typically the hosting provider blocking outbound SMTP (DigitalOcean and most clouds block 25/465/587 by default; ping/ICMP is unaffected). "+
+			"Fixes: ask the provider to unblock SMTP, send via an email API/relay over port 443 or 2525, or confirm the port matches the encryption mode (587=STARTTLS, 465=TLS): %w",
+			security, addr, err)
 	}
+	return fmt.Errorf("connect to %s (%s) failed: %w", addr, security, err)
+}
 
-	dialer := &net.Dialer{Timeout: smtpDialTimeout}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+const emailAPITimeout = 20 * time.Second
+
+// emailHTTPClient 用于 API 渠道发送，带整体请求超时。
+var emailHTTPClient = &http.Client{Timeout: emailAPITimeout}
+
+// formatEmailFrom 组装符合 RFC 5322 的发件人字段（"Name <addr>" 或 "addr"）。
+func formatEmailFrom(from, fromName string) string {
+	from = sanitizeEmailHeader(from)
+	if name := sanitizeEmailHeader(fromName); name != "" {
+		return fmt.Sprintf("%s <%s>", name, from)
+	}
+	return from
+}
+
+// sendViaResend 通过 Resend API 发送：POST {base}/emails，收件人 to 为数组。
+func (s *EmailService) sendViaResend(ctx context.Context, cfg *EmailDeliveryConfig, to, subject, body string) error {
+	payload := map[string]any{
+		"from":    formatEmailFrom(cfg.From, cfg.FromName),
+		"to":      []string{sanitizeEmailHeader(to)},
+		"subject": sanitizeEmailHeader(subject),
+		"html":    body,
+	}
+	return s.postEmailAPI(ctx, string(EmailProviderResend), cfg.APIBaseURL+"/emails", cfg.APIKey, payload)
+}
+
+// sendViaCyberPanel 通过 CyberPanel API 发送：POST {base}/email/v1/send，收件人 to 为字符串。
+func (s *EmailService) sendViaCyberPanel(ctx context.Context, cfg *EmailDeliveryConfig, to, subject, body string) error {
+	payload := map[string]any{
+		"from":    formatEmailFrom(cfg.From, cfg.FromName),
+		"to":      sanitizeEmailHeader(to),
+		"subject": sanitizeEmailHeader(subject),
+		"html":    body,
+	}
+	return s.postEmailAPI(ctx, string(EmailProviderCyberPanel), cfg.APIBaseURL+"/email/v1/send", cfg.APIKey, payload)
+}
+
+// postEmailAPI 执行带 Bearer 鉴权的 JSON POST，并对非 2xx 响应给出可诊断的错误。
+func (s *EmailService) postEmailAPI(ctx context.Context, provider, endpoint, apiKey string, payload map[string]any) error {
+	buf, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("tls dial: %w", err)
+		return fmt.Errorf("%s: marshal payload: %w", provider, err)
 	}
-	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
-	defer func() { _ = conn.Close() }()
 
-	client, err := smtp.NewClient(conn, host)
+	ctx, cancel := context.WithTimeout(ctx, emailAPITimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(buf))
 	if err != nil {
-		return fmt.Errorf("new smtp client: %w", err)
+		return fmt.Errorf("%s: build request: %w", provider, err)
 	}
-	defer func() { _ = client.Close() }()
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
-	if err = client.Auth(auth); err != nil {
-		return fmt.Errorf("smtp auth: %w", err)
-	}
-
-	if err = client.Mail(from); err != nil {
-		return fmt.Errorf("smtp mail: %w", err)
-	}
-
-	if err = client.Rcpt(to); err != nil {
-		return fmt.Errorf("smtp rcpt: %w", err)
-	}
-
-	w, err := client.Data()
+	resp, err := emailHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("smtp data: %w", err)
+		return fmt.Errorf("%s: request to %s failed: %w", provider, endpoint, err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
-	_, err = w.Write(msg)
-	if err != nil {
-		return fmt.Errorf("write msg: %w", err)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("%s: send failed (HTTP %d): %s", provider, resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
-
-	err = w.Close()
-	if err != nil {
-		return fmt.Errorf("close writer: %w", err)
-	}
-
-	// Email is sent successfully after w.Close(), ignore Quit errors
-	// Some SMTP servers return non-standard responses on QUIT
-	_ = client.Quit()
 	return nil
 }
 
@@ -457,46 +694,22 @@ func (s *EmailService) buildVerifyCodeEmailBody(code, siteName string) string {
 `, siteName, code)
 }
 
-// TestSMTPConnectionWithConfig 使用指定配置测试SMTP连接
+// TestSMTPConnectionWithConfig 使用指定配置测试SMTP连接。
+// 复用与真实发送一致的连接逻辑（超时、端口语义、STARTTLS 升级、可选鉴权），
+// 这样“测试连接”的结果才能真实反映发送时的行为。
 func (s *EmailService) TestSMTPConnectionWithConfig(config *SMTPConfig) error {
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
-
-	if config.UseTLS {
-		tlsConfig := &tls.Config{
-			ServerName: config.Host,
-			// 与发送逻辑一致，显式要求 TLS 1.2+。
-			MinVersion: tls.VersionTLS12,
-		}
-		conn, err := tls.Dial("tcp", addr, tlsConfig)
-		if err != nil {
-			return fmt.Errorf("tls connection failed: %w", err)
-		}
-		defer func() { _ = conn.Close() }()
-
-		client, err := smtp.NewClient(conn, config.Host)
-		if err != nil {
-			return fmt.Errorf("smtp client creation failed: %w", err)
-		}
-		defer func() { _ = client.Close() }()
-
-		auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
-		if err = client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp authentication failed: %w", err)
-		}
-
-		return client.Quit()
-	}
-
-	// 非TLS连接测试
-	client, err := smtp.Dial(addr)
+	client, err := dialSMTPClient(config)
 	if err != nil {
-		return fmt.Errorf("smtp connection failed: %w", err)
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
-	if err = client.Auth(auth); err != nil {
-		return fmt.Errorf("smtp authentication failed: %w", err)
+	if auth := smtpAuth(config); auth != nil {
+		if ok, _ := client.Extension("AUTH"); ok {
+			if err := client.Auth(auth); err != nil {
+				return fmt.Errorf("smtp authentication failed: %w", err)
+			}
+		}
 	}
 
 	return client.Quit()

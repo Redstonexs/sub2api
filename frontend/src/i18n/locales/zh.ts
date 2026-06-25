@@ -6245,6 +6245,22 @@ export default {
         enabled: '启用订阅到期提醒',
         enabledHint: '开启后，系统会在订阅到期前 7 天、3 天、1 天各发送一次提醒。'
       },
+      email: {
+        provider: '发送方式',
+        providerHint: '邮件的发送渠道。API 方式（Resend / CyberPanel）通过 HTTPS 发送，可绕过云厂商对 SMTP 端口的封锁（如 DigitalOcean 封锁 25/465/587）。',
+        providerSmtp: 'SMTP',
+        providerResend: 'Resend API',
+        providerCyberPanel: 'CyberPanel API',
+        apiBaseUrl: 'API 地址',
+        apiBaseUrlHint: 'CyberPanel：填写你的邮件服务器地址。Resend：可选，默认 https://api.resend.com。',
+        apiBaseUrlPlaceholderResend: 'https://api.resend.com（可选）',
+        apiBaseUrlPlaceholderCyberPanel: 'https://mail.yourdomain.com',
+        apiKey: 'API Key',
+        apiKeyPlaceholder: 'Bearer 令牌（如 re_... 或 sk_live_...）',
+        apiKeyHint: '以 Authorization: Bearer 请求头发送。',
+        apiKeyConfiguredPlaceholder: '********',
+        apiKeyConfiguredHint: '已配置 API Key，留空则保持当前值不变。'
+      },
       smtp: {
         title: 'SMTP 设置',
         description: '配置用于发送验证码的邮件服务',

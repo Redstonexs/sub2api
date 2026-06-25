@@ -34,6 +34,12 @@ type SystemSettings struct {
 	SMTPFromName           string
 	SMTPUseTLS             bool
 
+	// 邮件发送渠道与 API 凭据（API 方式用于绕过云厂商 SMTP 端口封锁）
+	EmailProvider         string
+	EmailAPIBaseURL       string
+	EmailAPIKey           string
+	EmailAPIKeyConfigured bool
+
 	TurnstileEnabled             bool
 	TurnstileSiteKey             string
 	TurnstileSecretKey           string

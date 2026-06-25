@@ -152,6 +152,11 @@ const (
 	SettingKeySMTPFromName = "smtp_from_name" // 发件人名称
 	SettingKeySMTPUseTLS   = "smtp_use_tls"   // 是否使用TLS
 
+	// 邮件发送方式：smtp(默认) / resend / cyberpanel。API 方式可绕过云厂商对 SMTP 端口(25/465/587)的封锁。
+	SettingKeyEmailProvider   = "email_provider"     // 发送渠道：smtp|resend|cyberpanel
+	SettingKeyEmailAPIBaseURL = "email_api_base_url" // API 基础地址（CyberPanel 必填，Resend 可选）
+	SettingKeyEmailAPIKey     = "email_api_key"      // API Key（Bearer，加密存储）
+
 	// Cloudflare Turnstile 设置
 	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Turnstile 验证
 	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key

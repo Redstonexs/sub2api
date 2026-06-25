@@ -446,6 +446,10 @@ export interface SystemSettings {
   smtp_from_email: string;
   smtp_from_name: string;
   smtp_use_tls: boolean;
+  // Email delivery channel (smtp | resend | cyberpanel) + API credentials
+  email_provider: string;
+  email_api_base_url: string;
+  email_api_key_configured: boolean;
   // Cloudflare Turnstile settings
   turnstile_enabled: boolean;
   turnstile_site_key: string;
@@ -711,6 +715,9 @@ export interface UpdateSettingsRequest {
   smtp_from_email?: string;
   smtp_from_name?: string;
   smtp_use_tls?: boolean;
+  email_provider?: string;
+  email_api_base_url?: string;
+  email_api_key?: string;
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;
