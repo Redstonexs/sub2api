@@ -505,9 +505,10 @@ func (s *EmailService) sendViaResend(ctx context.Context, cfg *EmailDeliveryConf
 }
 
 // sendViaCyberPanel 通过 CyberPanel API 发送：POST {base}/email/v1/send，收件人 to 为字符串。
+// 注意：CyberPanel 的 from 仅接受裸邮箱地址，不支持 "名称 <邮箱>" 形式，因此这里不附带发件人名称。
 func (s *EmailService) sendViaCyberPanel(ctx context.Context, cfg *EmailDeliveryConfig, to, subject, body string) error {
 	payload := map[string]any{
-		"from":    formatEmailFrom(cfg.From, cfg.FromName),
+		"from":    sanitizeEmailHeader(cfg.From),
 		"to":      sanitizeEmailHeader(to),
 		"subject": sanitizeEmailHeader(subject),
 		"html":    body,

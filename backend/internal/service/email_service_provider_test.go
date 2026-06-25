@@ -68,7 +68,9 @@ func TestSendViaResend(t *testing.T) {
 
 func TestSendViaCyberPanel(t *testing.T) {
 	s := &EmailService{}
-	cfg := &EmailDeliveryConfig{Provider: EmailProviderCyberPanel, From: "no-reply@example.com"}
+	// FromName is set, but CyberPanel's API only accepts a bare email in `from`
+	// ("Name <email>" is rejected as an invalid address), so the name is dropped.
+	cfg := &EmailDeliveryConfig{Provider: EmailProviderCyberPanel, From: "no-reply@example.com", FromName: "Acme"}
 	body, header, path := captureRequest(t, http.StatusOK, func(base string) error {
 		cfg.APIBaseURL = base
 		cfg.APIKey = "sk_live_test"
