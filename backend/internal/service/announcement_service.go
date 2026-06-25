@@ -12,11 +12,11 @@ import (
 )
 
 type AnnouncementService struct {
-	announcementRepo AnnouncementRepository
-	readRepo         AnnouncementReadRepository
-	userRepo         UserRepository
-	userSubRepo      UserSubscriptionRepository
-	broadcaster      *AnnouncementBroadcastService
+	announcementRepo         AnnouncementRepository
+	readRepo                 AnnouncementReadRepository
+	userRepo                 UserRepository
+	userSubRepo              UserSubscriptionRepository
+	broadcaster              *AnnouncementBroadcastService
 	notificationEmailService *NotificationEmailService
 }
 
@@ -29,11 +29,11 @@ func NewAnnouncementService(
 	notificationEmailService *NotificationEmailService,
 ) *AnnouncementService {
 	return &AnnouncementService{
-		announcementRepo: announcementRepo,
-		readRepo:         readRepo,
-		userRepo:         userRepo,
-		userSubRepo:      userSubRepo,
-		broadcaster:      broadcaster,
+		announcementRepo:         announcementRepo,
+		readRepo:                 readRepo,
+		userRepo:                 userRepo,
+		userSubRepo:              userSubRepo,
+		broadcaster:              broadcaster,
 		notificationEmailService: notificationEmailService,
 	}
 }

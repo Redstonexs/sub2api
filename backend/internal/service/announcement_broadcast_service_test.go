@@ -52,7 +52,7 @@ func TestAnnouncementBroadcastSkipsUnsubscribedRecipients(t *testing.T) {
 	require.True(t, unsubscribed)
 
 	svc := &AnnouncementBroadcastService{
-		userRepo: &userRepoStub{users: []User{
+		userRepo: &announcementUserRepoStub{users: []User{
 			{ID: 1, Email: "user1@example.com", Username: "unsubscribed", Balance: 100, Subscriptions: []UserSubscription{{GroupID: 10, ExpiresAt: time.Now().Add(time.Hour)}}},
 			{ID: 2, Email: "user2@example.com", Username: "subscribed", Balance: 100, Subscriptions: []UserSubscription{{GroupID: 10, ExpiresAt: time.Now().Add(time.Hour)}}},
 		}},

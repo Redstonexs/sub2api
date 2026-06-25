@@ -36,15 +36,17 @@ func (*announcementRepoStub) Delete(context.Context, int64) error { return nil }
 func (*announcementRepoStub) List(context.Context, pagination.PaginationParams, AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
-func (*announcementRepoStub) ListActive(context.Context, time.Time) ([]Announcement, error) { return nil, nil }
+func (*announcementRepoStub) ListActive(context.Context, time.Time) ([]Announcement, error) {
+	return nil, nil
+}
 
-type userRepoStub struct {
+type announcementUserRepoStub struct {
 	users []User
 }
 
-func (s *userRepoStub) Create(context.Context, *User) error { return nil }
+func (s *announcementUserRepoStub) Create(context.Context, *User) error { return nil }
 
-func (s *userRepoStub) GetByID(_ context.Context, id int64) (*User, error) {
+func (s *announcementUserRepoStub) GetByID(_ context.Context, id int64) (*User, error) {
 	for i := range s.users {
 		if s.users[i].ID == id {
 			user := s.users[i]
@@ -53,20 +55,28 @@ func (s *userRepoStub) GetByID(_ context.Context, id int64) (*User, error) {
 	}
 	return nil, ErrUserNotFound
 }
-func (s *userRepoStub) GetByIDIncludeDeleted(context.Context, int64) (*User, error) { return nil, ErrUserNotFound }
-func (s *userRepoStub) GetByEmail(context.Context, string) (*User, error) { return nil, ErrUserNotFound }
-func (s *userRepoStub) GetFirstAdmin(context.Context) (*User, error) { return nil, ErrUserNotFound }
-func (s *userRepoStub) Update(context.Context, *User) error { return nil }
-func (s *userRepoStub) Delete(context.Context, int64) error { return nil }
-func (s *userRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, error) { return nil, nil }
-func (s *userRepoStub) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {
+func (s *announcementUserRepoStub) GetByIDIncludeDeleted(context.Context, int64) (*User, error) {
+	return nil, ErrUserNotFound
+}
+func (s *announcementUserRepoStub) GetByEmail(context.Context, string) (*User, error) {
+	return nil, ErrUserNotFound
+}
+func (s *announcementUserRepoStub) GetFirstAdmin(context.Context) (*User, error) {
+	return nil, ErrUserNotFound
+}
+func (s *announcementUserRepoStub) Update(context.Context, *User) error { return nil }
+func (s *announcementUserRepoStub) Delete(context.Context, int64) error { return nil }
+func (s *announcementUserRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
 	return nil, nil
 }
-func (s *userRepoStub) DeleteUserAvatar(context.Context, int64) error { return nil }
-func (s *userRepoStub) List(_ context.Context, _ pagination.PaginationParams) ([]User, *pagination.PaginationResult, error) {
+func (s *announcementUserRepoStub) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {
+	return nil, nil
+}
+func (s *announcementUserRepoStub) DeleteUserAvatar(context.Context, int64) error { return nil }
+func (s *announcementUserRepoStub) List(_ context.Context, _ pagination.PaginationParams) ([]User, *pagination.PaginationResult, error) {
 	return append([]User(nil), s.users...), &pagination.PaginationResult{}, nil
 }
-func (s *userRepoStub) ListWithFilters(_ context.Context, _ pagination.PaginationParams, filters UserListFilters) ([]User, *pagination.PaginationResult, error) {
+func (s *announcementUserRepoStub) ListWithFilters(_ context.Context, _ pagination.PaginationParams, filters UserListFilters) ([]User, *pagination.PaginationResult, error) {
 	if filters.Search == "" {
 		return append([]User(nil), s.users...), &pagination.PaginationResult{}, nil
 	}
@@ -78,33 +88,63 @@ func (s *userRepoStub) ListWithFilters(_ context.Context, _ pagination.Paginatio
 	}
 	return out, &pagination.PaginationResult{}, nil
 }
-func (s *userRepoStub) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) { return nil, nil }
-func (s *userRepoStub) GetLatestUsedAtByUserID(context.Context, int64) (*time.Time, error) { return nil, nil }
-func (s *userRepoStub) UpdateUserLastActiveAt(context.Context, int64, time.Time) error { return nil }
-func (s *userRepoStub) UpdateBalance(context.Context, int64, float64) error { return nil }
-func (s *userRepoStub) DeductBalance(context.Context, int64, float64) error { return nil }
-func (s *userRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
-func (s *userRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) { return 0, nil }
-func (s *userRepoStub) BatchAddConcurrency(context.Context, []int64, int) (int, error) { return 0, nil }
-func (s *userRepoStub) ExistsByEmail(context.Context, string) (bool, error) { return false, nil }
-func (s *userRepoStub) RemoveGroupFromAllowedGroups(context.Context, int64) (int64, error) { return 0, nil }
-func (s *userRepoStub) AddGroupToAllowedGroups(context.Context, int64, int64) error { return nil }
-func (s *userRepoStub) RemoveGroupFromUserAllowedGroups(context.Context, int64, int64) error { return nil }
-func (s *userRepoStub) ListUserAuthIdentities(context.Context, int64) ([]UserAuthIdentityRecord, error) { return nil, nil }
-func (s *userRepoStub) UnbindUserAuthProvider(context.Context, int64, string) error { return nil }
-func (s *userRepoStub) UpdateTotpSecret(context.Context, int64, *string) error { return nil }
-func (s *userRepoStub) EnableTotp(context.Context, int64) error { return nil }
-func (s *userRepoStub) DisableTotp(context.Context, int64) error { return nil }
+func (s *announcementUserRepoStub) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
+	return nil, nil
+}
+func (s *announcementUserRepoStub) GetLatestUsedAtByUserID(context.Context, int64) (*time.Time, error) {
+	return nil, nil
+}
+func (s *announcementUserRepoStub) UpdateUserLastActiveAt(context.Context, int64, time.Time) error {
+	return nil
+}
+func (s *announcementUserRepoStub) UpdateBalance(context.Context, int64, float64) error { return nil }
+func (s *announcementUserRepoStub) DeductBalance(context.Context, int64, float64) error { return nil }
+func (s *announcementUserRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
+func (s *announcementUserRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
+func (s *announcementUserRepoStub) BatchAddConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
+func (s *announcementUserRepoStub) ExistsByEmail(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (s *announcementUserRepoStub) RemoveGroupFromAllowedGroups(context.Context, int64) (int64, error) {
+	return 0, nil
+}
+func (s *announcementUserRepoStub) AddGroupToAllowedGroups(context.Context, int64, int64) error {
+	return nil
+}
+func (s *announcementUserRepoStub) RemoveGroupFromUserAllowedGroups(context.Context, int64, int64) error {
+	return nil
+}
+func (s *announcementUserRepoStub) ListUserAuthIdentities(context.Context, int64) ([]UserAuthIdentityRecord, error) {
+	return nil, nil
+}
+func (s *announcementUserRepoStub) UnbindUserAuthProvider(context.Context, int64, string) error {
+	return nil
+}
+func (s *announcementUserRepoStub) UpdateTotpSecret(context.Context, int64, *string) error {
+	return nil
+}
+func (s *announcementUserRepoStub) EnableTotp(context.Context, int64) error  { return nil }
+func (s *announcementUserRepoStub) DisableTotp(context.Context, int64) error { return nil }
 
 type userSubRepoStub struct{}
 
-func (userSubRepoStub) Create(context.Context, *UserSubscription) error { return nil }
+func (userSubRepoStub) Create(context.Context, *UserSubscription) error           { return nil }
 func (userSubRepoStub) GetByID(context.Context, int64) (*UserSubscription, error) { return nil, nil }
-func (userSubRepoStub) GetByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) { return nil, nil }
-func (userSubRepoStub) GetActiveByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) { return nil, nil }
+func (userSubRepoStub) GetByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) {
+	return nil, nil
+}
+func (userSubRepoStub) GetActiveByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) {
+	return nil, nil
+}
 func (userSubRepoStub) Update(context.Context, *UserSubscription) error { return nil }
-func (userSubRepoStub) Delete(context.Context, int64) error { return nil }
-func (userSubRepoStub) ListByUserID(context.Context, int64) ([]UserSubscription, error) { return nil, nil }
+func (userSubRepoStub) Delete(context.Context, int64) error             { return nil }
+func (userSubRepoStub) ListByUserID(context.Context, int64) ([]UserSubscription, error) {
+	return nil, nil
+}
 func (userSubRepoStub) ListActiveByUserID(_ context.Context, userID int64) ([]UserSubscription, error) {
 	if userID == 1 || userID == 2 {
 		return []UserSubscription{{GroupID: 10}}, nil
@@ -117,16 +157,18 @@ func (userSubRepoStub) ListByGroupID(context.Context, int64, pagination.Paginati
 func (userSubRepoStub) List(context.Context, pagination.PaginationParams, *int64, *int64, string, string, string, string) ([]UserSubscription, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
-func (userSubRepoStub) ExistsByUserIDAndGroupID(context.Context, int64, int64) (bool, error) { return false, nil }
-func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error { return nil }
-func (userSubRepoStub) UpdateStatus(context.Context, int64, string) error { return nil }
-func (userSubRepoStub) UpdateNotes(context.Context, int64, string) error { return nil }
-func (userSubRepoStub) ActivateWindows(context.Context, int64, time.Time) error { return nil }
-func (userSubRepoStub) ResetDailyUsage(context.Context, int64, time.Time) error { return nil }
-func (userSubRepoStub) ResetWeeklyUsage(context.Context, int64, time.Time) error { return nil }
+func (userSubRepoStub) ExistsByUserIDAndGroupID(context.Context, int64, int64) (bool, error) {
+	return false, nil
+}
+func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error      { return nil }
+func (userSubRepoStub) UpdateStatus(context.Context, int64, string) error         { return nil }
+func (userSubRepoStub) UpdateNotes(context.Context, int64, string) error          { return nil }
+func (userSubRepoStub) ActivateWindows(context.Context, int64, time.Time) error   { return nil }
+func (userSubRepoStub) ResetDailyUsage(context.Context, int64, time.Time) error   { return nil }
+func (userSubRepoStub) ResetWeeklyUsage(context.Context, int64, time.Time) error  { return nil }
 func (userSubRepoStub) ResetMonthlyUsage(context.Context, int64, time.Time) error { return nil }
-func (userSubRepoStub) IncrementUsage(context.Context, int64, float64) error { return nil }
-func (userSubRepoStub) BatchUpdateExpiredStatus(context.Context) (int64, error) { return 0, nil }
+func (userSubRepoStub) IncrementUsage(context.Context, int64, float64) error      { return nil }
+func (userSubRepoStub) BatchUpdateExpiredStatus(context.Context) (int64, error)   { return 0, nil }
 
 type announcementReadRepoStub struct{}
 
@@ -137,30 +179,9 @@ func (announcementReadRepoStub) GetReadMapByUser(context.Context, int64, []int64
 func (announcementReadRepoStub) GetReadMapByUsers(context.Context, int64, []int64) (map[int64]time.Time, error) {
 	return map[int64]time.Time{}, nil
 }
-func (announcementReadRepoStub) CountByAnnouncementID(context.Context, int64) (int64, error) { return 0, nil }
-
-type settingRepoStub struct {
-	values map[string]string
-	err    error
+func (announcementReadRepoStub) CountByAnnouncementID(context.Context, int64) (int64, error) {
+	return 0, nil
 }
-
-func (s settingRepoStub) Get(context.Context, string) (*Setting, error) { return nil, ErrSettingNotFound }
-func (s settingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
-	if s.err != nil {
-		return "", s.err
-	}
-	if value, ok := s.values[key]; ok {
-		return value, nil
-	}
-	return "", ErrSettingNotFound
-}
-func (settingRepoStub) Set(context.Context, string, string) error { return nil }
-func (settingRepoStub) GetMultiple(context.Context, []string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-func (settingRepoStub) SetMultiple(context.Context, map[string]string) error { return nil }
-func (settingRepoStub) GetAll(context.Context) (map[string]string, error) { return map[string]string{}, nil }
-func (settingRepoStub) Delete(context.Context, string) error { return nil }
 
 func TestAnnouncementServiceListUserReadStatusReflectsUnsubscribe(t *testing.T) {
 	ctx := context.Background()
@@ -187,7 +208,7 @@ func TestAnnouncementServiceListUserReadStatusReflectsUnsubscribe(t *testing.T) 
 	svc := NewAnnouncementService(
 		&announcementRepoStub{item: ann},
 		announcementReadRepoStub{},
-		&userRepoStub{users: []User{
+		&announcementUserRepoStub{users: []User{
 			{ID: 1, Email: "user1@example.com", Username: "unsubscribed", Balance: 100},
 			{ID: 2, Email: "user2@example.com", Username: "subscribed", Balance: 100},
 		}},
@@ -221,7 +242,7 @@ func TestAnnouncementServiceListUserReadStatusWrapsUnsubscribeErrors(t *testing.
 	svc := NewAnnouncementService(
 		&announcementRepoStub{item: ann},
 		announcementReadRepoStub{},
-		&userRepoStub{users: []User{{ID: 1, Email: "user@example.com", Username: "user", Balance: 100}}},
+		&announcementUserRepoStub{users: []User{{ID: 1, Email: "user@example.com", Username: "user", Balance: 100}}},
 		userSubRepoStub{},
 		nil,
 		&NotificationEmailService{settingRepo: settingRepoStub{err: context.Canceled}},

@@ -18,7 +18,7 @@ var (
 		goldmark.WithExtensions(extension.GFM),
 		goldmark.WithRendererOptions(gmhtml.WithHardWraps()),
 	)
-	safeHTMLPolicy = newSafeHTMLPolicy()
+	safeHTMLPolicy  = newSafeHTMLPolicy()
 	convertMarkdown = func(source []byte, output io.Writer) error {
 		return markdownRenderer.Convert(source, output)
 	}
