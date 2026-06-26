@@ -9,7 +9,7 @@
           type="number" min="0" class="input mt-0.5 text-xs" />
       </div>
       <div class="w-20">
-        <label class="text-xs text-gray-400">Max <span class="text-gray-300">(含)</span></label>
+        <label class="text-xs text-gray-400">Max <span class="text-gray-300">{{ t('admin.channels.form.inclusive', '(含)') }}</span></label>
         <input :value="interval.max_tokens ?? ''" @input="emitField('max_tokens', toIntOrNull(($event.target as HTMLInputElement).value))"
           type="number" min="0" class="input mt-0.5 text-xs" :placeholder="'∞'" />
       </div>
@@ -50,7 +50,7 @@
           type="number" min="0" class="input mt-0.5 text-xs" />
       </div>
       <div class="w-20">
-        <label class="text-xs text-gray-400">Max <span class="text-gray-300">(含)</span></label>
+        <label class="text-xs text-gray-400">Max <span class="text-gray-300">{{ t('admin.channels.form.inclusive', '(含)') }}</span></label>
         <input :value="interval.max_tokens ?? ''" @input="emitField('max_tokens', toIntOrNull(($event.target as HTMLInputElement).value))"
           type="number" min="0" class="input mt-0.5 text-xs" :placeholder="'∞'" />
       </div>
