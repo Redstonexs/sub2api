@@ -4630,6 +4630,34 @@
             </div>
           </div>
 
+        <!-- Gateway Error Messages -->
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.gatewayErrorMessages.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.gatewayErrorMessages.description') }}
+            </p>
+          </div>
+          <div class="space-y-4 p-6">
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.gatewayErrorMessages.label') }}
+              </label>
+              <textarea
+                v-model="form.gateway_error_messages"
+                data-testid="gateway-error-messages"
+                class="input min-h-32 w-full font-mono text-sm"
+                :placeholder="t('admin.settings.gatewayErrorMessages.placeholder')"
+              />
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.gatewayErrorMessages.hint') }}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- Usage Records Settings -->
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
@@ -7946,6 +7974,8 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
+  // Gateway error messages (JSON object mapping status code -> message)
+  gateway_error_messages: "{}",
 });
 
 const authSourceDefaults = reactive<AuthSourceDefaultsState>(
@@ -8573,6 +8603,10 @@ async function loadSettings() {
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(settings));
     form.default_platform_quotas = normalizePlatformQuotasMap(settings.default_platform_quotas);
     form.backend_mode_enabled = settings.backend_mode_enabled;
+    form.gateway_error_messages =
+      typeof settings.gateway_error_messages === "string"
+        ? settings.gateway_error_messages
+        : JSON.stringify(settings.gateway_error_messages || {});
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
       settings.default_subscriptions,
     );
@@ -8894,6 +8928,30 @@ async function saveSettings() {
     form.claude_oauth_system_prompt_blocks =
       claudeOAuthSystemPromptBlocksJSON;
 
+    // Validate gateway error messages JSON
+    try {
+      const raw = form.gateway_error_messages?.trim() || "{}";
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("gateway_error_messages must be a JSON object");
+      }
+      for (const [code, message] of Object.entries(parsed)) {
+        if (!/^\d{3}$/.test(code)) {
+          throw new Error(`gateway_error_messages key "${code}" must be a 3-digit HTTP status code`);
+        }
+        if (typeof message !== "string") {
+          throw new Error(`gateway_error_messages value for "${code}" must be a string`);
+        }
+      }
+    } catch (e) {
+      appStore.showError(
+        t("admin.settings.gatewayErrorMessages.invalid", {
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
+      return;
+    }
+
     const payload: UpdateSettingsRequest = {
       registration_enabled: form.registration_enabled,
       email_verify_enabled: form.email_verify_enabled,
@@ -9116,6 +9174,7 @@ async function saveSettings() {
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,
+      gateway_error_messages: form.gateway_error_messages,
     };
 
     // 仅当 openai_fast_policy_settings 已成功从后端加载时才回写，

@@ -419,6 +419,7 @@ const baseSettingsResponse = {
   subscription_expiry_notify_enabled: true,
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [],
+  gateway_error_messages: "{}",
   // 平台限额嵌套字段（新后端契约）
   default_platform_quotas: {
     anthropic:   { daily: null, weekly: null, monthly: null },
@@ -1195,5 +1196,55 @@ describe("admin SettingsView platform quota matrix", () => {
     const quotas = payload["default_platform_quotas"] as Record<string, Record<string, unknown>>;
     // 不管输入是什么，提交值应为 null（而非 "" 或 NaN）
     expect(quotas["anthropic"]?.["daily"]).toBe(null);
+  });
+});
+
+describe("admin SettingsView gateway error messages", () => {
+  beforeEach(() => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      gateway_error_messages:
+        '{"429":"Please retry later","502":"Upstream unavailable"}',
+    });
+    updateSettings.mockClear();
+    showError.mockClear();
+  });
+
+  it("loads custom gateway error messages from settings response", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
+    expect(textarea.exists()).toBe(true);
+    expect(textarea.element.tagName.toLowerCase()).toBe("textarea");
+    expect((textarea.element as HTMLTextAreaElement).value).toBe(
+      '{"429":"Please retry later","502":"Upstream unavailable"}'
+    );
+  });
+
+  it("includes gateway_error_messages in update payload", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
+    await textarea.setValue('{"429":"Too many requests"}');
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(payload["gateway_error_messages"]).toBe('{"429":"Too many requests"}');
+  });
+
+  it("blocks save when gateway_error_messages is not a valid JSON object", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
+    await textarea.setValue('["invalid"]');
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalled();
   });
 });

@@ -307,6 +307,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AffiliateEnabled: settings.AffiliateEnabled,
 
 		AllowUserViewErrorRequests: settings.AllowUserViewErrorRequests,
+		GatewayErrorMessages:       settings.GatewayErrorMessages,
 	}
 
 	// OpenAI fast policy (stored under a dedicated setting key)
@@ -682,6 +683,37 @@ type UpdateSettingsRequest struct {
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
 
 	AllowUserViewErrorRequests *bool `json:"allow_user_view_error_requests"`
+
+	// Gateway error messages (JSON object mapping HTTP status code -> message)
+	GatewayErrorMessages *string `json:"gateway_error_messages"`
+}
+
+// parseGatewayErrorMessages parses and validates the raw gateway error messages
+// JSON string. It must be a JSON object whose keys are 3-digit HTTP status codes
+// and whose values are strings.
+func parseGatewayErrorMessages(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]string{}, nil
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("gateway_error_messages must be a valid JSON object: %w", err)
+	}
+
+	result := make(map[string]string, len(parsed))
+	for k, v := range parsed {
+		if len(k) != 3 || k[0] < '1' || k[0] > '5' || k[1] < '0' || k[1] > '9' || k[2] < '0' || k[2] > '9' {
+			return nil, fmt.Errorf("gateway_error_messages key %q is not a valid 3-digit HTTP status code", k)
+		}
+		str, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("gateway_error_messages value for %q must be a string", k)
+		}
+		result[k] = str
+	}
+	return result, nil
 }
 
 // UpdateSettings 更新系统设置
@@ -702,6 +734,15 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+
+	var gatewayErrorMessages map[string]string
+	if req.GatewayErrorMessages != nil {
+		gatewayErrorMessages, err = parseGatewayErrorMessages(*req.GatewayErrorMessages)
+		if err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
 	}
 
 	// 验证参数
@@ -1630,6 +1671,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AllowUserViewErrorRequests
 		}(),
+		GatewayErrorMessages: func() map[string]string {
+			if req.GatewayErrorMessages != nil {
+				return gatewayErrorMessages
+			}
+			return previousSettings.GatewayErrorMessages
+		}(),
 		OpsMonitoringEnabled: func() bool {
 			if req.OpsMonitoringEnabled != nil {
 				return *req.OpsMonitoringEnabled
@@ -2159,6 +2206,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CyberSessionBlockEnabled:    updatedSettings.CyberSessionBlockEnabled,
 		CyberSessionBlockTTLSeconds: updatedSettings.CyberSessionBlockTTLSeconds,
 		AllowUserViewErrorRequests:  updatedSettings.AllowUserViewErrorRequests,
+		GatewayErrorMessages:        updatedSettings.GatewayErrorMessages,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

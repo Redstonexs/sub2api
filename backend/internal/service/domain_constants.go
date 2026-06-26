@@ -482,3 +482,7 @@ const AdminAPIKeyPrefix = "admin-"
 // SettingKeyAllowUserViewErrorRequests controls whether end users can view
 // their own failed requests on the usage page. Default false (opt-in).
 const SettingKeyAllowUserViewErrorRequests = "allow_user_view_error_requests"
+
+// SettingKeyGatewayErrorMessages stores a JSON object mapping HTTP status code
+// strings (e.g. "429", "502") to user-facing error messages. Default empty object.
+const SettingKeyGatewayErrorMessages = "gateway_error_messages"

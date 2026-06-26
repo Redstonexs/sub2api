@@ -2035,6 +2035,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	updates[SettingKeyAllowUserViewErrorRequests] = strconv.FormatBool(settings.AllowUserViewErrorRequests)
 
+	if settings.GatewayErrorMessages != nil {
+		blob, err := json.Marshal(settings.GatewayErrorMessages)
+		if err != nil {
+			return nil, fmt.Errorf("marshal gateway_error_messages: %w", err)
+		}
+		updates[SettingKeyGatewayErrorMessages] = string(blob)
+	}
+
 	return updates, nil
 }
 
@@ -2968,6 +2976,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		openAIAdvancedSchedulerSettingKey:            "false",
 
 		SettingKeyAllowUserViewErrorRequests: "false",
+		SettingKeyGatewayErrorMessages:       "{}",
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
@@ -3546,6 +3555,15 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	result.AllowUserViewErrorRequests = settings[SettingKeyAllowUserViewErrorRequests] == "true" // default false
+
+	if raw := strings.TrimSpace(settings[SettingKeyGatewayErrorMessages]); raw != "" && raw != "{}" {
+		parsed := make(map[string]string)
+		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+			slog.Warn("[Setting] parseSettings: unmarshal gateway_error_messages failed", "error", err)
+		} else {
+			result.GatewayErrorMessages = parsed
+		}
+	}
 
 	return result
 }

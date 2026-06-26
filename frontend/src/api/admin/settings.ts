@@ -627,6 +627,9 @@ export interface SystemSettings {
 
   // Allow user view error requests
   allow_user_view_error_requests: boolean;
+
+  // Gateway error messages (JSON object mapping status code -> message)
+  gateway_error_messages?: string;
 }
 
 export interface UpdateSettingsRequest {
@@ -870,6 +873,9 @@ export interface UpdateSettingsRequest {
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 
   allow_user_view_error_requests?: boolean;
+
+  // Gateway error messages (JSON object mapping status code -> message)
+  gateway_error_messages?: string;
 }
 
 /**

@@ -266,6 +266,9 @@ type SystemSettings struct {
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
+
+	// 网关返回给客户端的错误提示自定义映射（key = HTTP 状态码字符串）
+	GatewayErrorMessages map[string]string `json:"gateway_error_messages,omitempty"`
 }
 
 type DefaultSubscriptionSetting struct {
