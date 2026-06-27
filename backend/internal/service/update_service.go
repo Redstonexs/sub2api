@@ -28,7 +28,10 @@ var (
 const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	// githubRepo is the repository the in-app updater checks for new releases.
+	// This points at the fork (Redstonexs/sub2api), not the upstream
+	// (Wei-Shaw/sub2api), so update detection follows this fork's releases.
+	githubRepo = "Redstonexs/sub2api"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
