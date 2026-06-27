@@ -4878,20 +4878,85 @@
             </p>
           </div>
           <div class="space-y-4 p-6">
-            <div>
-              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.gatewayErrorMessages.label') }}
-              </label>
-              <textarea
-                v-model="form.gateway_error_messages"
-                data-testid="gateway-error-messages"
-                class="input min-h-32 w-full font-mono text-sm"
-                :placeholder="t('admin.settings.gatewayErrorMessages.placeholder')"
-              />
-              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.settings.gatewayErrorMessages.hint') }}
+            <div class="space-y-2" data-testid="gateway-error-messages">
+              <div
+                v-if="gatewayErrorMessageRows.length"
+                class="flex items-center gap-2 px-0.5"
+              >
+                <span class="w-28 shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.gatewayErrorMessages.codeHeader') }}
+                </span>
+                <span class="flex-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.gatewayErrorMessages.messageHeader') }}
+                </span>
+              </div>
+              <div
+                v-for="(row, i) in gatewayErrorMessageRows"
+                :key="`gem-${i}`"
+                class="space-y-1"
+              >
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model="row.code"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="3"
+                    list="gateway-error-code-suggestions"
+                    data-testid="gateway-error-code"
+                    class="input w-28 shrink-0 font-mono text-sm"
+                    :class="{
+                      'input-error': gatewayErrorRowErrors.get(i)?.startsWith('code'),
+                    }"
+                    :placeholder="t('admin.settings.gatewayErrorMessages.codePlaceholder')"
+                  />
+                  <input
+                    v-model="row.message"
+                    type="text"
+                    data-testid="gateway-error-message"
+                    class="input flex-1 text-sm"
+                    :class="{
+                      'input-error': gatewayErrorRowErrors.get(i) === 'message-empty',
+                    }"
+                    :placeholder="t('admin.settings.gatewayErrorMessages.messagePlaceholder')"
+                  />
+                  <button
+                    type="button"
+                    data-testid="gateway-error-remove"
+                    class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
+                    @click="removeGatewayErrorMessageRow(i)"
+                  >
+                    {{ t('admin.settings.gatewayErrorMessages.remove') }}
+                  </button>
+                </div>
+                <p v-if="gatewayErrorRowErrors.get(i)" class="input-error-text">
+                  {{ gatewayErrorRowErrorText(i) }}
+                </p>
+              </div>
+              <p
+                v-if="!gatewayErrorMessageRows.length"
+                class="text-sm text-gray-500 dark:text-gray-400"
+              >
+                {{ t('admin.settings.gatewayErrorMessages.empty') }}
               </p>
             </div>
+            <datalist id="gateway-error-code-suggestions">
+              <option
+                v-for="code in gatewayErrorCodeSuggestions"
+                :key="code"
+                :value="code"
+              />
+            </datalist>
+            <button
+              type="button"
+              data-testid="gateway-error-add"
+              class="btn btn-secondary btn-sm"
+              @click="addGatewayErrorMessageRow"
+            >
+              {{ t('admin.settings.gatewayErrorMessages.addRow') }}
+            </button>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.gatewayErrorMessages.hint') }}
+            </p>
           </div>
         </div>
 
@@ -7365,6 +7430,13 @@ import {
   defaultFingerprintSignalRows,
   type FingerprintSignalRow,
 } from "./codexFingerprintSignals";
+import {
+  parseGatewayErrorMessagesToRows,
+  serializeGatewayErrorMessageRowsToJSON,
+  validateGatewayErrorMessageRows,
+  COMMON_GATEWAY_ERROR_CODES,
+  type GatewayErrorMessageRow,
+} from "./gatewayErrorMessages";
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
@@ -8223,8 +8295,6 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
-  // Gateway error messages (JSON object mapping status code -> message)
-  gateway_error_messages: "{}",
 });
 
 const authSourceDefaults = reactive<AuthSourceDefaultsState>(
@@ -8833,6 +8903,34 @@ function removeCodexFingerprintRow(i: number): void {
   codexFingerprintRows.value.splice(i, 1);
 }
 
+// Gateway error messages: edited as code/message rows, serialized to a JSON
+// object on save (see serializeGatewayErrorMessageRowsToJSON).
+const gatewayErrorMessageRows = ref<GatewayErrorMessageRow[]>([]);
+const gatewayErrorCodeSuggestions = COMMON_GATEWAY_ERROR_CODES;
+const gatewayErrorRowErrors = computed(() =>
+  validateGatewayErrorMessageRows(gatewayErrorMessageRows.value),
+);
+function addGatewayErrorMessageRow(): void {
+  gatewayErrorMessageRows.value.push({ code: "", message: "" });
+}
+function removeGatewayErrorMessageRow(i: number): void {
+  gatewayErrorMessageRows.value.splice(i, 1);
+}
+function gatewayErrorRowErrorText(i: number): string {
+  switch (gatewayErrorRowErrors.value.get(i)) {
+    case "code-empty":
+      return t("admin.settings.gatewayErrorMessages.errors.codeEmpty");
+    case "code-invalid":
+      return t("admin.settings.gatewayErrorMessages.errors.codeInvalid");
+    case "code-duplicate":
+      return t("admin.settings.gatewayErrorMessages.errors.codeDuplicate");
+    case "message-empty":
+      return t("admin.settings.gatewayErrorMessages.errors.messageEmpty");
+    default:
+      return "";
+  }
+}
+
 function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
   if (!raw || !raw.trim()) return [];
   try {
@@ -8937,10 +9035,11 @@ async function loadSettings() {
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(settings));
     form.default_platform_quotas = normalizePlatformQuotasMap(settings.default_platform_quotas);
     form.backend_mode_enabled = settings.backend_mode_enabled;
-    form.gateway_error_messages =
+    gatewayErrorMessageRows.value = parseGatewayErrorMessagesToRows(
       typeof settings.gateway_error_messages === "string"
         ? settings.gateway_error_messages
-        : JSON.stringify(settings.gateway_error_messages || {});
+        : JSON.stringify(settings.gateway_error_messages || {}),
+    );
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
       settings.default_subscriptions,
     );
@@ -9262,27 +9361,9 @@ async function saveSettings() {
     form.claude_oauth_system_prompt_blocks =
       claudeOAuthSystemPromptBlocksJSON;
 
-    // Validate gateway error messages JSON
-    try {
-      const raw = form.gateway_error_messages?.trim() || "{}";
-      const parsed = JSON.parse(raw);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("gateway_error_messages must be a JSON object");
-      }
-      for (const [code, message] of Object.entries(parsed)) {
-        if (!/^\d{3}$/.test(code)) {
-          throw new Error(`gateway_error_messages key "${code}" must be a 3-digit HTTP status code`);
-        }
-        if (typeof message !== "string") {
-          throw new Error(`gateway_error_messages value for "${code}" must be a string`);
-        }
-      }
-    } catch (e) {
-      appStore.showError(
-        t("admin.settings.gatewayErrorMessages.invalid", {
-          message: e instanceof Error ? e.message : String(e),
-        }),
-      );
+    // Validate gateway error message rows before saving.
+    if (gatewayErrorRowErrors.value.size > 0) {
+      appStore.showError(t("admin.settings.gatewayErrorMessages.invalidForm"));
       return;
     }
 
@@ -9520,7 +9601,9 @@ async function saveSettings() {
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,
-      gateway_error_messages: form.gateway_error_messages,
+      gateway_error_messages: serializeGatewayErrorMessageRowsToJSON(
+        gatewayErrorMessageRows.value,
+      ),
     };
 
     // 仅当 openai_fast_policy_settings 已成功从后端加载时才回写，

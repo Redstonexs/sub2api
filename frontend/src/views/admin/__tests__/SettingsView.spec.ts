@@ -1274,24 +1274,39 @@ describe("admin SettingsView gateway error messages", () => {
     showError.mockClear();
   });
 
-  it("loads custom gateway error messages from settings response", async () => {
+  it("loads custom gateway error messages into code/message rows", async () => {
     const wrapper = mountView();
     await flushPromises();
 
-    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
-    expect(textarea.exists()).toBe(true);
-    expect(textarea.element.tagName.toLowerCase()).toBe("textarea");
-    expect((textarea.element as HTMLTextAreaElement).value).toBe(
-      '{"429":"Please retry later","502":"Upstream unavailable"}'
+    const codes = wrapper.findAll('[data-testid="gateway-error-code"]');
+    const messages = wrapper.findAll('[data-testid="gateway-error-message"]');
+    expect(codes).toHaveLength(2);
+    expect(messages).toHaveLength(2);
+    expect((codes[0].element as HTMLInputElement).value).toBe("429");
+    expect((messages[0].element as HTMLInputElement).value).toBe(
+      "Please retry later"
+    );
+    expect((codes[1].element as HTMLInputElement).value).toBe("502");
+    expect((messages[1].element as HTMLInputElement).value).toBe(
+      "Upstream unavailable"
     );
   });
 
-  it("includes gateway_error_messages in update payload", async () => {
+  it("serializes gateway error rows into the update payload", async () => {
     const wrapper = mountView();
     await flushPromises();
 
-    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
-    await textarea.setValue('{"429":"Too many requests"}');
+    // Drop the second loaded row, keep a single custom mapping.
+    const removeButtons = wrapper.findAll(
+      '[data-testid="gateway-error-remove"]'
+    );
+    await removeButtons[1].trigger("click");
+
+    const codes = wrapper.findAll('[data-testid="gateway-error-code"]');
+    const messages = wrapper.findAll('[data-testid="gateway-error-message"]');
+    await codes[0].setValue("429");
+    await messages[0].setValue("Too many requests");
+
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
@@ -1299,12 +1314,22 @@ describe("admin SettingsView gateway error messages", () => {
     expect(payload["gateway_error_messages"]).toBe('{"429":"Too many requests"}');
   });
 
-  it("blocks save when gateway_error_messages is not a valid JSON object", async () => {
+  it("adds a new gateway error row via the add button", async () => {
     const wrapper = mountView();
     await flushPromises();
 
-    const textarea = wrapper.find('[data-testid="gateway-error-messages"]');
-    await textarea.setValue('["invalid"]');
+    await wrapper.find('[data-testid="gateway-error-add"]').trigger("click");
+
+    const codes = wrapper.findAll('[data-testid="gateway-error-code"]');
+    expect(codes).toHaveLength(3);
+  });
+
+  it("blocks save when a gateway error row has an invalid status code", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const codes = wrapper.findAll('[data-testid="gateway-error-code"]');
+    await codes[0].setValue("99");
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
