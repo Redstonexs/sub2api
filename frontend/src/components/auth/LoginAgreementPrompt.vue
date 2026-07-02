@@ -28,7 +28,7 @@
             >
               {{ doc.title }}
             </RouterLink>
-            <span v-if="index < documents.length - 1">、</span>
+            <span v-if="index < documents.length - 1">{{ t('legal.loginAgreementPrompt.documentSeparator') }}</span>
           </template>
         </p>
       </div>
@@ -140,8 +140,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import Icon from '@/components/icons/Icon.vue'
 import { useI18n } from 'vue-i18n'
+import Icon from '@/components/icons/Icon.vue'
 import type { LoginAgreementDocument } from '@/types'
 
 const { t } = useI18n()
@@ -187,10 +187,21 @@ function handleCheckboxChange(event: Event): void {
 }
 
 function documentIcon(index: number, title: string): 'document' | 'shield' | 'globe' | 'cog' {
-  if (title.includes('政策') || title.includes('隐私')) {
+  const normalizedTitle = title.toLowerCase()
+  if (
+    normalizedTitle.includes('policy') ||
+    normalizedTitle.includes('privacy') ||
+    title.includes('政策') ||
+    title.includes('隐私')
+  ) {
     return 'shield'
   }
-  if (title.includes('国家') || title.includes('地区')) {
+  if (
+    normalizedTitle.includes('country') ||
+    normalizedTitle.includes('region') ||
+    title.includes('国家') ||
+    title.includes('地区')
+  ) {
     return 'globe'
   }
   if (index === 3) {
