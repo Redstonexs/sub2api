@@ -424,6 +424,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { buildGatewayUrl } from '@/api/client'
 import { useTheme } from '@/composables/useTheme'
+import { chartChrome } from '@/utils/chartTheme'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -530,7 +531,7 @@ const RING_GRADIENTS = [
 const ringAnimated = ref(false)
 const displayPcts = ref<number[]>([])
 
-const ringTrackColor = computed(() => isDark.value ? '#222222' : '#F0F0EE')
+const ringTrackColor = computed(() => chartChrome(isDark.value).grid)
 
 interface RingItem {
   title: string
