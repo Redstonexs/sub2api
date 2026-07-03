@@ -134,6 +134,12 @@ type userSubRepoStub struct{}
 
 func (userSubRepoStub) Create(context.Context, *UserSubscription) error           { return nil }
 func (userSubRepoStub) GetByID(context.Context, int64) (*UserSubscription, error) { return nil, nil }
+func (userSubRepoStub) GetByIDIncludeDeleted(context.Context, int64) (*UserSubscription, error) {
+	return nil, nil
+}
+func (userSubRepoStub) Restore(context.Context, int64, string) (*UserSubscription, error) {
+	return nil, nil
+}
 func (userSubRepoStub) GetByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) {
 	return nil, nil
 }
@@ -158,6 +164,9 @@ func (userSubRepoStub) List(context.Context, pagination.PaginationParams, *int64
 	return nil, nil, nil
 }
 func (userSubRepoStub) ExistsByUserIDAndGroupID(context.Context, int64, int64) (bool, error) {
+	return false, nil
+}
+func (userSubRepoStub) ExistsActiveByUserIDAndGroupID(context.Context, int64, int64) (bool, error) {
 	return false, nil
 }
 func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error      { return nil }
