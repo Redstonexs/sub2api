@@ -423,6 +423,7 @@ import { useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { buildGatewayUrl } from '@/api/client'
+import { useTheme } from '@/composables/useTheme'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -436,13 +437,7 @@ const githubUrl = 'https://github.com/Redstonexs/sub2api'
 
 // ==================== Theme (same as HomeView) ====================
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
+const { isDark, toggleTheme } = useTheme()
 
 const currentYear = computed(() => new Date().getFullYear())
 
@@ -905,13 +900,6 @@ async function queryKey() {
 
 // ==================== Lifecycle ====================
 
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
-}
 
 function formatResetTime(resetAt: string | null | undefined): string {
   if (!resetAt) return ''
@@ -926,7 +914,6 @@ function formatResetTime(resetAt: string | null | undefined): string {
 }
 
 onMounted(() => {
-  initTheme()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }

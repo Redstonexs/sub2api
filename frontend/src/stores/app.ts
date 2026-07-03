@@ -14,10 +14,28 @@ import {
 } from '@/api/admin/system'
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
 
+const SIDEBAR_COLLAPSED_KEY = 'sub2api_sidebar_collapsed'
+
+function readPersistedSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistSidebarCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    // persisting is best-effort (private mode, quota)
+  }
+}
+
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
 
-  const sidebarCollapsed = ref<boolean>(false)
+  const sidebarCollapsed = ref<boolean>(readPersistedSidebarCollapsed())
   const mobileOpen = ref<boolean>(false)
   const loading = ref<boolean>(false)
   const toasts = ref<Toast[]>([])
@@ -59,6 +77,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function toggleSidebar(): void {
     sidebarCollapsed.value = !sidebarCollapsed.value
+    persistSidebarCollapsed(sidebarCollapsed.value)
   }
 
   /**
@@ -67,6 +86,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function setSidebarCollapsed(collapsed: boolean): void {
     sidebarCollapsed.value = collapsed
+    persistSidebarCollapsed(collapsed)
   }
 
   /**
@@ -227,6 +247,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function reset(): void {
     sidebarCollapsed.value = false
+    persistSidebarCollapsed(false)
     loading.value = false
     loadingCount.value = 0
     toasts.value = []
