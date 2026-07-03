@@ -487,13 +487,13 @@ onMounted(() => {
 }
 
 .btn-close {
-  background: #ef4444;
+  background: #D0685B;
 }
 .btn-minimize {
-  background: #eab308;
+  background: #E2A846;
 }
 .btn-maximize {
-  background: #22c55e;
+  background: #73BA65;
 }
 
 .terminal-title {
@@ -547,14 +547,14 @@ onMounted(() => {
 }
 
 .code-prompt {
-  color: #22c55e;
+  color: #73BA65;
   font-weight: bold;
 }
 .code-cmd {
-  color: #38bdf8;
+  color: #7EA4DD;
 }
 .code-flag {
-  color: #a78bfa;
+  color: #BF92CC;
 }
 .code-url {
   color: #cc785c;
@@ -564,14 +564,14 @@ onMounted(() => {
   font-style: italic;
 }
 .code-success {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.15);
+  color: #73BA65;
+  background: rgba(115, 186, 101, 0.15);
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
 }
 .code-response {
-  color: #fbbf24;
+  color: #F9BE5E;
 }
 
 /* Blinking Cursor */
@@ -579,7 +579,7 @@ onMounted(() => {
   display: inline-block;
   width: 8px;
   height: 16px;
-  background: #22c55e;
+  background: #73BA65;
   animation: blink 1s step-end infinite;
 }
 
