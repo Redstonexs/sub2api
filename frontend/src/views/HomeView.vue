@@ -189,7 +189,7 @@
         <div class="mb-12 grid gap-6 md:grid-cols-3">
           <!-- Feature 1: Unified Gateway -->
           <div
-            class="group rounded-xl border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-card-hover dark:border-dark-700 dark:bg-dark-800"
+            class="card group p-6 hover:shadow-card-hover"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-transform group-hover:scale-110 dark:bg-primary-900/20 dark:text-primary-400"
@@ -206,7 +206,7 @@
 
           <!-- Feature 2: Account Pool -->
           <div
-            class="group rounded-xl border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-card-hover dark:border-dark-700 dark:bg-dark-800"
+            class="card group p-6 hover:shadow-card-hover"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-transform group-hover:scale-110 dark:bg-primary-900/20 dark:text-primary-400"
@@ -235,7 +235,7 @@
 
           <!-- Feature 3: Billing & Quota -->
           <div
-            class="group rounded-xl border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-card-hover dark:border-dark-700 dark:bg-dark-800"
+            class="card group p-6 hover:shadow-card-hover"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-transform group-hover:scale-110 dark:bg-primary-900/20 dark:text-primary-400"

@@ -15,7 +15,7 @@
       <AppHeader />
 
       <!-- Main Content -->
-      <main class="p-4 md:p-6 lg:p-8">
+      <main class="animate-page-enter p-4 md:p-6 lg:p-8">
         <slot />
       </main>
     </div>

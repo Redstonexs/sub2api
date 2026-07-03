@@ -4,9 +4,10 @@
     <div
       class="pointer-events-none absolute inset-0 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-dark-950 dark:to-dark-900"
     ></div>
+    <div class="pointer-events-none absolute inset-0 bg-mesh-gradient"></div>
 
     <!-- Content Container -->
-    <div class="relative z-10 w-full max-w-md">
+    <div class="animate-page-enter relative z-10 w-full max-w-md">
       <!-- Logo/Brand -->
       <div class="mb-8 text-center">
         <!-- Custom Logo or Default Logo -->
@@ -26,7 +27,7 @@
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-xl p-8 shadow-glass">
+      <div class="rounded-2xl border border-gray-200/70 bg-white p-8 shadow-card dark:border-dark-700 dark:bg-dark-900">
         <slot />
       </div>
 
