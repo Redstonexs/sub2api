@@ -94,23 +94,18 @@
   }
 
   .btn-danger {
-    @apply bg-gradient-to-r from-red-500 to-red-600;
-    @apply text-white shadow-md shadow-red-500/25;
-    @apply hover:from-red-600 hover:to-red-700 hover:shadow-lg hover:shadow-red-500/30;
+    @apply bg-danger-600 text-white shadow-sm;
+    @apply hover:bg-danger-700 hover:shadow;
   }
 
   .btn-success {
-    @apply bg-gradient-to-r from-emerald-500 to-emerald-600;
-    @apply text-white shadow-md shadow-emerald-500/25;
-    @apply hover:from-emerald-600 hover:to-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30;
-    @apply dark:shadow-emerald-500/20;
+    @apply bg-success-600 text-white shadow-sm;
+    @apply hover:bg-success-700 hover:shadow;
   }
 
   .btn-warning {
-    @apply bg-gradient-to-r from-amber-500 to-amber-600;
-    @apply text-white shadow-md shadow-amber-500/25;
-    @apply hover:from-amber-600 hover:to-amber-700 hover:shadow-lg hover:shadow-amber-500/30;
-    @apply dark:shadow-amber-500/20;
+    @apply bg-warning-600 text-white shadow-sm;
+    @apply hover:bg-warning-700 hover:shadow;
   }
 
   .btn-stripe {
@@ -170,7 +165,7 @@
   }
 
   .input-error {
-    @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
+    @apply border-danger-500 focus:border-danger-500 focus:ring-danger-500/30;
   }
 
   .input-label {
@@ -182,7 +177,7 @@
   }
 
   .input-error-text {
-    @apply mt-1 text-xs text-red-500;
+    @apply mt-1 text-xs text-danger-500;
   }
 
   /* Hide number input spinner buttons for cleaner UI */
@@ -262,15 +257,15 @@
   }
 
   .stat-icon-success {
-    @apply bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400;
+    @apply bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success-400;
   }
 
   .stat-icon-warning {
-    @apply bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400;
+    @apply bg-warning-100 text-warning-600 dark:bg-warning-900/30 dark:text-warning-400;
   }
 
   .stat-icon-danger {
-    @apply bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400;
+    @apply bg-danger-100 text-danger-600 dark:bg-danger-900/30 dark:text-danger-400;
   }
 
   .stat-value {
@@ -286,11 +281,11 @@
   }
 
   .stat-trend-up {
-    @apply text-emerald-600 dark:text-emerald-400;
+    @apply text-success-600 dark:text-success-400;
   }
 
   .stat-trend-down {
-    @apply text-red-600 dark:text-red-400;
+    @apply text-danger-600 dark:text-danger-400;
   }
 
   /* ============ 表格样式 ============ */
@@ -335,15 +330,15 @@
   }
 
   .badge-success {
-    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
+    @apply bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400;
   }
 
   .badge-warning {
-    @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+    @apply bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400;
   }
 
   .badge-danger {
-    @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+    @apply bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400;
   }
 
   .badge-gray {
@@ -507,19 +502,19 @@
   }
 
   .toast-success {
-    @apply border-l-emerald-500;
+    @apply border-l-success-500;
   }
 
   .toast-error {
-    @apply border-l-red-500;
+    @apply border-l-danger-500;
   }
 
   .toast-warning {
-    @apply border-l-amber-500;
+    @apply border-l-warning-500;
   }
 
   .toast-info {
-    @apply border-l-primary-500;
+    @apply border-l-info-500;
   }
 
   /* ============ 侧边栏 ============ */
@@ -702,8 +697,8 @@
   }
 
   .tour-info-box {
-    @apply rounded-md border-l-4 border-blue-500 bg-blue-50 px-3 py-2 text-xs text-blue-900;
-    @apply dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200;
+    @apply rounded-md border-l-4 border-info-500 bg-info-50 px-3 py-2 text-xs text-info-900;
+    @apply dark:border-info-400 dark:bg-info-950/40 dark:text-info-200;
   }
 
   .tour-success-box {
