@@ -5,9 +5,11 @@ import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogS
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import { useAppStore } from '@/stores'
+import { useConfirm } from '@/composables/useConfirm'
 
 const appStore = useAppStore()
 const { t } = useI18n()
+const { confirm } = useConfirm()
 
 const props = withDefaults(defineProps<{
   platformFilter?: string
@@ -258,7 +260,7 @@ const saveRuntimeConfig = async () => {
 }
 
 const resetRuntimeConfig = async () => {
-  const ok = window.confirm(t('admin.ops.systemLog.confirmRollback'))
+  const ok = await confirm({ title: t('admin.ops.systemLog.title'), message: t('admin.ops.systemLog.confirmRollback'), danger: true })
   if (!ok) return
 
   runtimeSaving.value = true
@@ -282,7 +284,7 @@ const resetRuntimeConfig = async () => {
 }
 
 const cleanupCurrentFilter = async () => {
-  const ok = window.confirm(t('admin.ops.systemLog.confirmCleanup'))
+  const ok = await confirm({ title: t('admin.ops.systemLog.title'), message: t('admin.ops.systemLog.confirmCleanup'), danger: true })
   if (!ok) return
   try {
     const payload = {

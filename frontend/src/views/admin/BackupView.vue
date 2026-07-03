@@ -284,9 +284,11 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
 import type { BackupS3Config, BackupScheduleConfig, BackupRecord } from '@/api/admin/backup'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const { confirm } = useConfirm()
 
 // S3 config
 const s3Form = ref<BackupS3Config>({
@@ -547,7 +549,7 @@ async function downloadBackup(id: string) {
 }
 
 async function restoreBackup(id: string) {
-  if (!window.confirm(t('admin.backup.actions.restoreConfirm'))) return
+  if (!(await confirm({ title: t('admin.backup.actions.restore'), message: t('admin.backup.actions.restoreConfirm'), danger: true }))) return
   const password = window.prompt(t('admin.backup.actions.restorePasswordPrompt'))
   if (!password) return
   restoringId.value = id
@@ -566,7 +568,7 @@ async function restoreBackup(id: string) {
 }
 
 async function removeBackup(id: string) {
-  if (!window.confirm(t('admin.backup.actions.deleteConfirm'))) return
+  if (!(await confirm({ title: t('common.delete'), message: t('admin.backup.actions.deleteConfirm'), danger: true }))) return
   try {
     await adminAPI.backup.deleteBackup(id)
     appStore.showSuccess(t('admin.backup.actions.deleted'))

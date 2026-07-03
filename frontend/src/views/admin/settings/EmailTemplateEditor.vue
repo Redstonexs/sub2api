@@ -239,9 +239,11 @@ import type {
 } from "@/api/admin/settings";
 import { useAppStore } from "@/stores";
 import { extractApiErrorMessage } from "@/utils/apiError";
+import { useConfirm } from "@/composables/useConfirm";
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
+const { confirm } = useConfirm();
 
 const fallbackPlaceholders = [
   "{{site_name}}",
@@ -659,7 +661,7 @@ async function refreshPreview() {
 
 async function restoreOfficial() {
   if (!selectedEvent.value || !selectedLocale.value) return;
-  if (!window.confirm(t("admin.settings.emailTemplates.restoreConfirm"))) return;
+  if (!(await confirm({ title: t("admin.settings.emailTemplates.title"), message: t("admin.settings.emailTemplates.restoreConfirm"), danger: true }))) return;
 
   restoring.value = true;
   try {
