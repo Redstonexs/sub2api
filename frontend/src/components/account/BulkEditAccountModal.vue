@@ -1157,6 +1157,7 @@ import {
   resolveOpenAIWSModeConcurrencyHintKey
 } from '@/utils/openaiWsMode'
 import type { OpenAIWSMode } from '@/utils/openaiWsMode'
+import { useConfirm } from '@/composables/useConfirm'
 interface Props {
   show: boolean
   accountIds: number[]
@@ -1181,6 +1182,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const { confirm } = useConfirm()
 
 // Platform awareness
 const targetMode = computed(() => props.target?.mode ?? 'selected')
@@ -1371,16 +1373,16 @@ const addPresetMapping = (from: string, to: string) => {
 }
 
 // Error code helpers
-const toggleErrorCode = (code: number) => {
+const toggleErrorCode = async (code: number) => {
   const index = selectedErrorCodes.value.indexOf(code)
   if (index === -1) {
     // Adding code - check for 429/529 warning
     if (code === 429) {
-      if (!confirm(t('admin.accounts.customErrorCodes429Warning'))) {
+      if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes429Warning') }))) {
         return
       }
     } else if (code === 529) {
-      if (!confirm(t('admin.accounts.customErrorCodes529Warning'))) {
+      if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes529Warning') }))) {
         return
       }
     }
@@ -1390,7 +1392,7 @@ const toggleErrorCode = (code: number) => {
   }
 }
 
-const addCustomErrorCode = () => {
+const addCustomErrorCode = async () => {
   const code = customErrorCodeInput.value
   if (code === null || code < 100 || code > 599) {
     appStore.showError(t('admin.accounts.invalidErrorCode'))
@@ -1402,11 +1404,11 @@ const addCustomErrorCode = () => {
   }
   // Check for 429/529 warning
   if (code === 429) {
-    if (!confirm(t('admin.accounts.customErrorCodes429Warning'))) {
+    if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes429Warning') }))) {
       return
     }
   } else if (code === 529) {
-    if (!confirm(t('admin.accounts.customErrorCodes529Warning'))) {
+    if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes529Warning') }))) {
       return
     }
   }

@@ -3308,6 +3308,7 @@ import {
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { useConfirm } from '@/composables/useConfirm'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   OPENAI_WS_MODE_CTX_POOL,
@@ -3336,6 +3337,7 @@ interface OAuthFlowExposed {
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const { confirm } = useConfirm()
 
 const oauthStepTitle = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
@@ -4051,16 +4053,16 @@ const addAntigravityPresetMapping = (from: string, to: string) => {
 }
 
 // Error code toggle helper
-const toggleErrorCode = (code: number) => {
+const toggleErrorCode = async (code: number) => {
   const index = selectedErrorCodes.value.indexOf(code)
   if (index === -1) {
     // Adding code - check for 429/529 warning
     if (code === 429) {
-      if (!confirm(t('admin.accounts.customErrorCodes429Warning'))) {
+      if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes429Warning') }))) {
         return
       }
     } else if (code === 529) {
-      if (!confirm(t('admin.accounts.customErrorCodes529Warning'))) {
+      if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes529Warning') }))) {
         return
       }
     }
@@ -4071,7 +4073,7 @@ const toggleErrorCode = (code: number) => {
 }
 
 // Add custom error code from input
-const addCustomErrorCode = () => {
+const addCustomErrorCode = async () => {
   const code = customErrorCodeInput.value
   if (code === null || code < 100 || code > 599) {
     appStore.showError(t('admin.accounts.invalidErrorCode'))
@@ -4083,11 +4085,11 @@ const addCustomErrorCode = () => {
   }
   // Check for 429/529 warning
   if (code === 429) {
-    if (!confirm(t('admin.accounts.customErrorCodes429Warning'))) {
+    if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes429Warning') }))) {
       return
     }
   } else if (code === 529) {
-    if (!confirm(t('admin.accounts.customErrorCodes529Warning'))) {
+    if (!(await confirm({ title: t('admin.accounts.customErrorCodes'), message: t('admin.accounts.customErrorCodes529Warning') }))) {
       return
     }
   }

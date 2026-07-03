@@ -3425,6 +3425,9 @@ export default {
         refreshToken: 'Refresh Token',
         resetStatusSuccess: 'Successfully reset {count} account(s) status',
         refreshTokenSuccess: 'Successfully refreshed {count} account(s) token',
+        deleteConfirm: 'Delete {count} selected account(s)? This action cannot be undone.',
+        resetStatusConfirm: 'Reset the error status of {count} selected account(s)?',
+        refreshTokenConfirm: 'Refresh the token of {count} selected account(s)?',
         partialSuccess: 'Partially completed: {success} succeeded, {failed} failed'
       },
       bulkEdit: {

@@ -3489,6 +3489,9 @@ export default {
         refreshToken: '批量刷新令牌',
         resetStatusSuccess: '已成功重置 {count} 个账号状态',
         refreshTokenSuccess: '已成功刷新 {count} 个账号令牌',
+        deleteConfirm: '确定删除选中的 {count} 个账号吗？此操作不可撤销。',
+        resetStatusConfirm: '确定重置选中的 {count} 个账号的错误状态吗？',
+        refreshTokenConfirm: '确定刷新选中的 {count} 个账号的令牌吗？',
         partialSuccess: '操作部分完成：{success} 成功，{failed} 失败'
       },
       bulkEdit: {

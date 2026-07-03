@@ -441,11 +441,13 @@ import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfil
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
+import { useConfirm } from '@/composables/useConfirm'
 import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const { confirm } = useConfirm()
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
@@ -1244,9 +1246,9 @@ const toggleSelectAllVisible = (event: Event) => {
   const target = event.target as HTMLInputElement
   toggleVisible(target.checked)
 }
-const handleBulkDelete = async () => { if(!confirm(t('common.confirm'))) return; try { await Promise.all(selIds.value.map(id => adminAPI.accounts.delete(id))); clearSelection(); reload() } catch (error) { console.error('Failed to bulk delete accounts:', error) } }
+const handleBulkDelete = async () => { if (!(await confirm({ title: t('admin.accounts.bulkActions.delete'), message: t('admin.accounts.bulkActions.deleteConfirm', { count: selIds.value.length }), danger: true }))) return; try { await Promise.all(selIds.value.map(id => adminAPI.accounts.delete(id))); clearSelection(); reload() } catch (error) { console.error('Failed to bulk delete accounts:', error) } }
 const handleBulkResetStatus = async () => {
-  if (!confirm(t('common.confirm'))) return
+  if (!(await confirm({ title: t('admin.accounts.bulkActions.resetStatus'), message: t('admin.accounts.bulkActions.resetStatusConfirm', { count: selIds.value.length }) }))) return
   try {
     const result = await adminAPI.accounts.batchClearError(selIds.value)
     if (result.failed > 0) {
@@ -1262,7 +1264,7 @@ const handleBulkResetStatus = async () => {
   }
 }
 const handleBulkRefreshToken = async () => {
-  if (!confirm(t('common.confirm'))) return
+  if (!(await confirm({ title: t('admin.accounts.bulkActions.refreshToken'), message: t('admin.accounts.bulkActions.refreshTokenConfirm', { count: selIds.value.length }) }))) return
   try {
     const result = await adminAPI.accounts.batchRefresh(selIds.value)
     if (result.failed > 0) {
