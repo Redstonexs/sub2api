@@ -173,9 +173,18 @@ func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error    
 func (userSubRepoStub) UpdateStatus(context.Context, int64, string) error         { return nil }
 func (userSubRepoStub) UpdateNotes(context.Context, int64, string) error          { return nil }
 func (userSubRepoStub) ActivateWindows(context.Context, int64, time.Time) error   { return nil }
-func (userSubRepoStub) ResetDailyUsage(context.Context, int64, time.Time) error   { return nil }
-func (userSubRepoStub) ResetWeeklyUsage(context.Context, int64, time.Time) error  { return nil }
-func (userSubRepoStub) ResetMonthlyUsage(context.Context, int64, time.Time) error { return nil }
+func (userSubRepoStub) ResetUsageWindows(context.Context, int64, bool, bool, bool, time.Time) error {
+	return nil
+}
+func (userSubRepoStub) ResetDailyUsage(context.Context, int64, *time.Time, time.Time) error {
+	return nil
+}
+func (userSubRepoStub) ResetWeeklyUsage(context.Context, int64, *time.Time, time.Time) error {
+	return nil
+}
+func (userSubRepoStub) ResetMonthlyUsage(context.Context, int64, *time.Time, time.Time) error {
+	return nil
+}
 func (userSubRepoStub) IncrementUsage(context.Context, int64, float64) error      { return nil }
 func (userSubRepoStub) BatchUpdateExpiredStatus(context.Context) (int64, error)   { return 0, nil }
 
