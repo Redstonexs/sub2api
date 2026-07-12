@@ -113,6 +113,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesReq.Model = upstreamModel
 	if previousResponseID != "" {
 		responsesReq.PreviousResponseID = previousResponseID
+		responsesReq.Reasoning.Context = "all_turns"
 		trimAnthropicCompatResponsesInputToLatestTurn(responsesReq)
 	}
 	if compatReplayGuardEnabled && account.Type != AccountTypeOAuth {

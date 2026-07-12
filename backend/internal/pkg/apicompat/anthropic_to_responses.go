@@ -67,6 +67,9 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
 		Effort:  mapAnthropicEffortToResponses(effort),
 		Summary: "auto",
 	}
+	if responsesInputHasReasoning(input) {
+		out.Reasoning.Context = "all_turns"
+	}
 
 	// Convert tool_choice
 	if len(req.ToolChoice) > 0 {
@@ -78,6 +81,15 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
 	}
 
 	return out, nil
+}
+
+func responsesInputHasReasoning(items []ResponsesInputItem) bool {
+	for i := range items {
+		if items[i].Type == "reasoning" {
+			return true
+		}
+	}
+	return false
 }
 
 // convertAnthropicToolChoiceToResponses maps Anthropic tool_choice to Responses format.
@@ -257,7 +269,6 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
 // anthropicAssistantToResponses handles an Anthropic assistant message.
 // Text content → assistant message with output_text parts.
 // tool_use blocks → function_call items.
-// thinking blocks → ignored (OpenAI doesn't accept them as input).
 func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, error) {
 	// Try plain string.
 	var s string
@@ -276,34 +287,68 @@ func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, e
 	}
 
 	var items []ResponsesInputItem
-
-	// Text content → assistant message with output_text content parts.
-	text := extractAnthropicTextFromBlocks(blocks)
-	if text != "" {
-		parts := []ResponsesContentPart{{Type: "output_text", Text: text}}
+	var text strings.Builder
+	flushText := func() error {
+		if text.Len() == 0 {
+			return nil
+		}
+		parts := []ResponsesContentPart{{Type: "output_text", Text: text.String()}}
 		partsJSON, err := json.Marshal(parts)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		items = append(items, ResponsesInputItem{Type: "message", Role: "assistant", Content: partsJSON})
+		text.Reset()
+		return nil
 	}
 
-	// tool_use → function_call items.
 	for _, b := range blocks {
-		if b.Type != "tool_use" {
-			continue
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				if text.Len() > 0 {
+					_, _ = text.WriteString("\n\n")
+				}
+				_, _ = text.WriteString(b.Text)
+			}
+		case "thinking", "redacted_thinking":
+			encryptedContent := b.Signature
+			if b.Type == "redacted_thinking" {
+				encryptedContent = b.Data
+			}
+			if encryptedContent == "" {
+				continue
+			}
+			if err := flushText(); err != nil {
+				return nil, err
+			}
+			summary := make([]ResponsesSummary, 0, 1)
+			if b.Type == "thinking" && b.Thinking != "" {
+				summary = append(summary, ResponsesSummary{Type: "summary_text", Text: b.Thinking})
+			}
+			items = append(items, ResponsesInputItem{
+				Type:             "reasoning",
+				EncryptedContent: encryptedContent,
+				Summary:          &summary,
+			})
+		case "tool_use":
+			if err := flushText(); err != nil {
+				return nil, err
+			}
+			args := "{}"
+			if len(b.Input) > 0 {
+				args = string(b.Input)
+			}
+			items = append(items, ResponsesInputItem{
+				Type:      "function_call",
+				CallID:    toResponsesCallID(b.ID),
+				Name:      b.Name,
+				Arguments: args,
+			})
 		}
-		args := "{}"
-		if len(b.Input) > 0 {
-			args = string(b.Input)
-		}
-		fcID := toResponsesCallID(b.ID)
-		items = append(items, ResponsesInputItem{
-			Type:      "function_call",
-			CallID:    fcID,
-			Name:      b.Name,
-			Arguments: args,
-		})
+	}
+	if err := flushText(); err != nil {
+		return nil, err
 	}
 
 	return items, nil
@@ -386,18 +431,6 @@ func convertToolResultOutput(b AnthropicContentBlock) (string, []ResponsesConten
 		text = "(empty)"
 	}
 	return text, imageParts
-}
-
-// extractAnthropicTextFromBlocks joins all text blocks, ignoring thinking/
-// tool_use/tool_result blocks.
-func extractAnthropicTextFromBlocks(blocks []AnthropicContentBlock) string {
-	var parts []string
-	for _, b := range blocks {
-		if b.Type == "text" && b.Text != "" {
-			parts = append(parts, b.Text)
-		}
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 // mapAnthropicEffortToResponses converts Anthropic reasoning effort levels to

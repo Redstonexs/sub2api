@@ -531,6 +531,7 @@ func TestForwardAsAnthropic_AttachesPreviousResponseIDForCompatContinuation(t *t
 	require.NotNil(t, secondResult)
 	require.Equal(t, "resp_second", secondResult.ResponseID)
 	require.Equal(t, "resp_first", gjson.GetBytes(upstream.lastBody, "previous_response_id").String())
+	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
 	require.Equal(t, int64(2), gjson.GetBytes(upstream.lastBody, "input.#").Int())
 	require.Equal(t, "developer", gjson.GetBytes(upstream.lastBody, "input.0.role").String())
 	require.Contains(t, gjson.GetBytes(upstream.lastBody, "input.0.content.0.text").String(), "<sub2api-claude-code-todo-guard>")

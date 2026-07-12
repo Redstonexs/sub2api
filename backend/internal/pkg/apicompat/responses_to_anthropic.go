@@ -32,10 +32,11 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
 					summaryText += s.Text
 				}
 			}
-			if summaryText != "" {
+			if summaryText != "" || item.EncryptedContent != "" {
 				blocks = append(blocks, AnthropicContentBlock{
-					Type:     "thinking",
-					Thinking: summaryText,
+					Type:      "thinking",
+					Thinking:  summaryText,
+					Signature: item.EncryptedContent,
 				})
 			}
 		case "message":
@@ -227,8 +228,8 @@ func ResponsesEventToAnthropicEvents(
 		// 原始推理文本增量，与 reasoning summary 一样映射为 thinking。
 		"response.reasoning_text.delta":
 		return resToAnthHandleReasoningDelta(evt, state)
-	case "response.reasoning_summary_text.done":
-		return resToAnthHandleBlockDone(state)
+	case "response.reasoning_summary_text.done", "response.reasoning_text.done":
+		return nil
 	// response.done 是 Realtime/WS 与项目透传路径使用的终止别名；
 	// 普通 Responses HTTP SSE 的公开终止事件仍以 response.completed 为主。
 	case "response.completed", "response.done", "response.incomplete", "response.failed":
@@ -500,6 +501,9 @@ func resToAnthHandleOutputItemDone(evt *ResponsesStreamEvent, state *ResponsesEv
 	if evt.Item == nil {
 		return nil
 	}
+	if evt.Item.Type == "reasoning" {
+		return resToAnthHandleReasoningDone(evt, state)
+	}
 
 	// Handle web_search_call → synthesize server_tool_use + web_search_tool_result blocks.
 	if evt.Item.Type == "web_search_call" && evt.Item.Status == "completed" {
@@ -510,6 +514,27 @@ func resToAnthHandleOutputItemDone(evt *ResponsesStreamEvent, state *ResponsesEv
 		return closeCurrentBlock(state)
 	}
 	return nil
+}
+
+func resToAnthHandleReasoningDone(evt *ResponsesStreamEvent, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+	blockIdx, ok := state.OutputIndexToBlockIdx[evt.OutputIndex]
+	if !ok || !state.ContentBlockOpen || state.CurrentBlockType != "thinking" || blockIdx != state.ContentBlockIndex {
+		return nil
+	}
+
+	var events []AnthropicStreamEvent
+	if evt.Item.EncryptedContent != "" {
+		events = append(events, AnthropicStreamEvent{
+			Type:  "content_block_delta",
+			Index: &blockIdx,
+			Delta: &AnthropicDelta{
+				Type:      "signature_delta",
+				Signature: evt.Item.EncryptedContent,
+			},
+		})
+	}
+	events = append(events, closeCurrentBlock(state)...)
+	return events
 }
 
 // resToAnthHandleWebSearchDone converts an OpenAI web_search_call output item

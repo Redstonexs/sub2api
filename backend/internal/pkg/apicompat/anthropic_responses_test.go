@@ -790,8 +790,16 @@ func TestStreamingReasoning(t *testing.T) {
 	events = ResponsesEventToAnthropicEvents(&ResponsesStreamEvent{
 		Type: "response.reasoning_summary_text.done",
 	}, state)
-	require.Len(t, events, 1)
+	require.Empty(t, events)
+
+	events = ResponsesEventToAnthropicEvents(&ResponsesStreamEvent{
+		Type:     "response.completed",
+		Response: &ResponsesResponse{ID: "resp_3", Status: "completed"},
+	}, state)
+	require.Len(t, events, 3)
 	assert.Equal(t, "content_block_stop", events[0].Type)
+	assert.Equal(t, "message_delta", events[1].Type)
+	assert.Equal(t, "message_stop", events[2].Type)
 }
 
 func TestStreamingIncomplete(t *testing.T) {

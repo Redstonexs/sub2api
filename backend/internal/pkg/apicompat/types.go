@@ -59,7 +59,9 @@ type AnthropicContentBlock struct {
 	Text string `json:"text,omitempty"`
 
 	// type=thinking
-	Thinking string `json:"thinking,omitempty"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"`
 
 	// type=image
 	Source *AnthropicImageSource `json:"source,omitempty"`
@@ -212,6 +214,7 @@ type ResponsesRequest struct {
 type ResponsesReasoning struct {
 	Effort  string `json:"effort"`            // "low" | "medium" | "high" | "xhigh"
 	Summary string `json:"summary,omitempty"` // "auto" | "concise" | "detailed"
+	Context string `json:"context,omitempty"`
 }
 
 // ResponsesText configures text output options in the Responses API.
@@ -237,7 +240,9 @@ type ResponsesInputItem struct {
 	ID        string `json:"id,omitempty"`
 
 	// type=function_call_output
-	Output string `json:"output,omitempty"`
+	Output           string              `json:"output,omitempty"`
+	EncryptedContent string              `json:"encrypted_content,omitempty"`
+	Summary          *[]ResponsesSummary `json:"summary,omitempty"`
 }
 
 // ResponsesContentPart is a typed content part in a Responses message.
