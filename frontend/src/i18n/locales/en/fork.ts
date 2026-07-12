@@ -196,6 +196,17 @@ export default {
       gatewayForwarding: {
         claudeOAuthSystemPromptBlocksPlaceholder: "Leave empty to use the built-in 3 blocks. Supports an array or {'{'}\"blocks\": [...]{'}'}.",
       },
+      // Upstream v0.1.151 added the Fast/Flex user-scope UI reading
+      // openaiFastPolicy.userIds* but shipped the keys under betaPolicy;
+      // overlay them here until upstream relocates them.
+      openaiFastPolicy: {
+        userIds: "Specific user IDs",
+        userIdsHint:
+          "Leave empty to apply to all Sub2API users. Specified users match requests from their API keys and take precedence over global rules.",
+        userIdPlaceholder: "e.g., 1001",
+        addUserId: "Add user ID",
+        removeUserId: "Remove user ID",
+      },
     },
   },
   onboarding: {

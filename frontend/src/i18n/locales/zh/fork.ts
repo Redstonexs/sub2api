@@ -211,6 +211,17 @@ export default {
       gatewayForwarding: {
         claudeOAuthSystemPromptBlocksPlaceholder: "留空时使用内置 3 个 blocks。支持数组或 {'{'}\"blocks\": [...]{'}'}。",
       },
+      // Upstream v0.1.151 添加的 Fast/Flex 用户范围 UI 读取
+      // openaiFastPolicy.userIds*，但键被误放进 betaPolicy；
+      // 在此覆盖，待上游修正后移除。
+      openaiFastPolicy: {
+        userIds: "指定用户 ID",
+        userIdsHint:
+          "留空表示对全部 Sub2API 用户生效。指定后仅匹配这些用户的 API Key 请求，且优先于全局规则。",
+        userIdPlaceholder: "例如: 1001",
+        addUserId: "添加用户 ID",
+        removeUserId: "移除用户 ID",
+      },
     },
   },
   payment: {
