@@ -145,8 +145,21 @@ def main() -> int:
     parser.add_argument("--exceptions", required=True)
     args = parser.parse_args()
 
-    with open(args.audit, "r", encoding="utf-8") as handle:
-        audit = json.load(handle)
+    try:
+        with open(args.audit, "r", encoding="utf-8") as handle:
+            audit = json.load(handle)
+    except OSError as error:
+        sys.stderr.write(f"Unable to read pnpm audit report {args.audit}: {error}\n")
+        return 1
+    except UnicodeDecodeError as error:
+        sys.stderr.write(f"pnpm audit report is not UTF-8: {args.audit}: {error}\n")
+        return 1
+    except json.JSONDecodeError as error:
+        sys.stderr.write(
+            f"pnpm audit report is not valid JSON: {args.audit}: {error.msg} "
+            f"at line {error.lineno}, column {error.colno}\n"
+        )
+        return 1
 
     if not isinstance(audit, dict):
         sys.stderr.write("pnpm audit must produce a JSON object.\n")
