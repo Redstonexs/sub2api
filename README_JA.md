@@ -314,7 +314,7 @@ rm -rf data/ postgres_data/ redis_data/
 Apple シリコン搭載 Mac と macOS 26 では、Apple `container` 1.1.0 以降を使用して Sub2API、PostgreSQL、Redis の完全なスタックを実行できます:
 
 ```bash
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/Redstonexs/sub2api.git
 cd sub2api/deploy
 ./apple-container.sh init
 ./apple-container.sh up

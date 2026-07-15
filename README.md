@@ -314,7 +314,7 @@ rm -rf data/ postgres_data/ redis_data/
 Apple-silicon Macs running macOS 26 can run the full Sub2API, PostgreSQL, and Redis stack with Apple `container` 1.1.0 or newer:
 
 ```bash
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/Redstonexs/sub2api.git
 cd sub2api/deploy
 ./apple-container.sh init
 ./apple-container.sh up
@@ -455,6 +455,27 @@ If you disable URL validation or response header filtering, harden your network 
 - Block private/loopback/link-local ranges
 - Enforce TLS-only outbound traffic
 - Strip sensitive upstream response headers at the proxy
+
+#### OpenAI Responses WebSocket ingress limits
+
+`gateway.openai_ws` bounds the lifetime and aggregate count of client-facing
+Responses WebSocket sessions. These safeguards apply independently from
+per-turn user and account concurrency slots, which are released between turns.
+
+```yaml
+gateway:
+  openai_ws:
+    # Close a client socket idle between completed turns; 0 disables this safeguard.
+    ingress_inter_turn_idle_timeout_seconds: 300
+    # Distributed API-key limit for live client ingress sessions; 0 disables it.
+    max_ingress_connections_per_api_key: 64
+```
+
+The connection cap is coordinated through Redis using a 60-second lease that
+is refreshed every 20 seconds. A process that cannot confirm a lease for a
+full lease lifetime closes its local WebSocket rather than continuing outside
+the global cap. Use `http_bridge` for client-WebSocket/upstream-HTTP operation
+when rolling out or mitigating upstream WebSocket issues.
 
 #### ⚠️ Important: Creating the Admin Account
 
