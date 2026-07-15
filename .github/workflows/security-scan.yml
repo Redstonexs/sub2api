@@ -41,24 +41,18 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
+          check-latest: true
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
-      - name: Set up pnpm audit client
-        id: pnpm-audit
-        uses: pnpm/action-setup@v6
-        with:
-          version: 11.13.0
-          dest: ~/pnpm-audit
-          cache: false
       - name: Run pnpm audit
         working-directory: frontend
         run: |
           set +e
-          "${{ steps.pnpm-audit.outputs.bin_dest }}/pnpm" audit --prod --audit-level=high --json > audit.json
+          npm exec --yes --package=pnpm@11.13.0 -- pnpm audit --prod --audit-level=high --json > audit.json
           audit_status=$?
           set -e
           if [ ! -s audit.json ]; then
