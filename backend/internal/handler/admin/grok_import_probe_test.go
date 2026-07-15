@@ -124,21 +124,26 @@ func awaitGrokProbeSignal(t *testing.T, signals <-chan int64) int64 {
 	}
 }
 
+func awaitGrokImportProbeSchedulerIdle(t *testing.T, scheduler *grokImportProbeScheduler) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		snapshot := snapshotGrokImportProbeScheduler(scheduler)
+		return snapshot.queued == 0 && snapshot.workers == 0
+	}, time.Second, 10*time.Millisecond)
+}
+
 func TestGrokImportProbeSchedulerProbesSingleAccountOnce(t *testing.T) {
 	scheduler := newGrokImportProbeScheduler(1, time.Second)
 	prober := newGrokImportProbeStub(1)
 
 	scheduler.schedule(prober, newGrokOAuthImportAccount(101))
 	require.Equal(t, int64(101), awaitGrokProbeSignal(t, prober.done))
+	awaitGrokImportProbeSchedulerIdle(t, scheduler)
 
 	calls, maxActive, deadlineSeen := prober.snapshot()
 	require.Equal(t, map[int64]int{101: 1}, calls)
 	require.Equal(t, 1, maxActive)
 	require.True(t, deadlineSeen)
-	require.Eventually(t, func() bool {
-		snapshot := snapshotGrokImportProbeScheduler(scheduler)
-		return snapshot.queued == 0 && snapshot.workers == 0
-	}, time.Second, 10*time.Millisecond)
 }
 
 func TestGrokImportProbeSchedulerQueuesBatchWithoutPerTaskGoroutines(t *testing.T) {
@@ -175,10 +180,8 @@ func TestGrokImportProbeSchedulerQueuesBatchWithoutPerTaskGoroutines(t *testing.
 		require.Equal(t, 1, calls[id])
 	}
 	require.Equal(t, 3, maxActive)
-	require.Eventually(t, func() bool {
-		snapshot = snapshotGrokImportProbeScheduler(scheduler)
-		return snapshot.queued == 0 && snapshot.workers == 0
-	}, time.Second, 10*time.Millisecond)
+	awaitGrokImportProbeSchedulerIdle(t, scheduler)
+	snapshot = snapshotGrokImportProbeScheduler(scheduler)
 	require.Equal(t, 3, snapshot.maxWorkers)
 }
 
@@ -190,6 +193,7 @@ func TestGrokImportProbeSchedulerTimeoutCancelsProbe(t *testing.T) {
 
 	scheduler.schedule(prober, newGrokOAuthImportAccount(201))
 	require.Equal(t, int64(201), awaitGrokProbeSignal(t, prober.done))
+	awaitGrokImportProbeSchedulerIdle(t, scheduler)
 
 	calls, _, _ := prober.snapshot()
 	require.Equal(t, 1, calls[201])
@@ -223,10 +227,10 @@ func TestGrokImportProbeFailureLogDoesNotIncludeErrorMessage(t *testing.T) {
 	prober.failures[401] = infraerrors.New(502, "GROK_TEST_PROBE_FAILED", "refresh-token-secret")
 	scheduler.schedule(prober, newGrokOAuthImportAccount(401))
 	awaitGrokProbeSignal(t, prober.done)
+	awaitGrokImportProbeSchedulerIdle(t, scheduler)
 
-	require.Eventually(t, func() bool {
-		return bytes.Contains(logs.Bytes(), []byte("grok_import_active_probe_failed"))
-	}, time.Second, 10*time.Millisecond)
-	require.Contains(t, logs.String(), "GROK_TEST_PROBE_FAILED")
-	require.NotContains(t, logs.String(), "refresh-token-secret")
+	output := logs.String()
+	require.Contains(t, output, "grok_import_active_probe_failed")
+	require.Contains(t, output, "GROK_TEST_PROBE_FAILED")
+	require.NotContains(t, output, "refresh-token-secret")
 }

@@ -103,6 +103,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "request_id is required")
 		return
 	}
+	if endpoint == service.GrokMediaEndpointVideoStatus && !h.gatewayService.IsGrokMediaVideoRequestOwnedBy(c.Request.Context(), apiKey.GroupID, requestID, subject.UserID) {
+		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Video request not found")
+		return
+	}
 
 	reqLog = reqLog.With(zap.String("model", requestModel))
 	setOpsRequestContext(c, requestModel, false)
@@ -333,10 +337,17 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
-		if endpoint.IsGenerationRequest() && strings.TrimSpace(result.ResponseID) != "" {
+		if endpoint.IsVideoGenerationRequest() && strings.TrimSpace(result.ResponseID) != "" {
 			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(requestCtx, apiKey.GroupID, result.ResponseID, account.ID); err != nil {
 				reqLog.Warn("grok_media.bind_video_request_account_failed",
 					zap.Int64("account_id", account.ID),
+					zap.String("request_id", result.ResponseID),
+					zap.Error(err),
+				)
+			}
+			if err := h.gatewayService.BindGrokMediaVideoRequestOwner(requestCtx, apiKey.GroupID, result.ResponseID, subject.UserID); err != nil {
+				reqLog.Warn("grok_media.bind_video_request_owner_failed",
+					zap.Int64("user_id", subject.UserID),
 					zap.String("request_id", result.ResponseID),
 					zap.Error(err),
 				)

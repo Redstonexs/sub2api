@@ -93,6 +93,7 @@ func TestGrokSSOBatchImportKeepsCreatedAccountsWhenOneAutomaticProbeFails(t *tes
 	for i := 0; i < 3; i++ {
 		awaitGrokProbeSignal(t, prober.done)
 	}
+	awaitGrokImportProbeSchedulerIdle(t, defaultGrokImportProbeScheduler)
 	calls, _, _ := prober.snapshot()
 	require.Equal(t, map[int64]int{501: 1, 502: 1, 503: 1}, calls)
 }

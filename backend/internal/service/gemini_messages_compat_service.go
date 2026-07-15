@@ -14,6 +14,7 @@ import (
 	"math"
 	mathrand "math/rand"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -42,6 +43,37 @@ const (
 // Many clients don't send it; we inject a known dummy signature to satisfy the validator.
 // Ref: https://ai.google.dev/gemini-api/docs/thought-signatures
 const geminiDummyThoughtSignature = "skip_thought_signature_validator"
+
+func buildGeminiAIStudioURL(baseURL, model, action string, stream bool) string {
+	fullURL := fmt.Sprintf(
+		"%s/v1beta/models/%s:%s",
+		strings.TrimRight(baseURL, "/"),
+		url.PathEscape(model),
+		url.PathEscape(action),
+	)
+	if stream {
+		fullURL += "?alt=sse"
+	}
+	return fullURL
+}
+
+func buildGeminiAIStudioGETURL(baseURL, path string) (string, error) {
+	const modelsPath = "/v1beta/models"
+	baseURL = strings.TrimRight(baseURL, "/")
+	if path == modelsPath {
+		return baseURL + modelsPath, nil
+	}
+
+	const modelPrefix = modelsPath + "/"
+	if !strings.HasPrefix(path, modelPrefix) {
+		return "", errors.New("invalid path")
+	}
+	model := strings.TrimPrefix(path, modelPrefix)
+	if model == "" || model == "." || model == ".." {
+		return "", errors.New("invalid model")
+	}
+	return baseURL + modelPrefix + url.PathEscape(model), nil
+}
 
 type GeminiMessagesCompatService struct {
 	accountRepo               AccountRepository
@@ -637,10 +669,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 			if req.Stream {
 				action = "streamGenerateContent"
 			}
-			fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, action)
-			if req.Stream {
-				fullURL += "?alt=sse"
-			}
+			fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, action, req.Stream)
 
 			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
@@ -711,10 +740,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					return nil, "", err
 				}
 
-				fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, action)
-				if useUpstreamStream {
-					fullURL += "?alt=sse"
-				}
+				fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, action, useUpstreamStream)
 
 				restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 				upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
@@ -1174,10 +1200,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				return nil, "", err
 			}
 
-			fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, upstreamAction)
-			if useUpstreamStream {
-				fullURL += "?alt=sse"
-			}
+			fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, upstreamAction, useUpstreamStream)
 
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(body))
 			if err != nil {
@@ -1242,10 +1265,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 					return nil, "", err
 				}
 
-				fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, upstreamAction)
-				if useUpstreamStream {
-					fullURL += "?alt=sse"
-				}
+				fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, upstreamAction, useUpstreamStream)
 
 				upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(body))
 				if err != nil {
@@ -2640,17 +2660,15 @@ func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, ac
 	if account == nil {
 		return nil, errors.New("account is nil")
 	}
-	path = strings.TrimSpace(path)
-	if path == "" || !strings.HasPrefix(path, "/") {
-		return nil, errors.New("invalid path")
-	}
-
 	baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
 		return nil, err
 	}
-	fullURL := strings.TrimRight(normalizedBaseURL, "/") + path
+	fullURL, err := buildGeminiAIStudioGETURL(normalizedBaseURL, path)
+	if err != nil {
+		return nil, err
+	}
 
 	var proxyURL string
 	if account.ProxyID != nil && account.Proxy != nil {

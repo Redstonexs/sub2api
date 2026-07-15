@@ -148,10 +148,25 @@ def main() -> int:
     with open(args.audit, "r", encoding="utf-8") as handle:
         audit = json.load(handle)
 
+    if not isinstance(audit, dict):
+        sys.stderr.write("pnpm audit must produce a JSON object.\n")
+        return 1
+    audit_error = audit.get("error")
+    if audit_error:
+        if isinstance(audit_error, dict):
+            code = audit_error.get("code")
+            message = audit_error.get("message")
+            detail = ": ".join(str(value) for value in (code, message) if value)
+        else:
+            detail = str(audit_error)
+        sys.stderr.write(f"pnpm audit failed: {detail or 'unknown error'}\n")
+        return 1
+
     # 读取异常清单并建立索引，便于快速匹配包名 + advisory。
     exceptions = parse_exceptions(args.exceptions)
     exception_index = {}
     errors = []
+    today = date.today()
 
     for exc in exceptions:
         missing = [field for field in REQUIRED_FIELDS if not exc.get(field)]
@@ -169,6 +184,11 @@ def main() -> int:
                 f"Exception has invalid expires_on date: {exc.get('package', '<unknown>')}"
             )
             continue
+        if exc_date < today:
+            errors.append(
+                f"Exception expired: {exc.get('package', '<unknown>')} on {exc_date.isoformat()}"
+            )
+            continue
         if not exc_package or not exc_advisory:
             errors.append("Exception missing package or advisory value")
             continue
@@ -184,9 +204,7 @@ def main() -> int:
             "expires_on": exc_date,
         }
 
-    today = date.today()
     missing_exceptions = []
-    expired_exceptions = []
 
     # 去重处理：同一包名 + advisory 可能在不同字段重复出现。
     seen = set()
@@ -213,10 +231,6 @@ def main() -> int:
                 "Exception severity mismatch: "
                 f"{name} ({advisory_id}) expected {sev}, got {exc['severity']}"
             )
-        if exc["expires_on"] and exc["expires_on"] < today:
-            expired_exceptions.append(
-                (name, sev, advisory_id, exc["expires_on"].isoformat())
-            )
 
     if missing_exceptions:
         errors.append("High/Critical vulnerabilities missing exceptions:")
@@ -227,13 +241,6 @@ def main() -> int:
             if title:
                 label = f"{label}: {title}"
             errors.append(f"- {label}")
-
-    if expired_exceptions:
-        errors.append("Exceptions expired:")
-        for name, sev, advisory_id, expires_on in expired_exceptions:
-            errors.append(
-                f"- {name} ({sev}) [{advisory_id}] expired on {expires_on}"
-            )
 
     if errors:
         sys.stderr.write("\n".join(errors) + "\n")

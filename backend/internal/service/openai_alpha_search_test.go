@@ -16,7 +16,6 @@ import (
 )
 
 func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	body := []byte(`{
 		"id":"search-session",
 		"model":"gpt-5.6-sol",
@@ -71,7 +70,6 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 }
 
 func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"news"}]}}`)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -112,7 +110,6 @@ func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
 }
 
 func TestForwardAlphaSearchReturnsFailoverBeforeWriting(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{}}`)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)

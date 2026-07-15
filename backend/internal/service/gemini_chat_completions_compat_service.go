@@ -312,10 +312,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 			if clientStream {
 				action = "streamGenerateContent"
 			}
-			fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, action)
-			if clientStream {
-				fullURL += "?alt=sse"
-			}
+			fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, action, clientStream)
 
 			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
@@ -379,10 +376,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 				return nil, "", err
 			}
 
-			fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(normalizedBaseURL, "/"), mappedModel, action)
-			if useUpstreamStream {
-				fullURL += "?alt=sse"
-			}
+			fullURL := buildGeminiAIStudioURL(normalizedBaseURL, mappedModel, action, useUpstreamStream)
 
 			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))

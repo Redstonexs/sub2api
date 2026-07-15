@@ -96,6 +96,36 @@ func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 	}
 }
 
+func TestResponsesRejectsUnsafePathBeforeDependencies(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, path := range []string{
+		"/responses/../../v1/files",
+		"/responses/../../responses/compact",
+		"/responses/..%3bv1/files",
+		"/responses/..%ef%bc%8fv1/files",
+		"/responses/compact%20",
+		"/responses/compact%09",
+		"/responses/compact%0a",
+		"/responses/compact%E3%80%80",
+	} {
+		t.Run(path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 1})
+				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
+				c.Next()
+			})
+			router.POST("/responses/*subpath", (&OpenAIGatewayHandler{}).Responses)
+
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"gpt-5"}`)))
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Equal(t, "invalid_request_error", gjson.GetBytes(recorder.Body.Bytes(), "error.type").String())
+		})
+	}
+}
+
 func TestResolveOpenAIMessagesMetadataSession_DoesNotDerivePromptCacheKey(t *testing.T) {
 	body := []byte(`{"model":"claude-sonnet-4-5","metadata":{"user_id":"claude-code-session"},"messages":[{"role":"user","content":"hello"}]}`)
 

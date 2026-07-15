@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseDebugEnvBool(t *testing.T) {
 	t.Run("empty is false", func(t *testing.T) {
@@ -28,4 +32,24 @@ func TestParseDebugEnvBool(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestInitDebugGatewayBodyFileCreatesOwnerOnlyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway-debug.log")
+	svc := &GatewayService{}
+	svc.initDebugGatewayBodyFile(path)
+
+	file := svc.debugGatewayBodyFile.Load()
+	if file == nil {
+		t.Fatal("debug gateway file was not initialized")
+	}
+	t.Cleanup(func() { _ = file.Close() })
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat debug gateway file: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("debug gateway file mode = %04o, want 0600", info.Mode().Perm())
+	}
 }

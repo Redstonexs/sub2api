@@ -180,6 +180,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	if err := service.ValidateOpenAIResponsesRequestPath(c); err != nil {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Invalid Responses request path")
+		return
+	}
 	reqLog := requestLogger(
 		c,
 		"handler.openai_gateway.responses",

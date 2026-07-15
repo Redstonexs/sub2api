@@ -906,7 +906,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	default:
 		targetURL = openaiPlatformAPIURL
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	suffix, err := openAIResponsesRequestPathSuffix(c)
+	if err != nil {
+		return nil, err
+	}
+	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, suffix)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {

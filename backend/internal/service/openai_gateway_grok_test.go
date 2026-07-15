@@ -392,7 +392,6 @@ func TestNormalizeGrokMediaModelForEndpoint(t *testing.T) {
 
 func TestForwardGrokMediaImagesGenerationNormalizesImagineAlias(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -441,7 +440,6 @@ func TestForwardGrokMediaImagesGenerationNormalizesImagineAlias(t *testing.T) {
 
 func TestForwardGrokMediaImagesGenerationStripsUnsupportedSize(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -478,7 +476,6 @@ func TestForwardGrokMediaImagesGenerationStripsUnsupportedSize(t *testing.T) {
 
 func TestForwardGrokMediaImagesEditMultipartConvertsToJSON(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -530,7 +527,6 @@ func TestForwardGrokMediaImagesEditMultipartConvertsToJSON(t *testing.T) {
 
 func TestForwardGrokMediaVideoGenerationReturnsUsageAndResponseID(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -576,7 +572,6 @@ func TestForwardGrokMediaVideoGenerationReturnsUsageAndResponseID(t *testing.T) 
 
 func TestForwardGrokMediaVideoGenerationPreservesImageToVideoModel(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -615,7 +610,6 @@ func TestForwardGrokMediaVideoGenerationPreservesImageToVideoModel(t *testing.T)
 }
 
 func TestForwardGrokMediaOAuthImageToVideoKeepsCLIGatewayForLargeBody(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -656,7 +650,6 @@ func TestForwardGrokMediaOAuthImageToVideoKeepsCLIGatewayForLargeBody(t *testing
 
 func TestForwardGrokMediaVideoStatusUsesGETWithoutBody(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -699,7 +692,6 @@ func TestForwardGrokMediaVideoStatusUsesGETWithoutBody(t *testing.T) {
 
 func TestForwardGrokMediaVideoMutationEndpoints(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
 		name     string
@@ -757,7 +749,6 @@ func TestBindGrokMediaVideoRequestAccountUsesRequestIDStickyHash(t *testing.T) {
 
 func TestForwardGrokMedia429ReconcilesRateLimitBeforeCustomErrorBypass(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -802,7 +793,6 @@ func TestForwardGrokMedia429ReconcilesRateLimitBeforeCustomErrorBypass(t *testin
 }
 
 func TestGrokMedia429FailoverPreservesRetryAfter(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
@@ -850,7 +840,6 @@ func healthyGrokOAuthGatewayTestAccount(id int64, token string) *Account {
 }
 
 func TestForwardAsChatCompletionsForGrokStopFallsBackToXAIChatCompletions(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -900,7 +889,6 @@ func TestForwardAsChatCompletionsForGrokStopFallsBackToXAIChatCompletions(t *tes
 }
 
 func TestForwardGrokResponsesStreamingDefaultsEmptyModelTo45AndSnapshots(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -967,7 +955,6 @@ func TestForwardGrokResponsesStreamingDefaultsEmptyModelTo45AndSnapshots(t *test
 }
 
 func TestForwardGrokResponsesAPIKeyUsesXAIResponses(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1012,7 +999,6 @@ func TestForwardGrokResponsesAPIKeyUsesXAIResponses(t *testing.T) {
 }
 
 func TestForwardAsChatCompletionsForGrokAPIKeyUsesConfiguredRawEndpointWithoutOAuthIdentity(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	body := []byte(`{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":false}`)
@@ -1044,7 +1030,6 @@ func TestForwardAsChatCompletionsForGrokAPIKeyUsesConfiguredRawEndpointWithoutOA
 }
 
 func TestAccountTestServiceGrokAPIKeyUsesXAIResponses(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	account := &Account{
 		ID:          54,
@@ -1078,7 +1063,6 @@ func TestAccountTestServiceGrokAPIKeyUsesXAIResponses(t *testing.T) {
 }
 
 func TestAccountTestServiceGrokAPIKeyAllowsConfiguredHTTPWhenGlobalPolicyDoes(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	account := &Account{
 		ID:          55,
@@ -1113,7 +1097,6 @@ func TestAccountTestServiceGrokAPIKeyAllowsConfiguredHTTPWhenGlobalPolicyDoes(t 
 }
 
 func TestForwardAsChatCompletionsForGrokStreamingUsesRawXAIChatCompletions(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1169,7 +1152,6 @@ func TestForwardAsChatCompletionsForGrokStreamingUsesRawXAIChatCompletions(t *te
 }
 
 func TestForwardGrokResponsesNonStreamingUsesCacheIdentityAndCachedUsage(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1226,7 +1208,6 @@ func TestForwardGrokResponsesNonStreamingUsesCacheIdentityAndCachedUsage(t *test
 }
 
 func TestForwardGrokResponsesFailoverKeepsCacheIdentityAcrossAccounts(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1284,7 +1265,6 @@ func TestForwardGrokResponsesFailoverKeepsCacheIdentityAcrossAccounts(t *testing
 }
 
 func TestForwardAsChatCompletionsForGrokStreamingStopFallsBackToRawXAIChatCompletions(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1345,7 +1325,6 @@ func TestForwardAsChatCompletionsForGrokStreamingStopFallsBackToRawXAIChatComple
 }
 
 func TestForwardAsChatCompletionsForGrokComposerBridgesImageInput(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1407,7 +1386,6 @@ func TestForwardAsChatCompletionsForGrokComposerBridgesImageInput(t *testing.T) 
 }
 
 func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1459,7 +1437,6 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 }
 
 func TestForwardAsAnthropicForGrokStreamingPreservesCacheUsage(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -1949,7 +1926,6 @@ func TestOpenAIWSHTTPBridgeGrokExhaustedSuccessPersistsRateLimit(t *testing.T) {
 }
 
 func TestFailoverOpenAIUpstreamHTTPErrorUsesOnlyGrokRateLimitPolicy(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	repo := &grokQuotaAccountRepo{}
 	svc := &OpenAIGatewayService{accountRepo: repo}
 	account := &Account{ID: 70, Platform: PlatformGrok, Type: AccountTypeOAuth}

@@ -93,9 +93,9 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		return
 	}
 
-	modelName := strings.TrimSpace(c.Param("model"))
-	if modelName == "" {
-		googleError(c, http.StatusBadRequest, "Missing model in URL")
+	modelName := c.Param("model")
+	if !isSafeGeminiModelSegment(modelName) {
+		googleError(c, http.StatusNotFound, "invalid model path")
 		return
 	}
 
@@ -564,22 +564,41 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 }
 
 func parseGeminiModelAction(rest string) (model string, action string, err error) {
-	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		return "", "", &pathParseError{"missing path"}
 	}
 
 	// Standard: {model}:{action}
 	if i := strings.Index(rest, ":"); i > 0 && i < len(rest)-1 {
-		return rest[:i], rest[i+1:], nil
+		model, action = rest[:i], rest[i+1:]
+	} else if i := strings.Index(rest, "/"); i > 0 && i < len(rest)-1 {
+		// Fallback: {model}/{action}
+		model, action = rest[:i], rest[i+1:]
+	} else {
+		return "", "", &pathParseError{"invalid model action path"}
 	}
 
-	// Fallback: {model}/{action}
-	if i := strings.Index(rest, "/"); i > 0 && i < len(rest)-1 {
-		return rest[:i], rest[i+1:], nil
+	if !isSafeGeminiModelSegment(model) {
+		return "", "", &pathParseError{"invalid model path"}
 	}
 
-	return "", "", &pathParseError{"invalid model action path"}
+	return model, action, nil
+}
+
+func isSafeGeminiModelSegment(model string) bool {
+	if model == "" || model == "." || model == ".." {
+		return false
+	}
+	for _, char := range model {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (h *GatewayHandler) handleGeminiFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError) {

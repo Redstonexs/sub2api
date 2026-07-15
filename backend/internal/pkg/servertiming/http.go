@@ -53,10 +53,10 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 		client = http.DefaultClient
 	}
 	if req == nil || !Active(req.Context()) {
-		return client.Do(req)
+		return client.Do(req) // #nosec G704 -- callers construct and validate outbound request URLs; this wrapper only records timing.
 	}
 	startedAt := time.Now()
-	response, err := client.Do(req)
+	response, err := client.Do(req) // #nosec G704 -- callers construct and validate outbound request URLs; this wrapper only records timing.
 	RecordDependency(req.Context(), dependencyModule(req), startedAt, time.Now())
 	return response, err
 }

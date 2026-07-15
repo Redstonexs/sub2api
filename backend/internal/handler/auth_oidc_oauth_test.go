@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -98,6 +100,31 @@ func TestOIDCParseAndValidateIDToken(t *testing.T) {
 	require.Equal(t, "https://issuer.example.com", parsed.Issuer)
 
 	_, err = oidcParseAndValidateIDToken(context.Background(), cfg, signed, "bad-nonce")
+	require.Error(t, err)
+}
+
+func TestOIDCJWKECDSAPublicKeyRejectsInvalidPoint(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	coordinateSize := (privateKey.Curve.Params().BitSize + 7) / 8
+	valid := oidcJWK{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString(privateKey.X.FillBytes(make([]byte, coordinateSize))),
+		Y:   base64.RawURLEncoding.EncodeToString(privateKey.Y.FillBytes(make([]byte, coordinateSize))),
+	}
+	publicKey, err := valid.publicKey()
+	require.NoError(t, err)
+	require.IsType(t, &ecdsa.PublicKey{}, publicKey)
+
+	invalid := oidcJWK{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString([]byte{1}),
+		Y:   base64.RawURLEncoding.EncodeToString([]byte{1}),
+	}
+	_, err = invalid.publicKey()
 	require.Error(t, err)
 }
 

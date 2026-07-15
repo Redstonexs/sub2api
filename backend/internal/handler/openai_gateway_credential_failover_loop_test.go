@@ -245,6 +245,42 @@ type grokCredentialHandlerTokenCache struct {
 	deleteErr error
 }
 
+type grokCredentialHandlerGatewayCache struct {
+	mu       sync.Mutex
+	bindings map[string]int64
+}
+
+func (c *grokCredentialHandlerGatewayCache) GetSessionAccountID(_ context.Context, _ int64, sessionHash string) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	accountID, ok := c.bindings[sessionHash]
+	if !ok {
+		return 0, errors.New("session binding not found")
+	}
+	return accountID, nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) SetSessionAccountID(_ context.Context, _ int64, sessionHash string, accountID int64, _ time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.bindings == nil {
+		c.bindings = make(map[string]int64)
+	}
+	c.bindings[sessionHash] = accountID
+	return nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) RefreshSessionTTL(context.Context, int64, string, time.Duration) error {
+	return nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) DeleteSessionAccountID(_ context.Context, _ int64, sessionHash string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.bindings, sessionHash)
+	return nil
+}
+
 func (c *grokCredentialHandlerTokenCache) GetAccessToken(context.Context, string) (string, error) {
 	return "", errors.New("not cached")
 }
@@ -891,8 +927,9 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	cfg.Gateway.MaxAccountSwitches = 3
 	billingCache := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewayCache := &grokCredentialHandlerGatewayCache{}
 	gateway := service.NewOpenAIGatewayService(
-		repo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
+		repo, nil, nil, nil, nil, nil, gatewayCache, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), nil, billingCache, upstream,
 		&service.DeferredService{}, nil, provider, nil, nil, nil, nil, nil,
 	)
@@ -906,6 +943,7 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 		User:  &service.User{ID: 903, Status: service.StatusActive},
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGrok, Status: service.StatusActive},
 	}
+	require.NoError(t, gateway.BindGrokMediaVideoRequestOwner(context.Background(), &groupID, "request-1", apiKey.User.ID))
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware.ContextKeyAPIKey), apiKey)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -16,6 +17,8 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+var errInvalidOpenAIResponsesRequestPathSuffix = errors.New("invalid OpenAI Responses request path suffix")
 
 func (s *OpenAIGatewayService) validateUpstreamBaseURL(raw string) (string, error) {
 	if s.cfg != nil && !s.cfg.Security.URLAllowlist.Enabled {
@@ -168,8 +171,17 @@ func NormalizeOpenAICompactRequestBodyForTest(body []byte) ([]byte, bool, error)
 	return normalizeOpenAICompactRequestBody(body)
 }
 
+func ValidateOpenAIResponsesRequestPath(c *gin.Context) error {
+	_, err := openAIResponsesRequestPathSuffix(c)
+	return err
+}
+
 func isOpenAIResponsesCompactPath(c *gin.Context) bool {
-	suffix := strings.TrimSpace(openAIResponsesRequestPathSuffix(c))
+	suffix, err := openAIResponsesRequestPathSuffix(c)
+	if err != nil {
+		return false
+	}
+	suffix = strings.TrimSpace(suffix)
 	return suffix == "/compact" || strings.HasPrefix(suffix, "/compact/")
 }
 
@@ -251,26 +263,53 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 	return uuid.NewString()
 }
 
-func openAIResponsesRequestPathSuffix(c *gin.Context) string {
+func openAIResponsesRequestPathSuffix(c *gin.Context) (string, error) {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
-		return ""
+		return "", nil
 	}
-	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
+	normalizedPath := strings.TrimRight(c.Request.URL.Path, "/")
 	if normalizedPath == "" {
-		return ""
+		return "", nil
 	}
-	idx := strings.LastIndex(normalizedPath, "/responses")
+	idx := strings.Index(normalizedPath, "/responses")
 	if idx < 0 {
-		return ""
+		return "", nil
 	}
 	suffix := normalizedPath[idx+len("/responses"):]
 	if suffix == "" || suffix == "/" {
-		return ""
+		return "", nil
 	}
 	if !strings.HasPrefix(suffix, "/") {
-		return ""
+		return "", nil
 	}
-	return suffix
+	for _, segment := range strings.Split(strings.TrimPrefix(suffix, "/"), "/") {
+		if !isSafeOpenAIResponsesRequestPathSegment(segment) {
+			return "", errInvalidOpenAIResponsesRequestPathSuffix
+		}
+	}
+	return suffix, nil
+}
+
+func isSafeOpenAIResponsesRequestPathSegment(segment string) bool {
+	for range 4 {
+		if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "\\/?#;") {
+			return false
+		}
+		for _, r := range segment {
+			if r < 0x21 || r > 0x7e {
+				return false
+			}
+		}
+		decoded, err := url.PathUnescape(segment)
+		if err != nil {
+			return false
+		}
+		if decoded == segment {
+			return true
+		}
+		segment = decoded
+	}
+	return false
 }
 
 func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {

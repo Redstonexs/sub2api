@@ -170,6 +170,10 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if err != nil {
 		return nil, err
 	}
+	rechargeCode, err := generatePaymentRechargeCode()
+	if err != nil {
+		return nil, fmt.Errorf("generate payment recharge code: %w", err)
+	}
 	providerSnapshot := buildPaymentOrderProviderSnapshot(sel, req)
 	selectedInstanceID := ""
 	selectedProviderKey := ""
@@ -185,7 +189,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetAmount(orderAmount).
 		SetPayAmount(payAmount).
 		SetFeeRate(feeRate).
-		SetRechargeCode("").
+		SetRechargeCode(rechargeCode).
 		SetOutTradeNo(outTradeNo).
 		SetPaymentType(req.PaymentType).
 		SetPaymentTradeNo("").
@@ -213,15 +217,29 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if err != nil {
 		return nil, fmt.Errorf("create order: %w", err)
 	}
-	code := fmt.Sprintf("PAY-%d-%d", order.ID, time.Now().UnixNano()%100000)
-	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("set recharge code: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit order transaction: %w", err)
 	}
 	return order, nil
+}
+
+func generatePaymentRechargeCode() (string, error) {
+	return GenerateRedeemCode()
+}
+
+func isLegacyPaymentRechargeCode(code string) bool {
+	parts := strings.Split(code, "-")
+	if len(parts) != 3 || parts[0] != "PAY" || len(parts[1]) == 0 || len(parts[2]) == 0 || len(parts[2]) > 5 {
+		return false
+	}
+	for _, part := range parts[1:] {
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s *PaymentService) allocateOutTradeNo(ctx context.Context, tx *dbent.Tx) (string, error) {

@@ -1133,24 +1133,48 @@ func (k oidcJWK) publicKey() (any, error) {
 		default:
 			return nil, fmt.Errorf("unsupported ec curve: %s", k.Crv)
 		}
-		x, err := decodeBase64URLBigInt(k.X)
-		if err != nil {
-			return nil, fmt.Errorf("decode ec x: %w", err)
-		}
-		y, err := decodeBase64URLBigInt(k.Y)
-		if err != nil {
-			return nil, fmt.Errorf("decode ec y: %w", err)
-		}
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("ec point is not on curve")
-		}
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		return parseOIDCECDSAPublicKey(curve, k.X, k.Y)
 	default:
 		return nil, fmt.Errorf("unsupported jwk kty: %s", k.Kty)
 	}
 }
 
+func parseOIDCECDSAPublicKey(curve elliptic.Curve, rawX, rawY string) (*ecdsa.PublicKey, error) {
+	x, err := decodeBase64URLBytes(rawX)
+	if err != nil {
+		return nil, fmt.Errorf("decode ec x: %w", err)
+	}
+	y, err := decodeBase64URLBytes(rawY)
+	if err != nil {
+		return nil, fmt.Errorf("decode ec y: %w", err)
+	}
+
+	coordinateSize := (curve.Params().BitSize + 7) / 8
+	if len(x) > coordinateSize || len(y) > coordinateSize {
+		return nil, errors.New("ec coordinate exceeds curve size")
+	}
+
+	encoded := make([]byte, 1+2*coordinateSize)
+	encoded[0] = 4
+	copy(encoded[1+coordinateSize-len(x):1+coordinateSize], x)
+	copy(encoded[1+2*coordinateSize-len(y):], y)
+
+	publicKey, err := ecdsa.ParseUncompressedPublicKey(curve, encoded)
+	if err != nil {
+		return nil, fmt.Errorf("parse ec public key: %w", err)
+	}
+	return publicKey, nil
+}
+
 func decodeBase64URLBigInt(raw string) (*big.Int, error) {
+	buf, err := decodeBase64URLBytes(raw)
+	if err != nil {
+		return nil, err
+	}
+	return new(big.Int).SetBytes(buf), nil
+}
+
+func decodeBase64URLBytes(raw string) ([]byte, error) {
 	buf, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(raw))
 	if err != nil {
 		return nil, err
@@ -1158,7 +1182,7 @@ func decodeBase64URLBigInt(raw string) (*big.Int, error) {
 	if len(buf) == 0 {
 		return nil, errors.New("empty value")
 	}
-	return new(big.Int).SetBytes(buf), nil
+	return buf, nil
 }
 
 func containsString(values []string, target string) bool {

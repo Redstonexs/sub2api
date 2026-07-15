@@ -3,7 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -30,6 +33,10 @@ const (
 	GrokMediaEndpointVideoStatus       GrokMediaEndpoint = "video_status"
 )
 
+const grokMediaVideoRequestOwnerTTL = 24 * time.Hour
+
+var ErrGrokMediaVideoRequestOwnerStoreUnavailable = errors.New("grok media video request owner store is unavailable")
+
 func (e GrokMediaEndpoint) RequiresRequestBody() bool {
 	return e != GrokMediaEndpointVideoStatus
 }
@@ -37,6 +44,15 @@ func (e GrokMediaEndpoint) RequiresRequestBody() bool {
 func (e GrokMediaEndpoint) IsGenerationRequest() bool {
 	switch e {
 	case GrokMediaEndpointImagesGenerations, GrokMediaEndpointImagesEdits, GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e GrokMediaEndpoint) IsVideoGenerationRequest() bool {
+	switch e {
+	case GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
 		return true
 	default:
 		return false
@@ -263,8 +279,43 @@ func GrokMediaVideoRequestSessionHash(requestID string) string {
 	return "grok-video:" + DeriveSessionHashFromSeed(requestID)
 }
 
+func grokMediaVideoRequestOwnerSessionHash(requestID string) string {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(requestID))
+	return "grok-video-owner:" + hex.EncodeToString(sum[:])
+}
+
 func (s *OpenAIGatewayService) BindGrokMediaVideoRequestAccount(ctx context.Context, groupID *int64, requestID string, accountID int64) error {
 	return s.BindStickySession(ctx, groupID, GrokMediaVideoRequestSessionHash(requestID), accountID)
+}
+
+func (s *OpenAIGatewayService) BindGrokMediaVideoRequestOwner(ctx context.Context, groupID *int64, requestID string, userID int64) error {
+	if s == nil || s.cache == nil {
+		return ErrGrokMediaVideoRequestOwnerStoreUnavailable
+	}
+	if groupID == nil || *groupID <= 0 || userID <= 0 {
+		return ErrGrokMediaVideoRequestOwnerStoreUnavailable
+	}
+	ownerSessionHash := grokMediaVideoRequestOwnerSessionHash(requestID)
+	if ownerSessionHash == "" {
+		return ErrGrokMediaVideoRequestOwnerStoreUnavailable
+	}
+	return s.cache.SetSessionAccountID(ctx, *groupID, ownerSessionHash, userID, grokMediaVideoRequestOwnerTTL)
+}
+
+func (s *OpenAIGatewayService) IsGrokMediaVideoRequestOwnedBy(ctx context.Context, groupID *int64, requestID string, userID int64) bool {
+	if s == nil || s.cache == nil || groupID == nil || *groupID <= 0 || userID <= 0 {
+		return false
+	}
+	ownerSessionHash := grokMediaVideoRequestOwnerSessionHash(requestID)
+	if ownerSessionHash == "" {
+		return false
+	}
+	ownerID, err := s.cache.GetSessionAccountID(ctx, *groupID, ownerSessionHash)
+	return err == nil && ownerID == userID
 }
 
 func (s *OpenAIGatewayService) ForwardGrokMedia(

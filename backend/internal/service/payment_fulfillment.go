@@ -331,6 +331,13 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, l
 	// Idempotency: check if redeem code already exists (from a previous partial run)
 	existing, lookupErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
 	action := resolveRedeemAction(existing, lookupErr)
+	if action == redeemActionCreate && errors.Is(lookupErr, ErrRedeemCodeNotFound) && isLegacyPaymentRechargeCode(o.RechargeCode) {
+		var err error
+		o, err = s.rekeyLegacyPaymentRechargeCode(ctx, o, lease)
+		if err != nil {
+			return err
+		}
+	}
 
 	switch action {
 	case redeemActionSkipCompleted:
@@ -354,6 +361,39 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, l
 		return err
 	}
 	return s.markCompleted(ctx, o, lease, "RECHARGE_SUCCESS")
+}
+
+func (s *PaymentService) rekeyLegacyPaymentRechargeCode(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) (*dbent.PaymentOrder, error) {
+	if o == nil || lease == nil {
+		return nil, errors.New("missing payment order or fulfillment lease")
+	}
+
+	replacement, err := generatePaymentRechargeCode()
+	if err != nil {
+		return nil, fmt.Errorf("generate replacement recharge code: %w", err)
+	}
+	updated, err := s.entClient.PaymentOrder.Update().
+		Where(
+			paymentorder.IDEQ(o.ID),
+			paymentorder.StatusEQ(OrderStatusRecharging),
+			paymentorder.UpdatedAtEQ(lease.version),
+			paymentorder.RechargeCodeEQ(o.RechargeCode),
+		).
+		SetRechargeCode(replacement).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("rekey legacy payment recharge code: %w", err)
+	}
+	if updated == 0 {
+		return nil, infraerrors.Conflict("CONFLICT", "fulfillment lease was lost while rekeying payment recharge code")
+	}
+
+	updatedOrder, err := s.entClient.PaymentOrder.Get(ctx, o.ID)
+	if err != nil {
+		return nil, fmt.Errorf("reload rekeyed payment order: %w", err)
+	}
+	lease.version = updatedOrder.UpdatedAt
+	return updatedOrder, nil
 }
 
 func (s *PaymentService) markCompleted(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease, auditAction string) error {

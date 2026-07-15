@@ -101,14 +101,18 @@ func TestCreateOrderInTx_WritesProviderSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, strconv.FormatInt(instance.ID, 10), valueOrEmpty(order.ProviderInstanceID))
 	require.Equal(t, payment.TypeAlipay, valueOrEmpty(order.ProviderKey))
-	require.Equal(t, float64(2), order.ProviderSnapshot["schema_version"])
-	require.Equal(t, strconv.FormatInt(instance.ID, 10), order.ProviderSnapshot["provider_instance_id"])
-	require.Equal(t, payment.TypeAlipay, order.ProviderSnapshot["provider_key"])
-	require.Equal(t, "redirect", order.ProviderSnapshot["payment_mode"])
-	require.NotContains(t, order.ProviderSnapshot, "config")
-	require.NotContains(t, order.ProviderSnapshot, "secretKey")
-	require.NotContains(t, order.ProviderSnapshot, "supported_types")
-	require.NotContains(t, order.ProviderSnapshot, "instance_name")
+	require.Regexp(t, `^[a-f0-9]{32}$`, order.RechargeCode)
+
+	persisted, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, float64(2), persisted.ProviderSnapshot["schema_version"])
+	require.Equal(t, strconv.FormatInt(instance.ID, 10), persisted.ProviderSnapshot["provider_instance_id"])
+	require.Equal(t, payment.TypeAlipay, persisted.ProviderSnapshot["provider_key"])
+	require.Equal(t, "redirect", persisted.ProviderSnapshot["payment_mode"])
+	require.NotContains(t, persisted.ProviderSnapshot, "config")
+	require.NotContains(t, persisted.ProviderSnapshot, "secretKey")
+	require.NotContains(t, persisted.ProviderSnapshot, "supported_types")
+	require.NotContains(t, persisted.ProviderSnapshot, "instance_name")
 }
 
 func TestBuildPaymentOrderProviderSnapshot_UsesWxpayJSAPIAppIDForOpenIDOrders(t *testing.T) {
