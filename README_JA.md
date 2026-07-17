@@ -8,8 +8,6 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Redstonexs%2Fsub2api | Trendshift" width="250" height="55"/></a>
-
 **サブスクリプションクォータ配分のための AI API ゲートウェイプラットフォーム**
 
 [English](README.md) | [中文](README_CN.md) | 日本語
@@ -567,16 +565,6 @@ sub2api/
     ├── config.example.yaml   # バイナリデプロイ用フル設定ファイル
     └── install.sh            # ワンクリックインストールスクリプト
 ```
-
-## スター履歴
-
-<a href="https://star-history.com/#Redstonexs/sub2api&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Redstonexs/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Redstonexs/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Redstonexs/sub2api&type=Date" />
- </picture>
-</a>
 
 ---
 
