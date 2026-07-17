@@ -129,6 +129,9 @@ func (s *announcementUserRepoStub) UpdateTotpSecret(context.Context, int64, *str
 }
 func (s *announcementUserRepoStub) EnableTotp(context.Context, int64) error  { return nil }
 func (s *announcementUserRepoStub) DisableTotp(context.Context, int64) error { return nil }
+func (s *announcementUserRepoStub) BatchUpdateLimits(context.Context, []int64, *int, *int) (int, error) {
+	return 0, nil
+}
 
 type userSubRepoStub struct{}
 

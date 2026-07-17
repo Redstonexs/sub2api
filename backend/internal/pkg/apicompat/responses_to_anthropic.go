@@ -414,6 +414,28 @@ func resToAnthHandleFuncArgsDelta(evt *ResponsesStreamEvent, state *ResponsesEve
 		return nil
 	}
 
+	if state.CurrentBlockType == "tool_use" && state.CurrentToolName == "Read" {
+		state.CurrentToolArgs += evt.Delta
+		if state.CurrentToolHadDelta || !json.Valid([]byte(state.CurrentToolArgs)) {
+			return nil
+		}
+
+		blockIdx, ok := state.OutputIndexToBlockIdx[evt.OutputIndex]
+		if !ok {
+			return nil
+		}
+		state.CurrentToolHadDelta = true
+		sanitized := sanitizeAnthropicToolUseInput(state.CurrentToolName, state.CurrentToolArgs)
+		return []AnthropicStreamEvent{{
+			Type:  "content_block_delta",
+			Index: &blockIdx,
+			Delta: &AnthropicDelta{
+				Type:        "input_json_delta",
+				PartialJSON: string(sanitized),
+			},
+		}}
+	}
+
 	if state.CurrentBlockType == "tool_use" {
 		state.CurrentToolHadDelta = true
 	}
@@ -434,6 +456,9 @@ func resToAnthHandleFuncArgsDelta(evt *ResponsesStreamEvent, state *ResponsesEve
 }
 
 func resToAnthHandleFuncArgsDone(evt *ResponsesStreamEvent, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+	if !state.ContentBlockOpen {
+		return nil
+	}
 	if state.CurrentBlockType != "tool_use" {
 		return resToAnthHandleBlockDone(state)
 	}

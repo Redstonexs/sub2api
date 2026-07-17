@@ -444,6 +444,19 @@ func convertToolResultOutput(b AnthropicContentBlock) (string, []ResponsesConten
 //	medium → medium
 //	high   → high
 //	max    → xhigh
+
+// extractAnthropicTextFromBlocks joins all text blocks, ignoring thinking/
+// tool_use/tool_result blocks.
+func extractAnthropicTextFromBlocks(blocks []AnthropicContentBlock) string {
+	var parts []string
+	for _, b := range blocks {
+		if b.Type == "text" && b.Text != "" {
+			parts = append(parts, b.Text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func mapAnthropicEffortToResponses(effort string) string {
 	if effort == "max" {
 		return "xhigh"
