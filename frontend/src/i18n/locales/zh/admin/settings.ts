@@ -527,7 +527,6 @@ export default {
         enabledHint: '启用或禁用支付系统',
         enabledPaymentTypes: '启用的服务商',
         enabledPaymentTypesHint: '禁用服务商将同时禁用对应的实例。',
-        findProvider: '正在寻找合适的易支付服务商？',
         minAmount: '最低金额',
         maxAmount: '最高金额',
         dailyLimit: '每日限额',
