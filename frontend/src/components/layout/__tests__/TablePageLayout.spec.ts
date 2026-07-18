@@ -8,6 +8,10 @@ const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../Table
 const componentSource = readFileSync(componentPath, 'utf8')
 
 describe('TablePageLayout responsive table scrolling', () => {
+  it('keeps the card-compatible page shell through constrained desktop widths', () => {
+    expect(componentSource).toContain('window.innerWidth < 1536')
+  })
+
   it('does not disable the table horizontal scroll container in mobile mode', () => {
     const tableWrapperBlocks = Array.from(
       componentSource.matchAll(/([^{}]*:deep\(\.table-wrapper\)[^{}]*)\{([^{}]*)\}/g)

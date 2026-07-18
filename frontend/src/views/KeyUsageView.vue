@@ -951,13 +951,13 @@ onUnmounted(() => {
   100% { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background: linear-gradient(90deg, #e7e3d8 25%, #f3f1ea 50%, #e7e3d8 75%);
   background-size: 200% 100%;
   animation: shimmer-kv 1.8s ease-in-out infinite;
   border-radius: 8px;
 }
-:global(.dark) .skeleton {
-  background: linear-gradient(90deg, #334155 25%, #1e293b 50%, #334155 75%);
+.dark .skeleton {
+  background: linear-gradient(90deg, #39352e 25%, #2a2722 50%, #39352e 75%);
   background-size: 200% 100%;
 }
 
