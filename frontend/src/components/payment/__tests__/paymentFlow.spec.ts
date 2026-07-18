@@ -4,6 +4,7 @@ import {
   buildCreateOrderPayload,
   decidePaymentLaunch,
   getVisibleMethods,
+  normalizeVisibleMethod,
   readPaymentRecoverySnapshot,
   type PaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
@@ -33,6 +34,15 @@ function createOrderResult(overrides: Partial<CreateOrderResult> = {}): CreateOr
 }
 
 describe('getVisibleMethods', () => {
+  it('keeps HashPay as a first-class hosted payment method', () => {
+    const visible = getVisibleMethods({
+      hashpay: methodLimit({ fee_rate: 0.8 }),
+    })
+
+    expect(normalizeVisibleMethod('hashpay')).toBe('hashpay')
+    expect(visible).toEqual({ hashpay: methodLimit({ fee_rate: 0.8 }) })
+  })
+
   it('normalizes provider aliases and keeps stripe as a top-level method', () => {
     const visible = getVisibleMethods({
       alipay_direct: methodLimit({ single_min: 5 }),
@@ -74,6 +84,30 @@ describe('getVisibleMethods', () => {
 })
 
 describe('decidePaymentLaunch', () => {
+  it('launches HashPay checkout as a hosted redirect', () => {
+    const payload = buildCreateOrderPayload({
+      amount: 12.34,
+      paymentType: 'hashpay',
+      orderType: 'balance',
+      isMobile: false,
+      isWechatBrowser: false,
+    })
+    const decision = decidePaymentLaunch(createOrderResult({
+      pay_url: 'https://hashpay.example/checkout/hp_123',
+      out_trade_no: 'sub2_hashpay_123',
+      payment_mode: 'redirect',
+    }), {
+      visibleMethod: 'hashpay',
+      orderType: 'balance',
+      isMobile: false,
+    })
+
+    expect(payload.payment_type).toBe('hashpay')
+    expect(decision.kind).toBe('redirect_waiting')
+    expect(decision.paymentState.paymentType).toBe('hashpay')
+    expect(decision.paymentState.payUrl).toBe('https://hashpay.example/checkout/hp_123')
+  })
+
   it('uses Stripe popup waiting flow for desktop Alipay client secret', () => {
     const decision = decidePaymentLaunch(createOrderResult({
       client_secret: 'cs_test',

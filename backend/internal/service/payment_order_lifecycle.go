@@ -180,6 +180,15 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 			}
 			resp = retriedResp
 		}
+		if err := validateProviderQueryMetadata(o, prov.ProviderKey(), resp.Metadata); err != nil {
+			s.writeAuditLog(ctx, o.ID, "PAYMENT_QUERY_METADATA_MISMATCH", prov.ProviderKey(), map[string]any{
+				"detail":   err.Error(),
+				"tradeNo":  resp.TradeNo,
+				"queryRef": queryRef,
+			})
+			slog.Warn("query upstream returned mismatched payment metadata", "orderID", o.ID, "queryRef", queryRef, "error", err)
+			return ""
+		}
 		notificationTradeNo := o.PaymentTradeNo
 		if upstreamTradeNo := strings.TrimSpace(resp.TradeNo); paymentOrderShouldPersistUpstreamTradeNo(queryRef, upstreamTradeNo, notificationTradeNo) {
 			if _, updateErr := s.entClient.PaymentOrder.Update().
@@ -207,6 +216,27 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 		finishProviderCall()
 	}
 	return ""
+}
+
+func validateProviderQueryMetadata(order *dbent.PaymentOrder, providerKey string, metadata map[string]string) error {
+	if order == nil {
+		return fmt.Errorf("cannot validate payment query metadata for a nil order")
+	}
+	if payment.GetBasePaymentType(strings.TrimSpace(providerKey)) != payment.TypeHashPay &&
+		payment.GetBasePaymentType(strings.TrimSpace(order.PaymentType)) != payment.TypeHashPay {
+		return nil
+	}
+	if strings.TrimSpace(order.OutTradeNo) == "" {
+		return fmt.Errorf("hashpay query cannot bind an empty local merchant order number")
+	}
+	merchantNo := strings.TrimSpace(metadata["merchant_no"])
+	if merchantNo == "" {
+		return fmt.Errorf("hashpay query missing merchant_no")
+	}
+	if merchantNo != strings.TrimSpace(order.OutTradeNo) {
+		return fmt.Errorf("hashpay query merchant_no mismatch: expected %s, got %s", order.OutTradeNo, merchantNo)
+	}
+	return nil
 }
 
 func requeryPaidOrderOnce(ctx context.Context, prov payment.Provider, queryRef string) (*payment.QueryOrderResponse, bool) {

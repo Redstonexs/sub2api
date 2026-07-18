@@ -78,6 +78,23 @@ func encryptValidWebhookWxpayConfig(t *testing.T, suffix string) string {
 	})
 }
 
+func encryptValidWebhookHashPayConfig(t *testing.T, suffix string) string {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	privDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+
+	return encryptWebhookProviderConfig(t, map[string]string{
+		"apiBase":    "https://hashpay-" + suffix + ".example",
+		"currency":   "USD",
+		"merchantId": "merchant-" + suffix,
+		"privateKey": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER})),
+	})
+}
+
 func TestGetOrderProviderInstanceResolvesUniqueLegacyProviderKey(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
@@ -328,6 +345,42 @@ func TestGetWebhookProviderRejectsAmbiguousRegistryFallback(t *testing.T) {
 	}
 
 	providers, err := svc.GetWebhookProviders(ctx, payment.TypeWxpay, "")
+	require.NoError(t, err)
+	require.Len(t, providers, 2)
+}
+
+func TestGetWebhookProvidersAllowsMultipleHashPayInstances(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	_, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeHashPay).
+		SetName("hashpay-a").
+		SetConfig(encryptValidWebhookHashPayConfig(t, "a")).
+		SetSupportedTypes(payment.TypeHashPay).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeHashPay).
+		SetName("hashpay-b").
+		SetConfig(encryptValidWebhookHashPayConfig(t, "b")).
+		SetSupportedTypes(payment.TypeHashPay).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{
+		entClient:       client,
+		loadBalancer:    newWebhookProviderTestLoadBalancer(client),
+		registry:        payment.NewRegistry(),
+		providersLoaded: true,
+	}
+
+	// When
+	providers, err := svc.GetWebhookProviders(ctx, payment.TypeHashPay, "")
+
+	// Then
 	require.NoError(t, err)
 	require.Len(t, providers, 2)
 }

@@ -220,6 +220,37 @@ func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey str
 		if actual := strings.TrimSpace(metadata["status"]); actual != "" && !strings.EqualFold(actual, "SUCCEEDED") {
 			return fmt.Errorf("airwallex status mismatch: expected SUCCEEDED, got %s", actual)
 		}
+	case payment.TypeHashPay:
+		if expected := strings.TrimSpace(snapshot.MerchantID); expected != "" {
+			actual := strings.TrimSpace(metadata["merchant_id"])
+			if actual == "" {
+				return fmt.Errorf("hashpay notification missing merchant_id")
+			}
+			if !strings.EqualFold(expected, actual) {
+				return fmt.Errorf("hashpay merchant_id mismatch: expected %s, got %s", expected, actual)
+			}
+		}
+		if expected := strings.TrimSpace(snapshot.Currency); expected != "" {
+			actual := strings.ToUpper(strings.TrimSpace(metadata["currency"]))
+			if actual == "" {
+				return fmt.Errorf("hashpay notification missing currency")
+			}
+			if !strings.EqualFold(expected, actual) {
+				return fmt.Errorf("hashpay currency mismatch: expected %s, got %s", expected, actual)
+			}
+		}
+		if actual := strings.TrimSpace(metadata["status"]); actual != "" && !strings.EqualFold(actual, "PAID") {
+			return fmt.Errorf("hashpay status mismatch: expected paid, got %s", actual)
+		}
+		if expected := strings.TrimSpace(order.OutTradeNo); expected != "" {
+			actual := strings.TrimSpace(metadata["merchant_no"])
+			if actual == "" {
+				return fmt.Errorf("hashpay notification missing merchant_no")
+			}
+			if !strings.EqualFold(expected, actual) {
+				return fmt.Errorf("hashpay merchant_no mismatch: expected %s, got %s", expected, actual)
+			}
+		}
 	}
 
 	return nil

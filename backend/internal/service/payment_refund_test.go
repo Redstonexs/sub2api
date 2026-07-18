@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -14,6 +15,126 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRequestRefundRejectsHashPayDespiteCorruptedUserRefundFlags(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order, user := createHashPayRefundOrderForTest(t, ctx, client, "user")
+
+	svc := &PaymentService{
+		entClient: client,
+		userRepo:  &mockUserRepo{getByIDErr: errors.New("unexpected user lookup")},
+	}
+
+	err := svc.RequestRefund(ctx, order.ID, user.ID, "duplicate payment")
+	require.Error(t, err)
+	require.Equal(t, "USER_REFUND_DISABLED", infraerrors.Reason(err))
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+}
+
+func TestPrepareRefundRejectsHashPayDespiteCorruptedAdminRefundFlags(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order, _ := createHashPayRefundOrderForTest(t, ctx, client, "admin")
+
+	svc := &PaymentService{
+		entClient: client,
+		userRepo:  &mockUserRepo{getByIDErr: errors.New("unexpected user lookup")},
+	}
+
+	plan, result, err := svc.PrepareRefund(ctx, order.ID, order.Amount, "duplicate payment", false, true)
+	require.Nil(t, plan)
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, "REFUND_DISABLED", infraerrors.Reason(err))
+}
+
+func TestExecuteRefundRejectsHashPayBeforeDeductionOrProviderInvocation(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order, _ := createHashPayRefundOrderForTest(t, ctx, client, "execute")
+
+	var deducted float64
+	provider := &refundInvocationCounter{}
+	svc := &PaymentService{
+		entClient:    client,
+		loadBalancer: &captureLoadBalancer{},
+		userRepo: &mockUserRepo{deductBalanceFn: func(context.Context, int64, float64) error {
+			deducted++
+			return nil
+		}},
+	}
+	restore := replacePaymentProviderFactoryForTest(t, provider)
+	defer restore()
+
+	result, err := svc.ExecuteRefund(ctx, &RefundPlan{
+		OrderID:         order.ID,
+		Order:           order,
+		RefundAmount:    order.Amount,
+		GatewayAmount:   order.Amount,
+		Reason:          "duplicate payment",
+		DeductionType:   payment.DeductionTypeBalance,
+		BalanceToDeduct: order.Amount,
+	})
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, "REFUND_DISABLED", infraerrors.Reason(err))
+	require.Zero(t, deducted)
+	require.Zero(t, provider.refundCalls)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+}
+
+func createHashPayRefundOrderForTest(t *testing.T, ctx context.Context, client *dbent.Client, suffix string) (*dbent.PaymentOrder, *dbent.User) {
+	t.Helper()
+
+	user, err := client.User.Create().
+		SetEmail("refund-hashpay-" + suffix + "@example.com").
+		SetPasswordHash("hash").
+		SetUsername("refund-hashpay-" + suffix).
+		Save(ctx)
+	require.NoError(t, err)
+
+	inst, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeHashPay).
+		SetName("hashpay-refund-" + suffix).
+		SetConfig("{}").
+		SetSupportedTypes("hashpay").
+		SetEnabled(true).
+		SetAllowUserRefund(true).
+		SetRefundEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(100).
+		SetPayAmount(100).
+		SetFeeRate(0).
+		SetRechargeCode("REFUND-HASHPAY-" + suffix).
+		SetOutTradeNo("sub2_refund_hashpay_" + suffix).
+		SetPaymentType(payment.TypeHashPay).
+		SetPaymentTradeNo("trade-hashpay-refund-" + suffix).
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusCompleted).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetPaidAt(time.Now()).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		SetProviderInstanceID(strconv.FormatInt(inst.ID, 10)).
+		SetProviderKey(payment.TypeHashPay).
+		Save(ctx)
+	require.NoError(t, err)
+
+	return order, user
+}
 
 func TestValidateRefundRequestRejectsLegacyGuessedProviderInstance(t *testing.T) {
 	ctx := context.Background()
@@ -499,6 +620,16 @@ func (refundProviderTestDouble) VerifyNotification(context.Context, string, map[
 }
 func (refundProviderTestDouble) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
 	return nil, nil
+}
+
+type refundInvocationCounter struct {
+	refundProviderTestDouble
+	refundCalls int
+}
+
+func (p *refundInvocationCounter) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
+	p.refundCalls++
+	return &payment.RefundResponse{Status: payment.ProviderStatusSuccess}, nil
 }
 
 type refundQueryProviderTestDouble struct {

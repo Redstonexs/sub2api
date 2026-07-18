@@ -4,6 +4,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,11 +12,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/enttest"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	_ "modernc.org/sqlite"
 )
 
 func TestWriteSuccessResponse(t *testing.T) {
@@ -145,6 +152,46 @@ func TestWebhookConstants(t *testing.T) {
 	t.Run("webhookLogTruncateLen is 200", func(t *testing.T) {
 		assert.Equal(t, 200, webhookLogTruncateLen)
 	})
+}
+
+func TestWebhookProviderLookupFailureRequiresRetry(t *testing.T) {
+	tests := []struct {
+		providerKey string
+		wantRetry   bool
+	}{
+		{providerKey: payment.TypeHashPay, wantRetry: true},
+		{providerKey: payment.TypeWxpay, wantRetry: true},
+		{providerKey: payment.TypeStripe, wantRetry: false},
+		{providerKey: payment.TypeAirwallex, wantRetry: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.providerKey, func(t *testing.T) {
+			require.Equal(t, tt.wantRetry, webhookProviderLookupFailureRequiresRetry(tt.providerKey))
+		})
+	}
+}
+
+func TestHashPayWebhookProviderLookupFailureReturnsRetryableHTTPError(t *testing.T) {
+	// Given: a real payment service backed by an empty in-memory provider table.
+	db, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared&_fk=1")
+	require.NoError(t, err)
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+	client := enttest.NewClient(t, enttest.WithOptions(dbent.Driver(entsql.OpenDB(dialect.SQLite, db))))
+	t.Cleanup(func() { _ = client.Close(); _ = db.Close() })
+
+	h := NewPaymentWebhookHandler(service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, nil, nil, nil, nil), payment.NewRegistry())
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/payment/webhook/hashpay", nil)
+
+	// When: HashPay receives a callback while no HashPay provider is configured.
+	h.HashPayWebhook(ctx)
+
+	// Then: the HTTP contract remains retryable instead of acknowledging success.
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, "verify failed", recorder.Body.String())
 }
 
 func TestExtractOutTradeNo(t *testing.T) {

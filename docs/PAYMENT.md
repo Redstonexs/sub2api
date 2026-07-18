@@ -25,6 +25,7 @@ Sub2API has a built-in payment system that enables user self-service top-up with
 | **Alipay (Direct)** | Desktop QR code, mobile Alipay redirect | Direct integration with Alipay Open Platform, returning desktop QR codes and mobile WAP/app launch links |
 | **WeChat Pay (Direct)** | Native QR, H5, MP/JSAPI Pay | Direct integration with WeChat Pay APIv3 with environment-aware routing |
 | **Stripe** | Card, Alipay, WeChat Pay, Link, etc. | International payments, multi-currency support |
+| **HashPay** | Hosted crypto checkout | Merchant-signed order API with encrypted callbacks and signed order confirmation |
 
 > Alipay/WeChat Pay direct and EasyPay can both exist as backend provider instances, but the frontend always exposes only two visible buttons: `Alipay` and `WeChat Pay`. Admins choose exactly one source for each visible method: direct or EasyPay. Direct channels connect to payment APIs directly with lower fees; EasyPay aggregates through third-party platforms with easier setup.
 
@@ -149,6 +150,19 @@ International payment platform supporting multiple payment methods and currencie
 | **Publishable Key** | Stripe publishable key (`pk_live_...` or `pk_test_...`) | Yes |
 | **Webhook Secret** | Stripe Webhook signing secret (`whsec_...`) | Yes |
 
+### HashPay
+
+Hosted crypto checkout provided by [HashPay](https://github.com/Redstonexs/HashPay). Create or rotate the merchant in HashPay first, then save the merchant ID and the PEM private key shown by HashPay. The same private key signs order requests and decrypts encrypted callbacks.
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| **API Base URL** | Deployed HashPay origin; the trailing `/api` is optional | Yes |
+| **Merchant ID** | HashPay merchant ID | Yes |
+| **Private Key** | Merchant RSA private key in PEM format | Yes |
+| **Payment Currency** | Checkout currency supported by the HashPay deployment | Yes (defaults to CNY) |
+
+HashPay's published API currently has no refund endpoint. Sub2API therefore hides and rejects refund settings for HashPay instances; process any required refund through the payment operation that controls the relevant crypto transfer.
+
 ---
 
 ## Provider Instance Management
@@ -158,7 +172,7 @@ You can create **multiple instances** of the same provider type for load balanci
 - **Multi-instance load balancing** — Distribute orders via round-robin or least-amount strategy
 - **Independent limits** — Each instance can have its own min/max amount and daily limit
 - **Independent toggle** — Enable/disable individual instances without affecting others
-- **Refund control** — Enable or disable refunds per instance
+- **Refund control** — Enable or disable refunds per instance where the gateway supports refunds
 - **Payment methods** — Each instance can support a subset of payment methods
 - **Ordering** — Drag to reorder instances
 
@@ -190,6 +204,7 @@ When adding a provider, the system auto-generates callback URLs from your site d
 | **Alipay (Direct)** | `https://your-domain.com/api/v1/payment/webhook/alipay` |
 | **WeChat Pay (Direct)** | `https://your-domain.com/api/v1/payment/webhook/wxpay` |
 | **Stripe** | `https://your-domain.com/api/v1/payment/webhook/stripe` |
+| **HashPay** | `https://your-domain.com/api/v1/payment/webhook/hashpay` |
 
 > Replace `your-domain.com` with your actual domain. For EasyPay / Alipay / WeChat Pay, the callback URL is auto-filled when adding the provider — no manual configuration needed.
 
@@ -200,6 +215,14 @@ When adding a provider, the system auto-generates callback URLs from your site d
 3. Add an endpoint with the callback URL
 4. Subscribe to events: `payment_intent.succeeded`, `payment_intent.payment_failed`
 5. Copy the generated Webhook Secret (`whsec_...`) to your provider configuration
+
+### HashPay Callback Setup
+
+1. In the HashPay merchant settings, set the callback URL to the HashPay URL above
+2. Keep the private key that matches the merchant public key in the Sub2API provider instance
+3. Use HTTPS in production and allow HashPay to reach the endpoint
+
+Sub2API validates the callback merchant ID and timestamp, decrypts HashPay's `RSA-OAEP-256+A256GCM` envelope, then confirms the order ID, merchant order number, amount, currency, and `paid` state through HashPay's signed merchant API before crediting the order.
 
 ### Important Notes
 
@@ -226,7 +249,8 @@ User selects amount and payment method
   ├─ EasyPay     → QR code / H5 redirect
   ├─ Alipay      → Desktop QR payload (Face-to-Face preferred, Website Pay fallback) / mobile Alipay redirect
   ├─ WeChat Pay  → Desktop Native QR / non-WeChat H5 / in-WeChat JSAPI
-  └─ Stripe      → Payment Element (card/Alipay/WeChat/etc.)
+  ├─ Stripe      → Payment Element (card/Alipay/WeChat/etc.)
+  └─ HashPay     → Hosted crypto checkout
        │
        ▼
   Webhook callback verified → Order PAID
@@ -266,7 +290,7 @@ If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as
 | Aspect | Sub2ApiPay | Built-in Payment |
 |--------|-----------|-----------------|
 | Deployment | Separate service (Next.js + PostgreSQL) | Built into Sub2API, no extra deployment |
-| Payment Methods | EasyPay, Alipay, WeChat, Stripe | Same |
+| Payment Methods | EasyPay, Alipay, WeChat, Stripe | EasyPay, Alipay, WeChat, Stripe, HashPay |
 | Configuration | Environment variables + separate admin UI | Unified in Sub2API admin dashboard |
 | Top-up Integration | Via Admin API callback | Internal processing, more reliable |
 | Subscription Plans | Supported | Not yet (planned) |

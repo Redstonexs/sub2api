@@ -67,6 +67,12 @@ func (h *PaymentWebhookHandler) AirwallexWebhook(c *gin.Context) {
 	h.handleNotify(c, payment.TypeAirwallex)
 }
 
+// HashPayWebhook handles encrypted HashPay payment notifications.
+// POST /api/v1/payment/webhook/hashpay
+func (h *PaymentWebhookHandler) HashPayWebhook(c *gin.Context) {
+	h.handleNotify(c, payment.TypeHashPay)
+}
+
 // handleNotify is the shared logic for all provider webhook handlers.
 func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string) {
 	var rawBody string
@@ -90,7 +96,7 @@ func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string)
 	providers, err := h.paymentService.GetWebhookProviders(c.Request.Context(), providerKey, outTradeNo)
 	if err != nil {
 		slog.Warn("[Payment Webhook] provider not found", "provider", providerKey, "outTradeNo", outTradeNo, "error", err)
-		if providerKey == payment.TypeWxpay {
+		if webhookProviderLookupFailureRequiresRetry(providerKey) {
 			c.String(http.StatusBadRequest, "verify failed")
 			return
 		}
@@ -144,6 +150,18 @@ func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string)
 	writeSuccessResponse(c, resolvedProviderKey)
 }
 
+// webhookProviderLookupFailureRequiresRetry marks providers whose callback
+// delivery must be retried while their local merchant configuration is absent.
+// HashPay and WeChat Pay both treat a non-2xx response as retryable.
+func webhookProviderLookupFailureRequiresRetry(providerKey string) bool {
+	switch providerKey {
+	case payment.TypeHashPay, payment.TypeWxpay:
+		return true
+	default:
+		return false
+	}
+}
+
 // extractOutTradeNo parses the webhook body to find the out_trade_no.
 // This allows looking up the correct provider instance before verification.
 func extractOutTradeNo(rawBody, providerKey string) string {
@@ -165,6 +183,7 @@ func extractOutTradeNo(rawBody, providerKey string) string {
 			return strings.TrimSpace(payload.Data.Object.MerchantOrderID)
 		}
 	}
+	// HashPay and WxPay callbacks keep the order ID inside protected payloads.
 	// For other providers (Stripe, Alipay direct, WxPay direct), the registry
 	// typically has only one instance, so no instance lookup is needed.
 	return ""

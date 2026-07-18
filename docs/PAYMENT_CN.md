@@ -25,6 +25,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 | **支付宝官方** | 桌面二维码扫码、移动端支付宝跳转 | 直接对接支付宝开放平台，桌面端返回二维码，移动端返回 WAP/唤起链接 |
 | **微信官方** | Native 扫码、H5、公众号/JSAPI 支付 | 直接对接微信支付 APIv3，按终端环境自动分流 |
 | **Stripe** | 银行卡、支付宝、微信支付、Link 等 | 国际支付，支持多币种 |
+| **HashPay** | 托管式加密货币收银台 | 商户签名下单、加密回调，并通过签名订单查询确认 |
 
 > 支付宝官方 / 微信官方与易支付可以同时作为后台服务商实例存在，但前台始终只展示 `支付宝`、`微信支付` 两个可见按钮。管理员需要分别为这两个按钮选择唯一支付来源：官方或易支付。官方渠道直接对接 API，资金直达商户账户，手续费更低；易支付通过第三方平台聚合，接入门槛更低。
 
@@ -149,6 +150,19 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 | **Publishable Key** | Stripe 可公开密钥（`pk_live_...` 或 `pk_test_...`） | 是 |
 | **Webhook Secret** | Stripe Webhook 签名密钥（`whsec_...`） | 是 |
 
+### HashPay
+
+HashPay 是托管式加密货币收银台。请先在 [HashPay](https://github.com/Redstonexs/HashPay) 创建或轮换商户，再将 HashPay 展示的商户 ID 和 PEM 私钥保存到 Sub2API。该私钥同时用于签名下单请求和解密加密回调。
+
+| 参数 | 说明 | 必填 |
+|------|------|------|
+| **API 地址** | 已部署的 HashPay 服务地址；末尾 `/api` 可填可不填 | 是 |
+| **商户 ID** | HashPay 商户 ID | 是 |
+| **私钥** | PEM 格式的商户 RSA 私钥 | 是 |
+| **支付币种** | 当前 HashPay 部署支持的收银台币种 | 是（默认 CNY） |
+
+HashPay 已公开的接口目前没有退款 API。Sub2API 会隐藏并拒绝 HashPay 实例的退款设置；需要退款时应在实际控制对应加密货币转账的支付运营侧处理。
+
 ---
 
 ## 服务商实例管理
@@ -158,7 +172,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 - **多实例负载均衡** — 按轮询或最少金额策略分流订单
 - **独立限额** — 每个实例可独立配置单笔最小/最大金额和每日限额
 - **独立启停** — 可单独启用/禁用某个实例，不影响其他实例
-- **退款控制** — 每个实例可单独开启或关闭退款功能
+- **退款控制** — 支持退款的网关可在每个实例上单独开启或关闭退款功能
 - **支付方式** — 每个实例可选择支持的支付方式子集
 - **排序** — 拖拽调整实例顺序
 
@@ -190,6 +204,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 | **支付宝官方** | `https://your-domain.com/api/v1/payment/webhook/alipay` |
 | **微信官方** | `https://your-domain.com/api/v1/payment/webhook/wxpay` |
 | **Stripe** | `https://your-domain.com/api/v1/payment/webhook/stripe` |
+| **HashPay** | `https://your-domain.com/api/v1/payment/webhook/hashpay` |
 
 > 将 `your-domain.com` 替换为你的实际域名。EasyPay / 支付宝 / 微信的回调地址在添加服务商时自动填入，无需手动配置。
 
@@ -200,6 +215,14 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 3. 添加端点，填写回调地址
 4. 订阅事件：`payment_intent.succeeded`、`payment_intent.payment_failed`
 5. 将生成的 Webhook Secret（`whsec_...`）填入服务商配置
+
+### HashPay 回调设置
+
+1. 在 HashPay 对应商户的设置中，将回调地址填写为上表中的 HashPay URL
+2. 将与该商户公钥匹配的私钥保存在 Sub2API 服务商实例中
+3. 生产环境使用 HTTPS，并确保 HashPay 可以访问该地址
+
+Sub2API 会校验回调中的商户 ID 和时间戳，解密 HashPay 的 `RSA-OAEP-256+A256GCM` 信封后，再通过 HashPay 的商户签名 API 确认订单 ID、商户订单号、金额、币种和 `paid` 状态，最后才为订单入账。
 
 ### 注意事项
 
@@ -226,7 +249,8 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
   ├─ EasyPay    → 扫码 / H5 跳转
   ├─ 支付宝官方  → 桌面扫码单（当面付优先，电脑网站支付回退）/ 移动端支付宝跳转
   ├─ 微信官方    → 桌面 Native 扫码 / 非微信 H5 / 微信内 JSAPI
-  └─ Stripe     → Payment Element（银行卡/支付宝/微信等）
+  ├─ Stripe     → Payment Element（银行卡/支付宝/微信等）
+  └─ HashPay    → 托管式加密货币收银台
        │
        ▼
   支付回调验签 → 订单 PAID
@@ -266,7 +290,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 | 对比项 | Sub2ApiPay | 内置支付 |
 |--------|-----------|---------|
 | 部署方式 | 独立服务（Next.js + PostgreSQL） | 内置于 Sub2API，无需额外部署 |
-| 支付方式 | EasyPay、支付宝、微信、Stripe | 相同 |
+| 支付方式 | EasyPay、支付宝、微信、Stripe | EasyPay、支付宝、微信、Stripe、HashPay |
 | 配置方式 | 环境变量 + 独立管理后台 | Sub2API 管理后台内统一配置 |
 | 充值对接 | 通过 Admin API 回调 | 内部直接处理，更可靠 |
 | 订阅套餐 | 支持 | 暂不支持（计划中） |

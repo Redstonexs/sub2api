@@ -52,6 +52,13 @@ func TestValidateProviderRequest(t *testing.T) {
 			wantErr:        false,
 		},
 		{
+			name:           "valid hashpay provider",
+			providerKey:    payment.TypeHashPay,
+			providerName:   "HashPay Provider",
+			supportedTypes: payment.TypeHashPay,
+			wantErr:        false,
+		},
+		{
 			name:           "valid alipay provider",
 			providerKey:    "alipay",
 			providerName:   "Alipay Direct",
@@ -110,6 +117,93 @@ func TestValidateProviderRequest(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestCreateProviderInstanceRejectsHashPayRefundSettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		refundEnabled   bool
+		allowUserRefund bool
+	}{
+		{name: "refund enabled", refundEnabled: true},
+		{name: "user refunds allowed", allowUserRefund: true},
+		{name: "both enabled", refundEnabled: true, allowUserRefund: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := newPaymentConfigServiceTestClient(t)
+			svc := &PaymentConfigService{entClient: client}
+
+			created, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+				ProviderKey:     payment.TypeHashPay,
+				Name:            "HashPay",
+				RefundEnabled:   tc.refundEnabled,
+				AllowUserRefund: tc.allowUserRefund,
+			})
+			require.Nil(t, created)
+			require.Error(t, err)
+			require.Equal(t, "REFUND_UNSUPPORTED", infraerrors.Reason(err))
+
+			count, countErr := client.PaymentProviderInstance.Query().Count(ctx)
+			require.NoError(t, countErr)
+			require.Zero(t, count)
+		})
+	}
+}
+
+func TestUpdateProviderInstanceRejectsHashPayRefundSettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		req  UpdateProviderInstanceRequest
+	}{
+		{
+			name: "refund enabled",
+			req:  UpdateProviderInstanceRequest{RefundEnabled: boolPtrValue(true)},
+		},
+		{
+			name: "user refunds allowed",
+			req:  UpdateProviderInstanceRequest{AllowUserRefund: boolPtrValue(true)},
+		},
+		{
+			name: "user refunds allowed while refund disabled",
+			req: UpdateProviderInstanceRequest{
+				RefundEnabled:   boolPtrValue(false),
+				AllowUserRefund: boolPtrValue(true),
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := newPaymentConfigServiceTestClient(t)
+			svc := &PaymentConfigService{entClient: client}
+
+			instance, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+				ProviderKey: payment.TypeHashPay,
+				Name:        "HashPay",
+			})
+			require.NoError(t, err)
+
+			updated, err := svc.UpdateProviderInstance(ctx, instance.ID, tc.req)
+			require.Nil(t, updated)
+			require.Error(t, err)
+			require.Equal(t, "REFUND_UNSUPPORTED", infraerrors.Reason(err))
+
+			saved, err := client.PaymentProviderInstance.Get(ctx, instance.ID)
+			require.NoError(t, err)
+			require.False(t, saved.RefundEnabled)
+			require.False(t, saved.AllowUserRefund)
 		})
 	}
 }
@@ -243,6 +337,11 @@ func TestIsSensitiveProviderConfigField(t *testing.T) {
 		{payment.TypeAirwallex, "apiBase", false},
 		{payment.TypeAirwallex, "accountId", false},
 		{payment.TypeAirwallex, "currency", false},
+
+		{payment.TypeHashPay, "privateKey", true},
+		{payment.TypeHashPay, "merchantId", false},
+		{payment.TypeHashPay, "apiBase", false},
+		{payment.TypeHashPay, "currency", false},
 
 		// Unknown provider: never sensitive
 		{"unknown", "secretKey", false},

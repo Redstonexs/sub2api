@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   PAYMENT_CURRENCY_OPTIONS,
   PROVIDER_CONFIG_FIELDS,
+  PROVIDER_SUPPORTED_TYPES,
+  WEBHOOK_PATHS,
   isBuiltInAlipayMethod,
   isBuiltInWxpayMethod,
   parseEasyPayCustomMethods,
@@ -55,6 +57,21 @@ describe('PROVIDER_CONFIG_FIELDS.stripe', () => {
     expect(currency?.defaultValue).toBe('CNY')
     expect(currency?.hintKey).toBe('admin.settings.payment.field_paymentCurrencyHint')
     expect(currency?.options).toBe(PAYMENT_CURRENCY_OPTIONS)
+  })
+})
+
+describe('PROVIDER_CONFIG_FIELDS.hashpay', () => {
+  it('exposes the merchant credentials, currency, and encrypted callback path required by HashPay', () => {
+    expect(PROVIDER_SUPPORTED_TYPES.hashpay).toEqual(['hashpay'])
+    expect(findField('hashpay', 'apiBase')?.sensitive).toBe(false)
+    expect(findField('hashpay', 'merchantId')?.sensitive).toBe(false)
+    expect(findField('hashpay', 'privateKey')?.sensitive).toBe(true)
+
+    const currency = findField('hashpay', 'currency')
+    expect(currency?.defaultValue).toBe('CNY')
+    expect(currency?.hintKey).toBe('admin.settings.payment.field_paymentCurrencyHint')
+    expect(currency?.options).toBe(PAYMENT_CURRENCY_OPTIONS)
+    expect(WEBHOOK_PATHS.hashpay).toBe('/api/v1/payment/webhook/hashpay')
   })
 })
 

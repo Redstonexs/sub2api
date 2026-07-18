@@ -3,11 +3,14 @@
     <button
       ref="triggerRef"
       type="button"
+      :id="id"
       @click="toggle"
       :disabled="disabled"
       :aria-expanded="isOpen"
       :aria-haspopup="true"
-      aria-label="Select option"
+      :aria-label="accessibleLabel"
+      :aria-labelledby="ariaLabelledby"
+      :aria-describedby="ariaDescribedby"
       :class="[
         'select-trigger',
         isOpen && 'select-trigger-open',
@@ -137,6 +140,10 @@ export interface SelectOption {
 interface Props {
   modelValue: string | number | boolean | null | undefined
   options: SelectOption[] | Array<Record<string, unknown>>
+  id?: string
+  ariaLabel?: string
+  ariaLabelledby?: string
+  ariaDescribedby?: string
   placeholder?: string
   disabled?: boolean
   error?: boolean
@@ -181,6 +188,7 @@ const triggerRect = ref<DOMRect | null>(null)
 
 // i18n placeholders
 const placeholderText = computed(() => props.placeholder ?? t('common.selectOption'))
+const accessibleLabel = computed(() => props.ariaLabel ?? (props.ariaLabelledby ? undefined : t('common.selectOption')))
 const searchPlaceholderText = computed(() => props.searchPlaceholder ?? t('common.searchPlaceholder'))
 const emptyTextDisplay = computed(() => props.emptyText ?? t('common.noOptionsFound'))
 

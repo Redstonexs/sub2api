@@ -26,6 +26,25 @@ import (
 
 var createPaymentProviderFromInstance = provider.CreateProvider
 
+func isHashPayProviderKey(providerKey string) bool {
+	return strings.EqualFold(strings.TrimSpace(providerKey), payment.TypeHashPay)
+}
+
+func isHashPayRefundProvider(o *dbent.PaymentOrder, inst *dbent.PaymentProviderInstance) bool {
+	if inst != nil && isHashPayProviderKey(inst.ProviderKey) {
+		return true
+	}
+	if o == nil {
+		return false
+	}
+	return isHashPayProviderKey(psStringValue(o.ProviderKey)) ||
+		isHashPayProviderKey(payment.GetBasePaymentType(strings.TrimSpace(o.PaymentType)))
+}
+
+func hashPayRefundDisabled(reason string) error {
+	return infraerrors.Forbidden(reason, "HashPay does not support refunds")
+}
+
 // getOrderProviderInstance looks up the provider instance that processed this order.
 // For legacy orders without provider_instance_id, it resolves only when the
 // historical instance is uniquely identifiable from the stored order fields.
@@ -199,6 +218,9 @@ func (s *PaymentService) validateRefundRequest(ctx context.Context, oid, uid int
 	if err != nil || inst == nil {
 		return nil, infraerrors.Forbidden("USER_REFUND_DISABLED", "refund is not available for this order")
 	}
+	if isHashPayRefundProvider(o, inst) {
+		return nil, hashPayRefundDisabled("USER_REFUND_DISABLED")
+	}
 	if !inst.AllowUserRefund {
 		return nil, infraerrors.Forbidden("USER_REFUND_DISABLED", "user refund is not enabled for this provider")
 	}
@@ -223,6 +245,9 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if inst == nil {
 		// Legacy order without provider_instance_id — block refund
 		return nil, nil, infraerrors.Forbidden("REFUND_DISABLED", "refund is not available for this order")
+	}
+	if isHashPayRefundProvider(o, inst) {
+		return nil, nil, hashPayRefundDisabled("REFUND_DISABLED")
 	}
 	if !inst.RefundEnabled {
 		return nil, nil, infraerrors.Forbidden("REFUND_DISABLED", "refund is not enabled for this provider")
@@ -281,6 +306,12 @@ func (s *PaymentService) prepDeduct(ctx context.Context, o *dbent.PaymentOrder, 
 }
 
 func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
+	if isHashPayRefundProvider(p.Order, nil) {
+		return nil, hashPayRefundDisabled("REFUND_DISABLED")
+	}
+	if inst, err := s.getRefundOrderProviderInstance(ctx, p.Order); err == nil && isHashPayRefundProvider(p.Order, inst) {
+		return nil, hashPayRefundDisabled("REFUND_DISABLED")
+	}
 	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed)).SetStatus(OrderStatusRefunding).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("lock: %w", err)
@@ -331,6 +362,9 @@ func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*Ref
 }
 
 func (s *PaymentService) gwRefund(ctx context.Context, p *RefundPlan) (*payment.RefundResponse, error) {
+	if isHashPayRefundProvider(p.Order, nil) {
+		return nil, hashPayRefundDisabled("REFUND_DISABLED")
+	}
 	if p.Order.PaymentTradeNo == "" {
 		s.writeAuditLog(ctx, p.Order.ID, "REFUND_NO_TRADE_NO", "admin", map[string]any{"detail": "skipped"})
 		return &payment.RefundResponse{Status: payment.ProviderStatusSuccess}, nil
@@ -542,6 +576,9 @@ func (s *PaymentService) getRefundProvider(ctx context.Context, o *dbent.Payment
 	}
 	if inst == nil {
 		return nil, fmt.Errorf("refund provider instance is unavailable for order %d", o.ID)
+	}
+	if isHashPayRefundProvider(o, inst) {
+		return nil, hashPayRefundDisabled("REFUND_DISABLED")
 	}
 	return s.createProviderFromInstance(ctx, inst)
 }

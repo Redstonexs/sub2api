@@ -263,6 +263,132 @@ func TestVerifyOrderByOutTradeNoBackfillsTradeNoFromPaidQuery(t *testing.T) {
 	require.Equal(t, user.ID, redeemRepo.useCalls[0].userID)
 }
 
+func TestVerifyOrderByOutTradeNoRejectsPaidHashPayWithoutMatchingMerchantNo(t *testing.T) {
+	tests := []struct {
+		name     string
+		suffix   string
+		metadata map[string]string
+	}{
+		{
+			name:     "missing merchant_no",
+			suffix:   "missing_merchant_no",
+			metadata: map[string]string{},
+		},
+		{
+			name:   "mismatched merchant_no",
+			suffix: "mismatched_merchant_no",
+			metadata: map[string]string{
+				"merchant_no": "sub2_hashpay_foreign_order",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given
+			ctx := context.Background()
+			client := newPaymentOrderLifecycleTestClient(t)
+
+			user, err := client.User.Create().
+				SetEmail("hashpay-" + tt.suffix + "@example.com").
+				SetPasswordHash("hash").
+				SetUsername("hashpay-" + tt.suffix + "-user").
+				Save(ctx)
+			require.NoError(t, err)
+
+			order, err := client.PaymentOrder.Create().
+				SetUserID(user.ID).
+				SetUserEmail(user.Email).
+				SetUserName(user.Username).
+				SetAmount(88).
+				SetPayAmount(88).
+				SetFeeRate(0).
+				SetRechargeCode("HASH_PAY-" + tt.suffix).
+				SetOutTradeNo("sub2_hashpay_" + tt.suffix).
+				SetPaymentType(payment.TypeHashPay).
+				SetPaymentTradeNo("").
+				SetOrderType(payment.OrderTypeBalance).
+				SetStatus(OrderStatusPending).
+				SetExpiresAt(time.Now().Add(time.Hour)).
+				SetClientIP("127.0.0.1").
+				SetSrcHost("api.example.com").
+				Save(ctx)
+			require.NoError(t, err)
+
+			userRepo := &mockUserRepo{
+				getByIDUser: &User{
+					ID:       user.ID,
+					Email:    user.Email,
+					Username: user.Username,
+					Balance:  0,
+				},
+			}
+			userRepo.updateBalanceFn = func(ctx context.Context, id int64, amount float64) error {
+				require.Equal(t, user.ID, id)
+				if userRepo.getByIDUser != nil {
+					userRepo.getByIDUser.Balance += amount
+				}
+				return nil
+			}
+			redeemRepo := &paymentOrderLifecycleRedeemRepo{
+				codesByCode: map[string]*RedeemCode{
+					order.RechargeCode: {
+						ID:     1,
+						Code:   order.RechargeCode,
+						Type:   RedeemTypeBalance,
+						Value:  order.Amount,
+						Status: StatusUnused,
+					},
+				},
+			}
+			redeemService := NewRedeemService(
+				redeemRepo,
+				userRepo,
+				nil,
+				nil,
+				nil,
+				client,
+				nil,
+				nil,
+			)
+			registry := payment.NewRegistry()
+			provider := &paymentOrderLifecycleQueryProvider{
+				key: payment.TypeHashPay,
+				resp: &payment.QueryOrderResponse{
+					TradeNo:  "hashpay-upstream-trade-" + tt.suffix,
+					Status:   payment.ProviderStatusPaid,
+					Amount:   88,
+					Metadata: tt.metadata,
+				},
+			}
+			registry.Register(provider)
+
+			svc := &PaymentService{
+				entClient:       client,
+				registry:        registry,
+				redeemService:   redeemService,
+				userRepo:        userRepo,
+				providersLoaded: true,
+			}
+
+			// When
+			got, err := svc.VerifyOrderByOutTradeNo(ctx, order.OutTradeNo, user.ID)
+
+			// Then
+			require.NoError(t, err)
+			require.Equal(t, OrderStatusPending, got.Status)
+			require.Empty(t, got.PaymentTradeNo)
+
+			reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+			require.NoError(t, err)
+			require.Equal(t, OrderStatusPending, reloaded.Status)
+			require.Empty(t, reloaded.PaymentTradeNo)
+			require.Equal(t, 0.0, userRepo.getByIDUser.Balance)
+			require.Empty(t, redeemRepo.useCalls)
+		})
+	}
+}
+
 func TestVerifyOrderByOutTradeNoRetriesZeroAmountPaidQueryOnce(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentOrderLifecycleTestClient(t)

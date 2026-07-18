@@ -20,6 +20,11 @@ const messages: Record<string, string> = {
   'admin.settings.payment.stripeWebhookHint': 'Configure Stripe webhook.',
   'admin.settings.payment.stripeWebhookApiVersionHint': 'Use Stripe API version {version}.',
   'admin.settings.payment.airwallexWebhookHint': 'Select payment_intent.succeeded and use the latest stable API version.',
+  'admin.settings.payment.hashpayWebhookHint': 'Configure this callback URL in HashPay.',
+  'admin.settings.payment.field_privateKey': 'Private Key',
+  'admin.settings.payment.showSensitiveField': 'Show {field}',
+  'admin.settings.payment.hideSensitiveField': 'Hide {field}',
+  'admin.accounts.leaveEmptyToKeep': 'Leave empty to keep',
 }
 
 vi.mock('vue-i18n', () => ({
@@ -64,12 +69,14 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
         { value: 'wxpay', label: 'WeChat Pay' },
         { value: 'stripe', label: 'Stripe' },
         { value: 'airwallex', label: 'Airwallex' },
+        { value: 'hashpay', label: 'HashPay' },
       ],
       enabledKeyOptions: [
         { value: 'easypay', label: 'EasyPay' },
         { value: 'alipay', label: 'Alipay' },
         { value: 'wxpay', label: 'WeChat Pay' },
         { value: 'airwallex', label: 'Airwallex' },
+        { value: 'hashpay', label: 'HashPay' },
       ],
       allPaymentTypes: [
         { value: 'alipay', label: 'Alipay' },
@@ -83,8 +90,8 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
           template: '<div><slot /><slot name="footer" /></div>',
         },
         Select: {
-          props: ['modelValue', 'options', 'disabled'],
-          template: '<div />',
+          props: ['modelValue', 'options', 'disabled', 'id', 'ariaLabel', 'ariaLabelledby'],
+          template: '<button :id="id" :aria-label="ariaLabel" :aria-labelledby="ariaLabelledby" />',
         },
         ToggleSwitch: {
           template: '<div />',
@@ -136,6 +143,68 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(wrapper.text()).toContain(messages['admin.settings.payment.stripeWebhookHint'])
     expect(wrapper.text()).toContain(`Use Stripe API version ${STRIPE_SDK_API_VERSION}.`)
     expect(wrapper.text()).toContain('/api/v1/payment/webhook/stripe')
+  })
+
+  it('shows the HashPay encrypted callback URL', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('hashpay')
+    await nextTick()
+
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.hashpayWebhookHint'])
+    expect(wrapper.text()).toContain('/api/v1/payment/webhook/hashpay')
+  })
+
+  it('does not expose unsupported refund controls for HashPay', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('hashpay')
+    await nextTick()
+
+    expect(wrapper.find('[label="admin.settings.payment.refundEnabled"]').exists()).toBe(false)
+    expect(wrapper.find('[label="admin.settings.payment.allowUserRefund"]').exists()).toBe(false)
+  })
+
+  it('masks HashPay PEM input by default and associates HashPay controls with their labels', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('hashpay')
+    await nextTick()
+
+    const privateKey = wrapper.get('textarea#payment-provider-config-privateKey')
+    expect(privateKey.classes()).toContain('text-transparent')
+    expect(privateKey.attributes('aria-describedby')).toBe('payment-provider-config-privateKey-hint')
+    expect(wrapper.get('label[for="payment-provider-config-privateKey"]').text()).toContain('Private Key')
+
+    const revealButton = wrapper.get('button[aria-label="Show Private Key"]')
+    await revealButton.trigger('click')
+
+    expect(privateKey.classes()).not.toContain('text-transparent')
+    expect(wrapper.get('button[aria-label="Hide Private Key"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('button#payment-provider-key').attributes('aria-labelledby')).toBe('payment-provider-key-label')
+    expect(wrapper.get('button#payment-provider-config-currency').attributes('aria-labelledby')).toBe('payment-provider-config-currency-label')
+  })
+
+  it('keeps the blank-on-edit private-key placeholder readable while the field stays masked', async () => {
+    const provider = providerFactory({
+      provider_key: 'hashpay',
+      name: 'HashPay',
+      config: {
+        apiBase: 'https://pay.example.com',
+        merchantId: 'merchant_123',
+        currency: 'CNY',
+      },
+      supported_types: ['hashpay'],
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (value: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+
+    const privateKey = wrapper.get('textarea#payment-provider-config-privateKey')
+    expect(privateKey.classes()).toContain('text-transparent')
+    expect(privateKey.element.parentElement?.querySelector('[aria-hidden="true"] span')?.textContent)
+      .toBe('Leave empty to keep')
   })
 
   it('emits an empty Airwallex accountId when the admin clears it', async () => {

@@ -579,6 +579,64 @@ func TestValidateProviderNotificationMetadataRejectsStripeCurrencyMismatch(t *te
 	assert.ErrorContains(t, err, "stripe currency mismatch")
 }
 
+func TestValidateProviderNotificationMetadataRejectsHashPaySnapshotMismatch(t *testing.T) {
+	// Given
+	t.Parallel()
+	order := &dbent.PaymentOrder{
+		PaymentType: payment.TypeHashPay,
+		OutTradeNo:  "sub2_order_expected",
+		ProviderSnapshot: map[string]any{
+			"schema_version": 2,
+			"merchant_id":    "merchant-expected",
+			"currency":       "USD",
+		},
+	}
+
+	// When
+	err := validateProviderNotificationMetadata(order, payment.TypeHashPay, map[string]string{
+		"currency":    "USD",
+		"merchant_id": "merchant-other",
+		"merchant_no": "sub2_order_expected",
+		"status":      "paid",
+	})
+
+	// Then
+	assert.ErrorContains(t, err, "hashpay merchant_id mismatch")
+
+	// When
+	err = validateProviderNotificationMetadata(order, payment.TypeHashPay, map[string]string{
+		"currency":    "CNY",
+		"merchant_id": "merchant-expected",
+		"merchant_no": "sub2_order_expected",
+		"status":      "paid",
+	})
+
+	// Then
+	assert.ErrorContains(t, err, "hashpay currency mismatch")
+
+	// When
+	err = validateProviderNotificationMetadata(order, payment.TypeHashPay, map[string]string{
+		"currency":    "USD",
+		"merchant_id": "merchant-expected",
+		"merchant_no": "sub2_order_expected",
+		"status":      "completed",
+	})
+
+	// Then
+	assert.ErrorContains(t, err, "hashpay status mismatch")
+
+	// When
+	err = validateProviderNotificationMetadata(order, payment.TypeHashPay, map[string]string{
+		"currency":    "USD",
+		"merchant_id": "merchant-expected",
+		"merchant_no": "sub2_order_other",
+		"status":      "paid",
+	})
+
+	// Then
+	assert.ErrorContains(t, err, "hashpay merchant_no mismatch")
+}
+
 func TestPaymentAmountToleranceForThreeDecimalCurrency(t *testing.T) {
 	t.Parallel()
 

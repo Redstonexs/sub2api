@@ -29,6 +29,13 @@ func (s *PaymentConfigService) validateProviderConfig(providerKey string, config
 	return err
 }
 
+func validateProviderRefundSettings(providerKey string, refundEnabled, allowUserRefund bool) error {
+	if providerKey != payment.TypeHashPay || (!refundEnabled && !allowUserRefund) {
+		return nil
+	}
+	return infraerrors.BadRequest("REFUND_UNSUPPORTED", "HashPay does not support refunds")
+}
+
 // --- Provider Instance CRUD ---
 
 func (s *PaymentConfigService) ListProviderInstances(ctx context.Context) ([]*dbent.PaymentProviderInstance, error) {
@@ -116,6 +123,7 @@ var providerSensitiveConfigFields = map[string]map[string]struct{}{
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}},
 	payment.TypeStripe:    {"secretkey": {}, "webhooksecret": {}},
 	payment.TypeAirwallex: {"apikey": {}, "webhooksecret": {}},
+	payment.TypeHashPay:   {"privatekey": {}},
 }
 
 // providerPendingOrderProtectedConfigFields lists config keys that cannot be
@@ -128,6 +136,7 @@ var providerPendingOrderProtectedConfigFields = map[string]map[string]struct{}{
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}, "appid": {}, "mpappid": {}, "mchid": {}, "publickeyid": {}, "certserial": {}},
 	payment.TypeStripe:    {"secretkey": {}, "webhooksecret": {}, "currency": {}},
 	payment.TypeAirwallex: {"clientid": {}, "apikey": {}, "webhooksecret": {}, "apibase": {}, "accountid": {}, "currency": {}},
+	payment.TypeHashPay:   {"apibase": {}, "merchantid": {}, "privatekey": {}, "currency": {}},
 }
 
 func isSensitiveProviderConfigField(providerKey, fieldName string) bool {
@@ -178,12 +187,15 @@ func (s *PaymentConfigService) countPendingOrdersByPlan(ctx context.Context, pla
 }
 
 var validProviderKeys = map[string]bool{
-	payment.TypeEasyPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true,
+	payment.TypeEasyPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true, payment.TypeHashPay: true,
 }
 
 func (s *PaymentConfigService) CreateProviderInstance(ctx context.Context, req CreateProviderInstanceRequest) (*dbent.PaymentProviderInstance, error) {
 	typesStr := joinTypes(req.SupportedTypes)
 	if err := validateProviderRequest(req.ProviderKey, req.Name, typesStr); err != nil {
+		return nil, err
+	}
+	if err := validateProviderRefundSettings(req.ProviderKey, req.RefundEnabled, req.AllowUserRefund); err != nil {
 		return nil, err
 	}
 	if req.ProviderKey == payment.TypeEasyPay {
@@ -292,6 +304,12 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 	if err != nil {
 		return nil, fmt.Errorf("load provider instance: %w", err)
 	}
+	if err := validateProviderRefundSettings(current.ProviderKey,
+		req.RefundEnabled != nil && *req.RefundEnabled,
+		req.AllowUserRefund != nil && *req.AllowUserRefund,
+	); err != nil {
+		return nil, err
+	}
 	var pendingOrderCount *int
 	getPendingOrderCount := func() (int, error) {
 		if pendingOrderCount != nil {
@@ -307,6 +325,20 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 	nextEnabled := current.Enabled
 	if req.Enabled != nil {
 		nextEnabled = *req.Enabled
+	}
+	nextRefundEnabled := current.RefundEnabled
+	if req.RefundEnabled != nil {
+		nextRefundEnabled = *req.RefundEnabled
+	}
+	nextAllowUserRefund := current.AllowUserRefund
+	if req.AllowUserRefund != nil {
+		nextAllowUserRefund = *req.AllowUserRefund
+	}
+	if req.RefundEnabled != nil && !*req.RefundEnabled {
+		nextAllowUserRefund = false
+	}
+	if err := validateProviderRefundSettings(current.ProviderKey, nextRefundEnabled, nextAllowUserRefund); err != nil {
+		return nil, err
 	}
 	nextSupportedTypes := current.SupportedTypes
 	if req.SupportedTypes != nil {

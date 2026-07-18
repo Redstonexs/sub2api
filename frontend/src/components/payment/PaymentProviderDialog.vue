@@ -9,21 +9,23 @@
       <!-- Name + Key -->
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="input-label">
+          <label for="payment-provider-name" class="input-label">
             {{ t('admin.settings.payment.providerName') }}
             <span class="text-red-500">*</span>
           </label>
-          <input v-model="form.name" type="text" class="input" required />
+          <input id="payment-provider-name" v-model="form.name" type="text" class="input" required />
         </div>
         <div>
-          <label class="input-label">
+          <label id="payment-provider-key-label" for="payment-provider-key" class="input-label">
             {{ t('admin.settings.payment.providerKey') }}
             <span class="text-red-500">*</span>
           </label>
           <Select
+            id="payment-provider-key"
             v-model="form.provider_key"
             :options="(!!editing ? allKeyOptions : enabledKeyOptions) as SelectOption[]"
             :disabled="!!editing"
+            aria-labelledby="payment-provider-key-label"
             @change="onKeyChange"
           />
         </div>
@@ -32,8 +34,8 @@
       <!-- Toggles + Payment mode + Supported types (single row) -->
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <ToggleSwitch :label="t('common.enabled')" :checked="form.enabled" @toggle="form.enabled = !form.enabled" />
-        <ToggleSwitch :label="t('admin.settings.payment.refundEnabled')" :checked="form.refund_enabled" @toggle="form.refund_enabled = !form.refund_enabled; if (!form.refund_enabled) form.allow_user_refund = false" />
-        <ToggleSwitch v-if="form.refund_enabled" :label="t('admin.settings.payment.allowUserRefund')" :checked="form.allow_user_refund" @toggle="form.allow_user_refund = !form.allow_user_refund" />
+        <ToggleSwitch v-if="supportsRefunds" :label="t('admin.settings.payment.refundEnabled')" :checked="form.refund_enabled" @toggle="form.refund_enabled = !form.refund_enabled; if (!form.refund_enabled) form.allow_user_refund = false" />
+        <ToggleSwitch v-if="supportsRefunds && form.refund_enabled" :label="t('admin.settings.payment.allowUserRefund')" :checked="form.allow_user_refund" @toggle="form.allow_user_refund = !form.allow_user_refund" />
         <div v-if="supportsPaymentMode" class="flex items-center gap-2">
           <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.settings.payment.paymentMode') }}</span>
           <div class="flex gap-1.5">
@@ -154,28 +156,58 @@
         </p>
         <div class="space-y-3">
           <div v-for="field in resolvedFields" :key="field.key">
-            <label class="input-label">
+            <label :id="fieldLabelId(field.key)" :for="fieldControlId(field.key)" class="input-label">
               {{ field.label }}
               <span v-if="field.optional" class="text-xs text-gray-400">({{ t('common.optional') }})</span>
               <span v-else class="text-red-500"> *</span>
             </label>
-            <textarea
-              v-if="field.sensitive && field.key.toLowerCase().includes('key') && field.key !== 'pkey'"
-              v-model="config[field.key]"
-              rows="3"
-              class="input font-mono text-xs"
-              autocomplete="new-password"
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore="true"
-              spellcheck="false"
-              :placeholder="editing ? t('admin.accounts.leaveEmptyToKeep') : ''"
-            />
+            <div v-if="field.sensitive && field.key.toLowerCase().includes('key') && field.key !== 'pkey'" class="relative">
+              <textarea
+                :id="fieldControlId(field.key)"
+                v-model="config[field.key]"
+                rows="3"
+                :class="[
+                  'input pr-10 font-mono text-xs',
+                  !visibleFields[field.key] && 'text-transparent caret-primary-600 dark:text-transparent dark:caret-primary-300',
+                ]"
+                :aria-describedby="field.hintKey ? fieldHintId(field.key) : undefined"
+                autocomplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore="true"
+                spellcheck="false"
+                :placeholder="editing ? t('admin.accounts.leaveEmptyToKeep') : ''"
+                @scroll="syncMaskedTextareaScroll(field.key, $event)"
+              />
+              <div
+                v-if="!visibleFields[field.key]"
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-0 overflow-hidden rounded-xl px-4 py-2.5 pr-10 font-mono text-xs leading-4 text-gray-700 dark:text-gray-200"
+              >
+                <span
+                  class="block whitespace-pre-wrap break-all"
+                  :style="{ transform: `translateY(-${maskedTextareaScrollTop[field.key] || 0}px)` }"
+                >{{ maskedSensitiveValue(config[field.key], editing ? t('admin.accounts.leaveEmptyToKeep') : '') }}</span>
+              </div>
+              <button
+                type="button"
+                @click="visibleFields[field.key] = !visibleFields[field.key]"
+                :aria-label="sensitiveFieldToggleLabel(field.key, field.label)"
+                :aria-pressed="Boolean(visibleFields[field.key])"
+                :title="sensitiveFieldToggleLabel(field.key, field.label)"
+                class="absolute right-0 top-0 z-10 flex h-10 items-center px-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg v-if="visibleFields[field.key]" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              </button>
+            </div>
             <div v-else-if="field.sensitive" class="relative">
               <input
+                :id="fieldControlId(field.key)"
                 :type="visibleFields[field.key] ? 'text' : 'password'"
                 v-model="config[field.key]"
                 class="input pr-10"
+                :aria-describedby="field.hintKey ? fieldHintId(field.key) : undefined"
                 autocomplete="new-password"
                 data-1p-ignore
                 data-lpignore="true"
@@ -186,6 +218,9 @@
               <button
                 type="button"
                 @click="visibleFields[field.key] = !visibleFields[field.key]"
+                :aria-label="sensitiveFieldToggleLabel(field.key, field.label)"
+                :aria-pressed="Boolean(visibleFields[field.key])"
+                :title="sensitiveFieldToggleLabel(field.key, field.label)"
                 class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg v-if="visibleFields[field.key]" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
@@ -194,18 +229,23 @@
             </div>
             <Select
               v-else-if="field.options?.length"
+              :id="fieldControlId(field.key)"
               v-model="config[field.key]"
               :options="field.options"
               :searchable="field.options.length > 5"
+              :aria-labelledby="fieldLabelId(field.key)"
+              :aria-describedby="field.hintKey ? fieldHintId(field.key) : undefined"
             />
             <input
               v-else
+              :id="fieldControlId(field.key)"
               type="text"
               v-model="config[field.key]"
               class="input"
+              :aria-describedby="field.hintKey ? fieldHintId(field.key) : undefined"
               :placeholder="field.defaultValue || ''"
             />
-            <p v-if="field.hintKey" class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            <p v-if="field.hintKey" :id="fieldHintId(field.key)" class="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
               {{ t(field.hintKey) }}
             </p>
           </div>
@@ -214,16 +254,16 @@
         <!-- Callback URLs (each = editable URL + fixed path) -->
         <div v-if="callbackPaths" class="mt-4 space-y-3">
           <div v-if="callbackPaths.notifyUrl">
-            <label class="input-label">{{ t('admin.settings.payment.field_notifyUrl') }} <span class="text-red-500">*</span></label>
+            <label for="payment-provider-notify-base-url" class="input-label">{{ t('admin.settings.payment.field_notifyUrl') }} <span class="text-red-500">*</span></label>
             <div class="flex">
-              <input v-model="notifyBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
+              <input id="payment-provider-notify-base-url" v-model="notifyBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
               <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-xs text-gray-500 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-400">{{ callbackPaths.notifyUrl }}</span>
             </div>
           </div>
           <div v-if="callbackPaths.returnUrl">
-            <label class="input-label">{{ t('admin.settings.payment.field_returnUrl') }} <span class="text-red-500">*</span></label>
+            <label for="payment-provider-return-base-url" class="input-label">{{ t('admin.settings.payment.field_returnUrl') }} <span class="text-red-500">*</span></label>
             <div class="flex">
-              <input v-model="returnBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
+              <input id="payment-provider-return-base-url" v-model="returnBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
               <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-xs text-gray-500 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-400">{{ callbackPaths.returnUrl }}</span>
             </div>
           </div>
@@ -342,6 +382,10 @@ function providerSupportsPaymentMode(providerKey: string): boolean {
   return providerKey === 'easypay' || providerKey === 'alipay'
 }
 
+function providerSupportsRefunds(providerKey: string): boolean {
+  return providerKey !== 'hashpay'
+}
+
 /** Allowed payment_mode values per provider. Used to coerce DB values
  * from a different provider (or stale data) back to the default. */
 function isValidPaymentMode(providerKey: string, mode: string): boolean {
@@ -410,6 +454,7 @@ const notifyBaseUrl = ref('')
 const returnBaseUrl = ref('')
 const limitsExpanded = ref(false)
 const visibleFields = reactive<Record<string, boolean>>({})
+const maskedTextareaScrollTop = reactive<Record<string, number>>({})
 const easyPayCustomMethods = reactive<EasyPayCustomMethod[]>([])
 
 // --- Computed ---
@@ -418,6 +463,7 @@ const defaultBaseUrl = typeof window !== 'undefined' ? window.location.origin : 
 const providerWebhookHintMap: Record<string, string> = {
   stripe: 'admin.settings.payment.stripeWebhookHint',
   airwallex: 'admin.settings.payment.airwallexWebhookHint',
+  hashpay: 'admin.settings.payment.hashpayWebhookHint',
 }
 
 const providerWebhookUrl = computed(() => {
@@ -432,6 +478,7 @@ const providerWebhookHint = computed(() =>
 const callbackPaths = computed(() => PROVIDER_CALLBACK_PATHS[form.provider_key] || null)
 
 const supportsPaymentMode = computed(() => providerSupportsPaymentMode(form.provider_key))
+const supportsRefunds = computed(() => providerSupportsRefunds(form.provider_key))
 
 const paymentModeOptions = computed(() => {
   if (form.provider_key === 'alipay') {
@@ -558,6 +605,33 @@ function isTypeSelected(type: string): boolean {
   return form.supported_types.includes(type)
 }
 
+function fieldControlId(fieldKey: string): string {
+  return `payment-provider-config-${fieldKey}`
+}
+
+function fieldLabelId(fieldKey: string): string {
+  return `${fieldControlId(fieldKey)}-label`
+}
+
+function fieldHintId(fieldKey: string): string {
+  return `${fieldControlId(fieldKey)}-hint`
+}
+
+function sensitiveFieldToggleLabel(fieldKey: string, label: string): string {
+  return visibleFields[fieldKey]
+    ? t('admin.settings.payment.hideSensitiveField', { field: label })
+    : t('admin.settings.payment.showSensitiveField', { field: label })
+}
+
+function maskedSensitiveValue(value: string | undefined, emptyValue: string): string {
+  if (!value) return emptyValue
+  return value.replace(/[^\r\n]/g, '•')
+}
+
+function syncMaskedTextareaScroll(fieldKey: string, event: Event) {
+  maskedTextareaScrollTop[fieldKey] = (event.target as HTMLTextAreaElement).scrollTop
+}
+
 function toggleType(type: string) {
   if (form.supported_types.includes(type)) {
     form.supported_types = form.supported_types.filter(t => t !== type)
@@ -591,6 +665,10 @@ function removeEasyPayCustomMethod(index: number) {
 function onKeyChange() {
   form.supported_types = [...(PROVIDER_SUPPORTED_TYPES[form.provider_key] || [])]
   form.payment_mode = defaultPaymentMode(form.provider_key)
+  if (!providerSupportsRefunds(form.provider_key)) {
+    form.refund_enabled = false
+    form.allow_user_refund = false
+  }
   clearConfig()
   applyDefaults()
 }
@@ -599,6 +677,7 @@ function clearConfig() {
   Object.keys(config).forEach(k => delete config[k])
   Object.keys(limits).forEach(k => delete limits[k])
   Object.keys(visibleFields).forEach(k => delete visibleFields[k])
+  Object.keys(maskedTextareaScrollTop).forEach(k => delete maskedTextareaScrollTop[k])
   notifyBaseUrl.value = ''
   returnBaseUrl.value = ''
   limitsExpanded.value = false
@@ -719,8 +798,8 @@ function handleSave() {
     supported_types: form.supported_types,
     enabled: form.enabled,
     payment_mode: supportsPaymentMode.value ? form.payment_mode : '',
-    refund_enabled: form.refund_enabled,
-    allow_user_refund: form.refund_enabled ? form.allow_user_refund : false,
+    refund_enabled: supportsRefunds.value && form.refund_enabled,
+    allow_user_refund: supportsRefunds.value && form.refund_enabled ? form.allow_user_refund : false,
     config: filteredConfig,
     limits: serializeLimits(),
   })
@@ -808,8 +887,8 @@ function loadProvider(provider: ProviderInstance) {
   form.payment_mode = isValidPaymentMode(provider.provider_key, provider.payment_mode || '')
     ? (provider.payment_mode || '')
     : defaultPaymentMode(provider.provider_key)
-  form.refund_enabled = provider.refund_enabled
-  form.allow_user_refund = provider.allow_user_refund
+  form.refund_enabled = providerSupportsRefunds(provider.provider_key) && provider.refund_enabled
+  form.allow_user_refund = providerSupportsRefunds(provider.provider_key) && provider.allow_user_refund
   clearConfig()
   // Pre-fill config from API response. Backend omits sensitive fields entirely,
   // so those inputs stay blank — submitting blank preserves the stored secret.
