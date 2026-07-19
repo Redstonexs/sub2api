@@ -419,6 +419,8 @@ const baseSettingsResponse = {
   payment_max_pending_orders: 3,
   payment_enabled_types: [],
   payment_balance_disabled: false,
+  payment_balance_purchase_enabled: true,
+  payment_subscription_purchase_enabled: false,
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
@@ -632,6 +634,66 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(paymentLinks).toHaveLength(1);
     expect(paymentLinks[0]?.attributes("href")).toBe(
       "https://github.com/Redstonexs/sub2api/blob/main/docs/PAYMENT_CN.md",
+    );
+  });
+
+  it("connects settings tabs to the active tabpanel", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+
+    expect(wrapper.get("#settings-tab-general").attributes("aria-controls")).toBe(
+      "settings-panel-general",
+    );
+    expect(wrapper.get("#settings-panel-general").attributes("role")).toBe(
+      "tabpanel",
+    );
+    expect(wrapper.get("#settings-panel-general").attributes("aria-labelledby")).toBe(
+      "settings-tab-general",
+    );
+
+    await openPaymentTab(wrapper);
+
+    expect(wrapper.get("#settings-tab-payment").attributes("aria-controls")).toBe(
+      "settings-panel-payment",
+    );
+    expect(wrapper.get("#settings-tab-general").attributes("aria-controls")).toBeUndefined();
+    expect(wrapper.find("#settings-panel-general").exists()).toBe(false);
+    expect(wrapper.get("#settings-panel-payment").attributes("aria-labelledby")).toBe(
+      "settings-tab-payment",
+    );
+  });
+
+  it("submits independent balance and subscription purchase switches", async () => {
+    // Given
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_balance_purchase_enabled: true,
+      payment_subscription_purchase_enabled: false,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    expect(wrapper.get("#payment-balance-purchase-enabled").attributes("aria-labelledby")).toBe(
+      "payment-balance-purchase-label",
+    );
+    expect(wrapper.get("#payment-subscription-purchase-enabled").attributes("aria-labelledby")).toBe(
+      "payment-subscription-purchase-label",
+    );
+
+    // When
+    await wrapper.get("#payment-balance-purchase-enabled").setValue(false);
+    await wrapper.get("#payment-subscription-purchase-enabled").setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    // Then
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_balance_purchase_enabled: false,
+        payment_subscription_purchase_enabled: true,
+      }),
     );
   });
 

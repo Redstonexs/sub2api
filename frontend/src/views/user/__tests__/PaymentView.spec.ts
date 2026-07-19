@@ -104,6 +104,8 @@ function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
     global_max: 0,
     plans: [],
     balance_disabled: false,
+    balance_purchase_enabled: true,
+    subscription_purchase_enabled: true,
     balance_recharge_multiplier: 1,
     subscription_usd_to_cny_rate: 0,
     recharge_fee_rate: 0,

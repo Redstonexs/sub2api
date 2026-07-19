@@ -44,6 +44,16 @@ func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
 // GetPlans returns subscription plans available for sale.
 // GET /api/v1/payment/plans
 func (h *PaymentHandler) GetPlans(c *gin.Context) {
+	cfg, err := h.configService.GetPaymentConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !cfg.SubscriptionPurchaseEnabled {
+		response.Success(c, []struct{}{})
+		return
+	}
+
 	plans, err := h.configService.ListPlansForSale(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -111,7 +121,10 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	}
 
 	// Fetch plans with group info
-	plans, _ := h.configService.ListPlansForSale(ctx)
+	plans := make([]*dbent.SubscriptionPlan, 0)
+	if cfg.SubscriptionPurchaseEnabled {
+		plans, _ = h.configService.ListPlansForSale(ctx)
+	}
 	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
 	planList := make([]checkoutPlan, 0, len(plans))
 	for _, p := range plans {
@@ -133,34 +146,38 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	}
 
 	response.Success(c, checkoutInfoResponse{
-		Methods:                   limitsResp.Methods,
-		GlobalMin:                 limitsResp.GlobalMin,
-		GlobalMax:                 limitsResp.GlobalMax,
-		Plans:                     planList,
-		BalanceDisabled:           cfg.BalanceDisabled,
-		BalanceRechargeMultiplier: cfg.BalanceRechargeMultiplier,
-		SubscriptionUSDToCNYRate:  cfg.SubscriptionUSDToCNYRate,
-		RechargeFeeRate:           cfg.RechargeFeeRate,
-		HelpText:                  cfg.HelpText,
-		HelpImageURL:              cfg.HelpImageURL,
-		StripePublishableKey:      cfg.StripePublishableKey,
-		AlipayForceQRCode:         cfg.AlipayForceQRCode,
+		Methods:                     limitsResp.Methods,
+		GlobalMin:                   limitsResp.GlobalMin,
+		GlobalMax:                   limitsResp.GlobalMax,
+		Plans:                       planList,
+		BalanceDisabled:             cfg.BalanceDisabled,
+		BalancePurchaseEnabled:      cfg.BalancePurchaseEnabled,
+		SubscriptionPurchaseEnabled: cfg.SubscriptionPurchaseEnabled,
+		BalanceRechargeMultiplier:   cfg.BalanceRechargeMultiplier,
+		SubscriptionUSDToCNYRate:    cfg.SubscriptionUSDToCNYRate,
+		RechargeFeeRate:             cfg.RechargeFeeRate,
+		HelpText:                    cfg.HelpText,
+		HelpImageURL:                cfg.HelpImageURL,
+		StripePublishableKey:        cfg.StripePublishableKey,
+		AlipayForceQRCode:           cfg.AlipayForceQRCode,
 	})
 }
 
 type checkoutInfoResponse struct {
-	Methods                   map[string]service.MethodLimits `json:"methods"`
-	GlobalMin                 float64                         `json:"global_min"`
-	GlobalMax                 float64                         `json:"global_max"`
-	Plans                     []checkoutPlan                  `json:"plans"`
-	BalanceDisabled           bool                            `json:"balance_disabled"`
-	BalanceRechargeMultiplier float64                         `json:"balance_recharge_multiplier"`
-	SubscriptionUSDToCNYRate  float64                         `json:"subscription_usd_to_cny_rate"`
-	RechargeFeeRate           float64                         `json:"recharge_fee_rate"`
-	HelpText                  string                          `json:"help_text"`
-	HelpImageURL              string                          `json:"help_image_url"`
-	StripePublishableKey      string                          `json:"stripe_publishable_key"`
-	AlipayForceQRCode         bool                            `json:"alipay_force_qrcode"`
+	Methods                     map[string]service.MethodLimits `json:"methods"`
+	GlobalMin                   float64                         `json:"global_min"`
+	GlobalMax                   float64                         `json:"global_max"`
+	Plans                       []checkoutPlan                  `json:"plans"`
+	BalanceDisabled             bool                            `json:"balance_disabled"`
+	BalancePurchaseEnabled      bool                            `json:"balance_purchase_enabled"`
+	SubscriptionPurchaseEnabled bool                            `json:"subscription_purchase_enabled"`
+	BalanceRechargeMultiplier   float64                         `json:"balance_recharge_multiplier"`
+	SubscriptionUSDToCNYRate    float64                         `json:"subscription_usd_to_cny_rate"`
+	RechargeFeeRate             float64                         `json:"recharge_fee_rate"`
+	HelpText                    string                          `json:"help_text"`
+	HelpImageURL                string                          `json:"help_image_url"`
+	StripePublishableKey        string                          `json:"stripe_publishable_key"`
+	AlipayForceQRCode           bool                            `json:"alipay_force_qrcode"`
 }
 
 type checkoutPlan struct {

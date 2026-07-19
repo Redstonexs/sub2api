@@ -9,20 +9,20 @@ export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
 const BADGE: Record<Platform, string> = {
-  anthropic: 'bg-orange-500/10 text-orange-600 border-orange-500/30 dark:text-orange-400',
-  openai: 'bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400',
-  antigravity: 'bg-purple-500/10 text-purple-600 border-purple-500/30 dark:text-purple-400',
-  gemini: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400',
+  anthropic: 'bg-orange-500/10 text-orange-700 border-orange-500/30 dark:text-orange-400',
+  openai: 'bg-green-500/10 text-green-700 border-green-500/30 dark:text-green-400',
+  antigravity: 'bg-purple-500/10 text-purple-700 border-purple-500/30 dark:text-purple-400',
+  gemini: 'bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400',
   grok: 'bg-zinc-800/10 text-zinc-800 border-zinc-800/30 dark:bg-zinc-500/10 dark:text-zinc-200 dark:border-zinc-500/30',
 }
 const BADGE_DEFAULT = 'bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400'
 
 // ── Light badge (softer bg, no border) ──────────────────────────────
 const BADGE_LIGHT: Record<Platform, string> = {
-  anthropic: 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/10 dark:text-orange-300',
-  openai: 'bg-green-500/10 text-green-600 dark:bg-green-500/10 dark:text-green-300',
-  antigravity: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-300',
-  gemini: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300',
+  anthropic: 'bg-orange-500/10 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300',
+  openai: 'bg-green-500/10 text-green-700 dark:bg-green-500/10 dark:text-green-300',
+  antigravity: 'bg-purple-500/10 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300',
+  gemini: 'bg-blue-500/10 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
   grok: 'bg-zinc-800/10 text-zinc-800 dark:bg-zinc-500/10 dark:text-zinc-200',
 }
 
@@ -48,33 +48,33 @@ const ACCENT_BAR_DEFAULT = 'bg-gradient-to-r from-primary-400 to-primary-500'
 
 // ── Text (price, icon) ─────────────────────────────────────────────
 const TEXT: Record<Platform, string> = {
-  anthropic: 'text-orange-600 dark:text-orange-400',
-  openai: 'text-emerald-600 dark:text-emerald-400',
-  antigravity: 'text-purple-600 dark:text-purple-400',
-  gemini: 'text-blue-600 dark:text-blue-400',
+  anthropic: 'text-orange-700 dark:text-orange-400',
+  openai: 'text-emerald-700 dark:text-emerald-400',
+  antigravity: 'text-purple-700 dark:text-purple-400',
+  gemini: 'text-blue-700 dark:text-blue-400',
   grok: 'text-zinc-800 dark:text-zinc-200',
 }
 const TEXT_DEFAULT = 'text-primary-600 dark:text-primary-400'
 
 // ── Icon (check mark etc.) ──────────────────────────────────────────
 const ICON: Record<Platform, string> = {
-  anthropic: 'text-orange-500 dark:text-orange-400',
-  openai: 'text-emerald-500 dark:text-emerald-400',
-  antigravity: 'text-purple-500 dark:text-purple-400',
-  gemini: 'text-blue-500 dark:text-blue-400',
+  anthropic: 'text-orange-700 dark:text-orange-400',
+  openai: 'text-emerald-700 dark:text-emerald-400',
+  antigravity: 'text-purple-700 dark:text-purple-400',
+  gemini: 'text-blue-700 dark:text-blue-400',
   grok: 'text-zinc-800 dark:text-zinc-200',
 }
 const ICON_DEFAULT = 'text-primary-500 dark:text-primary-400'
 
 // ── Button (solid bg) ───────────────────────────────────────────────
 const BUTTON: Record<Platform, string> = {
-  anthropic: 'bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 dark:bg-orange-500/80 dark:hover:bg-orange-500',
-  openai: 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800 dark:bg-green-600/80 dark:hover:bg-green-600',
-  antigravity: 'bg-purple-500 text-white hover:bg-purple-600 active:bg-purple-700 dark:bg-purple-500/80 dark:hover:bg-purple-500',
-  gemini: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 dark:bg-blue-500/80 dark:hover:bg-blue-500',
+  anthropic: 'bg-orange-700 text-white hover:bg-orange-800 active:bg-orange-900 dark:bg-orange-700/80 dark:hover:bg-orange-700',
+  openai: 'bg-green-700 text-white hover:bg-green-800 active:bg-green-900 dark:bg-green-700/80 dark:hover:bg-green-700',
+  antigravity: 'bg-purple-700 text-white hover:bg-purple-800 active:bg-purple-900 dark:bg-purple-700/80 dark:hover:bg-purple-700',
+  gemini: 'bg-blue-700 text-white hover:bg-blue-800 active:bg-blue-900 dark:bg-blue-700/80 dark:hover:bg-blue-700',
   grok: 'bg-zinc-800 text-white hover:bg-zinc-900 active:bg-black dark:bg-zinc-700 dark:hover:bg-zinc-600',
 }
-const BUTTON_DEFAULT = 'bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500'
+const BUTTON_DEFAULT = 'bg-primary-600 text-white hover:bg-primary-700 dark:bg-primary-600 dark:hover:bg-primary-500'
 
 // ── Discount badge ──────────────────────────────────────────────────
 const DISCOUNT: Record<Platform, string> = {

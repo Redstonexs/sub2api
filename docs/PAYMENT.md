@@ -1,6 +1,6 @@
 # Payment System Configuration Guide
 
-Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
+Sub2API has a built-in payment system that enables user self-service balance top-ups and subscription purchases without deploying a separate payment service.
 
 ---
 
@@ -9,6 +9,7 @@ Sub2API has a built-in payment system that enables user self-service top-up with
 - [Supported Payment Methods](#supported-payment-methods)
 - [Quick Start](#quick-start)
 - [System Settings](#system-settings)
+- [Subscription Purchases](#subscription-purchases)
 - [Provider Configuration](#provider-configuration)
 - [Provider Instance Management](#provider-instance-management)
 - [Webhook Configuration](#webhook-configuration)
@@ -39,7 +40,8 @@ Sub2API has a built-in payment system that enables user self-service top-up with
 2. Enable **Payment**
 3. Configure basic parameters (amount range, timeout, etc.)
 4. Add at least one provider instance in **Provider Management**
-5. Users can now top up from the frontend
+5. Open balance purchases and/or subscription purchases as needed
+6. Users can now buy the enabled products from the frontend
 
 ---
 
@@ -52,6 +54,8 @@ Configure the following in Admin Dashboard **Settings → Payment Settings**:
 | Setting | Description | Default |
 |---------|-------------|---------|
 | **Enable Payment** | Enable or disable the payment system | Off |
+| **Open Balance Purchases** | Allow users to buy account balance | On |
+| **Open Subscription Purchases** | Allow users to buy subscription plans | On |
 | **Product Name Prefix** | Prefix shown on payment page | - |
 | **Product Name Suffix** | Suffix (e.g., "Credits") | - |
 | **Minimum Amount** | Minimum single top-up amount | 1 |
@@ -60,6 +64,15 @@ Configure the following in Admin Dashboard **Settings → Payment Settings**:
 | **Order Timeout** | Order timeout in minutes (minimum 1) | 30 |
 | **Max Pending Orders** | Maximum concurrent pending orders per user | 3 |
 | **Load Balance Strategy** | Strategy for selecting provider instances | Round Robin |
+
+## Subscription Purchases
+
+Subscription purchasing has two independent controls:
+
+1. In **Settings → Payment Settings**, use **Open Subscription Purchases** to expose or close the subscription purchase flow globally.
+2. In **Orders → Subscription Plans**, use the **For Sale** switch on each plan to choose which plans users can purchase.
+
+Closing subscription purchases hides plans from the checkout API and rejects direct subscription-order requests. Closing balance purchases independently hides and rejects balance top-ups. Existing subscriptions remain active; these switches only affect new purchases.
 
 ### Frontend Visible Method Routing
 
@@ -229,18 +242,18 @@ Sub2API validates the callback merchant ID and timestamp, decrypts HashPay's `RS
 - Callback URLs must use **HTTPS** (required by Stripe, strongly recommended for others)
 - Ensure your firewall allows callback requests from payment platforms
 - The system automatically verifies callback signatures to prevent forgery
-- Balance top-up is processed automatically upon successful payment — no manual intervention needed
+- Successful balance orders automatically credit the user's balance; successful subscription orders assign or extend the selected plan
 
 ---
 
 ## Payment Flow
 
 ```
-User selects amount and payment method
+User selects a balance top-up amount or a subscription plan, then a payment method
        │
        ▼
   Create Order (PENDING)
-  ├─ Validate amount range, pending order count, daily limit
+  ├─ Validate the selected purchase type, availability switch, pending order count, and daily limit
   ├─ Load balance to select provider instance
   └─ Call provider to get payment info
        │
@@ -256,7 +269,11 @@ User selects amount and payment method
   Webhook callback verified → Order PAID
        │
        ▼
-  Auto top-up to user balance → Order COMPLETED
+  ├─ Balance order → Credit user balance
+  └─ Subscription order → Assign or extend the selected subscription
+       │
+       ▼
+  Order COMPLETED
 ```
 
 ### Order Status Reference
@@ -264,11 +281,11 @@ User selects amount and payment method
 | Status | Description |
 |--------|-------------|
 | `PENDING` | Waiting for user to complete payment |
-| `PAID` | Payment confirmed, awaiting balance credit |
-| `COMPLETED` | Balance credited successfully |
+| PAID | Payment confirmed, awaiting balance credit or subscription fulfillment |
+| COMPLETED | Balance credited or subscription fulfilled successfully |
 | `EXPIRED` | Timed out without payment |
 | `CANCELLED` | Cancelled by user |
-| `FAILED` | Balance credit failed, admin can retry |
+| FAILED | Fulfillment failed, admin can retry |
 | `REFUND_REQUESTED` | Refund requested |
 | `REFUNDING` | Refund in progress |
 | `REFUNDED` | Refund completed |
@@ -293,7 +310,7 @@ If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as
 | Payment Methods | EasyPay, Alipay, WeChat, Stripe | EasyPay, Alipay, WeChat, Stripe, HashPay |
 | Configuration | Environment variables + separate admin UI | Unified in Sub2API admin dashboard |
 | Top-up Integration | Via Admin API callback | Internal processing, more reliable |
-| Subscription Plans | Supported | Not yet (planned) |
+| Subscription Plans | Supported | Supported with per-plan sale controls |
 | Order Management | Separate admin interface | Integrated in Sub2API admin dashboard |
 
 ### Migration Steps

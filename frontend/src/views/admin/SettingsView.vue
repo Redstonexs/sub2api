@@ -24,6 +24,7 @@
                 :id="`settings-tab-${tab.key}`"
                 type="button"
                 role="tab"
+                :aria-controls="activeTab === tab.key ? `settings-panel-${tab.key}` : undefined"
                 :aria-selected="activeTab === tab.key"
                 :tabindex="activeTab === tab.key ? 0 : -1"
                 :class="[
@@ -44,6 +45,12 @@
           </nav>
         </div>
 
+        <section
+          :id="`settings-panel-${activeTab}`"
+          class="space-y-6"
+          role="tabpanel"
+          :aria-labelledby="`settings-tab-${activeTab}`"
+        >
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->
@@ -5724,7 +5731,7 @@
                   </div>
 
                   <!-- URL (full width) -->
-                  <div class="sm:col-span-2">
+                  <div class="sm:col-span-2 lg:col-span-3">
                     <label
                       class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
                     >
@@ -6556,7 +6563,7 @@
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.payment.title") }}
               </h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                 {{ t("admin.settings.payment.description") }}
                 <a
                   :href="paymentGuideHref"
@@ -6585,16 +6592,36 @@
               <!-- Enable toggle -->
               <div class="flex items-center justify-between">
                 <div>
-                  <label class="font-medium text-gray-900 dark:text-white">{{
+                  <p id="payment-enabled-label" class="font-medium text-gray-900 dark:text-white">{{
                     t("admin.settings.payment.enabled")
-                  }}</label>
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                  }}</p>
+                  <p id="payment-enabled-hint" class="text-sm text-gray-600 dark:text-gray-300">
                     {{ t("admin.settings.payment.enabledHint") }}
                   </p>
                 </div>
-                <Toggle v-model="form.payment_enabled" />
+                <Toggle aria-labelledby="payment-enabled-label" aria-describedby="payment-enabled-hint" v-model="form.payment_enabled" />
               </div>
               <template v-if="form.payment_enabled">
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4 dark:border-dark-600">
+                    <div>
+                      <p id="payment-balance-purchase-label" class="font-medium text-gray-900 dark:text-white">{{ t("admin.settings.payment.balancePurchaseEnabled") }}</p>
+                      <p id="payment-balance-purchase-hint" class="mt-1 text-sm text-gray-600 dark:text-gray-300">{{ t("admin.settings.payment.balancePurchaseEnabledHint") }}</p>
+                    </div>
+                    <Toggle id="payment-balance-purchase-enabled" class="self-end lg:self-auto" aria-labelledby="payment-balance-purchase-label" aria-describedby="payment-balance-purchase-hint" v-model="form.payment_balance_purchase_enabled" />
+                  </div>
+                  <div class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4 dark:border-dark-600">
+                    <div>
+                      <p id="payment-subscription-purchase-label" class="font-medium text-gray-900 dark:text-white">{{ t("admin.settings.payment.subscriptionPurchaseEnabled") }}</p>
+                      <p id="payment-subscription-purchase-hint" class="mt-1 text-sm text-gray-600 dark:text-gray-300">{{ t("admin.settings.payment.subscriptionPurchaseEnabledHint") }}</p>
+                    </div>
+                    <Toggle id="payment-subscription-purchase-enabled" class="self-end lg:self-auto" aria-labelledby="payment-subscription-purchase-label" aria-describedby="payment-subscription-purchase-hint" v-model="form.payment_subscription_purchase_enabled" />
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-accent-50 p-4 dark:border-dark-600 dark:bg-dark-800">
+                  <p class="text-sm text-gray-600 dark:text-gray-300">{{ t("admin.settings.payment.subscriptionPlansHint") }}</p>
+                  <a href="/admin/orders/plans" class="btn btn-secondary btn-sm">{{ t("admin.settings.payment.manageSubscriptionPlans") }}</a>
+                </div>
                 <!-- Row 1: Product name -->
                 <div class="grid grid-cols-3 gap-3">
                   <div>
@@ -6635,7 +6662,7 @@
                   </div>
                 </div>
                 <!-- Row 2: Balance toggle + amounts -->
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.minAmount")
@@ -6710,7 +6737,7 @@
                       min="0.01"
                       class="input"
                     />
-                    <p class="mt-0.5 text-xs text-gray-400">
+                    <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-300">
                       {{
                         t(
                           "admin.settings.payment.balanceRechargeMultiplierHint",
@@ -6730,7 +6757,7 @@
                       }}
                     </p>
                   </div>
-                  <div>
+                  <div class="col-span-2 lg:col-span-3">
                     <label class="input-label">{{
                       t("admin.settings.payment.subscriptionUsdToCnyRate")
                     }}</label>
@@ -6752,7 +6779,7 @@
                         )
                       "
                     />
-                    <p class="mt-0.5 text-xs text-gray-400">
+                    <p class="mt-0.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
                       {{
                         t("admin.settings.payment.subscriptionUsdToCnyRateHint")
                       }}
@@ -6786,11 +6813,11 @@
                         class="input pr-8"
                       />
                       <span
-                        class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400"
+                        class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-600 dark:text-gray-300"
                         >%</span
                       >
                     </div>
-                    <p class="mt-0.5 text-xs text-gray-400">
+                    <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-300">
                       {{ t("admin.settings.payment.rechargeFeeRateHint") }}
                     </p>
                     <p
@@ -6817,7 +6844,7 @@
                       class="input"
                       required
                     />
-                    <p class="mt-0.5 text-xs text-gray-400">
+                    <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-300">
                       {{ t("admin.settings.payment.orderTimeoutHint") }}
                     </p>
                   </div>
@@ -7557,6 +7584,7 @@
         <div v-show="activeTab === 'backup'">
           <BackupSettings />
         </div>
+        </section>
 
         <!-- Save Button -->
         <div v-show="activeTab !== 'backup'" class="flex justify-end">
@@ -7754,6 +7782,20 @@ const settingsTabKeyboardActions = {
 
 function selectSettingsTab(tab: SettingsTab): void {
   activeTab.value = tab;
+  window.requestAnimationFrame(() => {
+    const tabElement = document.getElementById(`settings-tab-${tab}`);
+    const tabScroller = tabElement?.closest<HTMLElement>(
+      ".settings-tabs-scroll",
+    );
+    if (!tabElement || !tabScroller) {
+      return;
+    }
+
+    const targetLeft =
+      tabElement.offsetLeft -
+      (tabScroller.clientWidth - tabElement.offsetWidth) / 2;
+    tabScroller.scrollTo?.({ left: Math.max(0, targetLeft) });
+  });
 }
 
 function focusSettingsTab(tab: SettingsTab): void {
@@ -8391,6 +8433,8 @@ const form = reactive<SettingsForm>({
   payment_max_pending_orders: 3,
   payment_order_timeout_minutes: 30,
   payment_balance_disabled: false,
+  payment_balance_purchase_enabled: true,
+  payment_subscription_purchase_enabled: true,
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
@@ -9957,6 +10001,9 @@ async function saveSettings() {
       payment_order_timeout_minutes:
         Number(form.payment_order_timeout_minutes) || 0,
       payment_balance_disabled: form.payment_balance_disabled,
+      payment_balance_purchase_enabled: form.payment_balance_purchase_enabled,
+      payment_subscription_purchase_enabled:
+        form.payment_subscription_purchase_enabled,
       payment_balance_recharge_multiplier:
         Number(form.payment_balance_recharge_multiplier) || 1,
       payment_subscription_usd_to_cny_rate:

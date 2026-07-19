@@ -115,10 +115,19 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
+	if req.OrderType != payment.OrderTypeBalance && req.OrderType != payment.OrderTypeSubscription {
+		return nil, infraerrors.BadRequest("INVALID_ORDER_TYPE", "unsupported order type")
+	}
+	if req.OrderType == payment.OrderTypeBalance && !cfg.BalancePurchaseEnabled {
+		return nil, infraerrors.Forbidden("BALANCE_PURCHASE_DISABLED", "balance purchases are disabled")
+	}
 	if req.OrderType == payment.OrderTypeBalance && cfg.BalanceDisabled {
 		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
 	if req.OrderType == payment.OrderTypeSubscription {
+		if !cfg.SubscriptionPurchaseEnabled {
+			return nil, infraerrors.Forbidden("SUBSCRIPTION_PURCHASE_DISABLED", "subscription purchases are disabled")
+		}
 		return s.validateSubOrder(ctx, req)
 	}
 	if math.IsNaN(req.Amount) || math.IsInf(req.Amount, 0) || req.Amount <= 0 {
