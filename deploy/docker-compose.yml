@@ -173,6 +173,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     networks:
       - sub2api-network
     healthcheck:
@@ -191,6 +193,30 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  migration:
+    image: postgres:18-alpine
+    restart: "no"
+    user: "${MIGRATION_UID:-1000}:${MIGRATION_GID:-1000}"
+    command: ["/bin/sh", "/usr/local/bin/sub2api-migrate"]
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=${POSTGRES_USER:-sub2api}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - PGDATABASE=${POSTGRES_DB:-sub2api}
+      - MIGRATION_MODE=${MIGRATION_MODE:-none}
+      - MIGRATION_ARCHIVE=/migration/${MIGRATION_ARCHIVE_NAME:-sub2api-full-instance.tar.gz}
+      - MIGRATION_DATA_DIR=/app/data
+    volumes:
+      - ./full-instance-migration.sh:/usr/local/bin/sub2api-migrate:ro,Z
+      - ./migration_artifacts:/migration:Z
+      - sub2api_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sub2api-network
 
   # ===========================================================================
   # PostgreSQL Database

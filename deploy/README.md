@@ -106,7 +106,7 @@ echo "JWT_SECRET=${JWT_SECRET}" >> .env
 echo "TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}" >> .env
 
 # Create data directories
-mkdir -p data postgres_data redis_data
+mkdir -p data postgres_data redis_data migration_artifacts
 
 # Start all services using local directory version
 docker compose -f docker-compose.local.yml up -d
@@ -267,6 +267,25 @@ docker compose -f docker-compose.local.yml up -d
 ```
 
 Your entire deployment (configuration + data) is migrated!
+
+### Full-Instance Migration Archive
+
+The Compose `migration` service exports the full PostgreSQL database and every file in `/app/data` into `migration_artifacts/sub2api-full-instance.tar.gz`. The archive contains credentials and runtime configuration; keep it private.
+
+On the source, stop the application before export so database data and `/app/data` are captured at the same point in time:
+
+```bash
+docker compose stop sub2api
+MIGRATION_MODE=export docker compose run --rm migration
+```
+
+Copy `migration_artifacts/sub2api-full-instance.tar.gz` into the target deployment directory. On the target, keep the archive in `migration_artifacts/`, then import through Compose:
+
+```bash
+MIGRATION_MODE=import docker compose up -d
+```
+
+The `migration` service waits for PostgreSQL, restores the archive, and must exit successfully before `sub2api` starts. Set `MIGRATION_MODE=none` after the import so later restarts do not restore the archive again.
 
 ---
 

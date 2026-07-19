@@ -110,6 +110,7 @@ backend/data/
 # ===================
 backend/config.yaml
 deploy/config.yaml
+deploy/migration_artifacts/
 backend/.installed
 
 # ===================

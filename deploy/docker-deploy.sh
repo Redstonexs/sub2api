@@ -87,6 +87,14 @@ main() {
     fi
     print_success "Downloaded docker-compose.yml"
 
+    print_info "Downloading full-instance migration runner..."
+    if command_exists curl; then
+        curl -sSL "${GITHUB_RAW_URL}/full-instance-migration.sh" -o full-instance-migration.sh
+    else
+        wget -q "${GITHUB_RAW_URL}/full-instance-migration.sh" -O full-instance-migration.sh
+    fi
+    print_success "Downloaded full-instance migration runner"
+
     # Download .env.example
     print_info "Downloading .env.example..."
     if command_exists curl; then
@@ -123,7 +131,7 @@ main() {
 
     # Create data directories
     print_info "Creating data directories..."
-    mkdir -p data postgres_data redis_data
+    mkdir -p data postgres_data redis_data migration_artifacts
     print_success "Created data directories"
 
     # Set secure permissions for .env file (readable/writable only by owner)
@@ -145,11 +153,13 @@ main() {
     echo ""
     echo "Directory structure:"
     echo "  docker-compose.yml        - Docker Compose configuration"
+    echo "  full-instance-migration.sh - Compose migration runner"
     echo "  .env                      - Environment variables (generated secrets)"
     echo "  .env.example              - Example template (for reference)"
     echo "  data/                     - Application data (will be created on first run)"
     echo "  postgres_data/            - PostgreSQL data"
     echo "  redis_data/               - Redis data"
+    echo "  migration_artifacts/      - Full-instance migration archives"
     echo ""
     echo "Next steps:"
     echo "  1. (Optional) Edit .env to customize configuration"
