@@ -53,7 +53,7 @@ func TestOpenAIGatewayServiceGrokMediaVideoRequestOwner(t *testing.T) {
 	require.False(t, svc.IsGrokMediaVideoRequestOwnedBy(context.Background(), &groupID, "video-request-1", 202))
 	require.False(t, svc.IsGrokMediaVideoRequestOwnedBy(context.Background(), &groupID, "unknown-video-request", 101))
 	require.Equal(t, grokMediaVideoRequestOwnerTTL, cache.ttls[grokMediaVideoRequestOwnerSessionHash("video-request-1")])
-	require.NotEqual(t, GrokMediaVideoRequestSessionHash("video-request-1"), grokMediaVideoRequestOwnerSessionHash("video-request-1"))
+	require.NotEqual(t, GrokMediaVideoRequestSessionHash("video-request-1", 101, 1), grokMediaVideoRequestOwnerSessionHash("video-request-1"))
 }
 
 func TestGrokMediaVideoRequestOwnerSessionHashUsesSHA256(t *testing.T) {
