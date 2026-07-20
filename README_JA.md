@@ -411,8 +411,17 @@ default:
 - `security.response_headers.enabled` - 設定可能なレスポンスヘッダーフィルタリングを有効化（無効時はデフォルトの許可リストを使用）
 - `security.csp` - Content-Security-Policy ヘッダーの制御
 - `billing.circuit_breaker` - 課金エラー時にフェイルクローズ
-- `server.trusted_proxies` - X-Forwarded-For パースの有効化
+- `security.trust_forwarded_ip_for_api_key_acl` - 従来の生転送ヘッダーによる上書きを制御（アップグレード互換性のため既定で有効）。無効にすると `server.trusted_proxies` を厳格に使用し、Sub2API に直接接続するプロキシの正確な CIDR のみを指定
+- `security.forwarded_client_ip_headers` - サードパーティ CDN のクライアント IP ヘッダーを最大 16 個指定。従来モードが有効な場合のみ、設定順で組み込みヘッダーより先に評価
 - `turnstile.required` - リリースモードでの Turnstile 必須化
+
+カスタムクライアント IP ヘッダーは YAML、またはカンマ区切りの環境変数で設定できます:
+
+```bash
+SECURITY_FORWARDED_CLIENT_IP_HEADERS=True-Client-IP,X-CDN-Client-IP
+```
+
+ヘッダー名は検証、正規化、重複排除されます。管理画面のセキュリティ設定から再起動なしで一覧を更新できます。新規インストールでは YAML/環境変数の既定値が永続化され、既存インストールではデータベース値がない場合に補完されます。従来モードを無効にすると、カスタムおよび組み込みの生転送ヘッダーはすべて無視され、Gin は `server.trusted_proxies` のみを使用します。従来モードを有効にする場合は、ファイアウォールでオリジンを CDN/プロキシアドレスに制限し、エッジで各信頼済みクライアント IP ヘッダーを上書きしてください。完全な移行手順と信頼境界ルールは [`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md) を参照してください。
 
 **⚠️ セキュリティ警告: HTTP URL 設定**
 

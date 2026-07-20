@@ -59,7 +59,9 @@ type AnthropicContentBlock struct {
 	Text string `json:"text,omitempty"`
 
 	// type=thinking
-	Thinking  string `json:"thinking,omitempty"`
+	Thinking string `json:"thinking,omitempty"`
+	// Signature carries provider encrypted reasoning (e.g. xAI encrypted_content)
+	// so multi-turn Claude clients can round-trip it back on subsequent turns.
 	Signature string `json:"signature,omitempty"`
 	Data      string `json:"data,omitempty"`
 
@@ -123,15 +125,32 @@ type AnthropicCacheControl struct {
 }
 
 // AnthropicResponse is the non-streaming response from POST /v1/messages.
+//
+// StopReason is a pointer so streaming message_start can emit JSON null
+// (official Anthropic wire format). A plain string zero-value would marshal as
+// "" which strict clients treat as invalid mid-stream state.
 type AnthropicResponse struct {
 	ID           string                  `json:"id"`
 	Type         string                  `json:"type"` // "message"
 	Role         string                  `json:"role"` // "assistant"
 	Content      []AnthropicContentBlock `json:"content"`
 	Model        string                  `json:"model"`
-	StopReason   string                  `json:"stop_reason"`
+	StopReason   *string                 `json:"stop_reason"`
 	StopSequence *string                 `json:"stop_sequence,omitempty"`
 	Usage        AnthropicUsage          `json:"usage"`
+}
+
+// AnthropicStopReasonPtr returns a non-nil pointer to s for final stop reasons.
+func AnthropicStopReasonPtr(s string) *string {
+	return &s
+}
+
+// AnthropicStopReasonString returns the stop reason value, or "" when unset/null.
+func AnthropicStopReasonString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // AnthropicUsage holds token counts in Anthropic format.
@@ -233,16 +252,19 @@ type ResponsesInputItem struct {
 	Role    string          `json:"role,omitempty"`
 	Content json.RawMessage `json:"content,omitempty"` // string or []ResponsesContentPart
 
+	// type=reasoning (multi-turn replay of encrypted reasoning)
+	EncryptedContent string `json:"encrypted_content,omitempty"`
+
 	// type=function_call
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
 	ID        string `json:"id,omitempty"`
 
+	Summary *[]ResponsesSummary `json:"summary,omitempty"`
+
 	// type=function_call_output
-	Output           string              `json:"output,omitempty"`
-	EncryptedContent string              `json:"encrypted_content,omitempty"`
-	Summary          *[]ResponsesSummary `json:"summary,omitempty"`
+	Output string `json:"output,omitempty"`
 }
 
 // ResponsesContentPart is a typed content part in a Responses message.

@@ -445,8 +445,17 @@ gateway:
 - `security.response_headers.enabled` 可启用可配置响应头过滤（关闭时使用默认白名单）
 - `security.csp` 配置 Content-Security-Policy
 - `billing.circuit_breaker` 计费异常时 fail-closed
-- `server.trusted_proxies` 启用可信代理解析 X-Forwarded-For
+- `security.trust_forwarded_ip_for_api_key_acl` 控制旧版原始转发头接管（为升级兼容默认开启）；关闭后严格使用 `server.trusted_proxies`，其中只应填写直接连接 Sub2API 的精确代理 CIDR
+- `security.forwarded_client_ip_headers` 最多配置 16 个第三方 CDN 客户端 IP 请求头；仅在旧版接管开启时按顺序优先于内置请求头解析
 - `turnstile.required` 在 release 模式强制启用 Turnstile
+
+自定义客户端 IP 请求头可通过 YAML 配置，也可使用逗号分隔的环境变量：
+
+```bash
+SECURITY_FORWARDED_CLIENT_IP_HEADERS=True-Client-IP,X-CDN-Client-IP
+```
+
+请求头名称会被校验、规范化并去重。管理员安全设置可在不重启的情况下更新该列表；新安装会持久化 YAML/环境变量默认值，已有安装会在数据库值缺失时回填。关闭旧版接管后，所有自定义和内置原始转发头都会被忽略，Gin 仅使用 `server.trusted_proxies`。启用接管时，请用防火墙将源站限制为 CDN/代理地址，并让边缘节点覆盖每个可信客户端 IP 请求头。完整迁移和信任边界规则见 [`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md)。
 
 **网关防御纵深建议（重点）**
 

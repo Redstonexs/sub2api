@@ -269,6 +269,9 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
 // anthropicAssistantToResponses handles an Anthropic assistant message.
 // Text content → assistant message with output_text parts.
 // tool_use blocks → function_call items.
+// thinking blocks with signature → reasoning items (encrypted_content) so
+// multi-turn Grok/Codex prompt cache can reuse prior reasoning prefixes.
+// thinking without signature remains ignored (not accepted as plain text input).
 func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, error) {
 	// Try plain string.
 	var s string
@@ -312,11 +315,13 @@ func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, e
 				_, _ = text.WriteString(b.Text)
 			}
 		case "thinking", "redacted_thinking":
-			encryptedContent := b.Signature
+			encryptedContent := strings.TrimSpace(b.Signature)
 			if b.Type == "redacted_thinking" {
-				encryptedContent = b.Data
+				encryptedContent = strings.TrimSpace(b.Data)
 			}
-			if encryptedContent == "" {
+			// Only replay provider ciphertext. Skip GPT/Codex-style gAAAA blobs and
+			// empty placeholders; xAI returns 400 on decrypt for foreign signatures.
+			if encryptedContent == "" || strings.HasPrefix(encryptedContent, "gAAAA") {
 				continue
 			}
 			if err := flushText(); err != nil {
