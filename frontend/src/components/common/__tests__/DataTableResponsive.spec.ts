@@ -9,10 +9,10 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
-describe('DataTable tablet layout', () => {
+describe('DataTable responsive layout', () => {
   const mountAtViewport = (width: number) => {
     const matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === '(min-width: 1536px)' && width >= 1536,
+      matches: query === '(min-width: 768px)' && width >= 768,
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -31,22 +31,28 @@ describe('DataTable tablet layout', () => {
             { key: 'name', label: 'Name' },
             { key: 'actions', label: 'Actions' },
           ],
-          data: [{ id: 1, name: 'Tablet-safe row' }],
+          data: [{ id: 1, name: 'Responsive row' }],
         },
       }),
     }
   }
 
-  it('uses readable cards at 1535px before sticky columns can overlap table cells', () => {
-    const { matchMedia, wrapper } = mountAtViewport(1535)
+  it('uses stacked cards below 768px where table cells cannot fit', () => {
+    const { matchMedia, wrapper } = mountAtViewport(767)
 
-    expect(matchMedia).toHaveBeenCalledWith('(min-width: 1536px)')
+    expect(matchMedia).toHaveBeenCalledWith('(min-width: 768px)')
     expect(wrapper.find('table').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Tablet-safe row')
+    expect(wrapper.text()).toContain('Responsive row')
   })
 
-  it('restores the table at 1536px when the application shell has enough room', () => {
-    const { wrapper } = mountAtViewport(1536)
+  it('restores the horizontal table at 768px and above', () => {
+    const { wrapper } = mountAtViewport(768)
+
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+
+  it('keeps the horizontal table on constrained desktop widths like 1280px', () => {
+    const { wrapper } = mountAtViewport(1280)
 
     expect(wrapper.find('table').exists()).toBe(true)
   })

@@ -30,7 +30,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const isMobile = ref(false)
 
 const checkMobile = () => {
-  isMobile.value = window.innerWidth < 1536
+  isMobile.value = window.innerWidth < 1024
 }
 
 onMounted(() => {
