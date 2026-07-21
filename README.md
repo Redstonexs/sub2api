@@ -227,7 +227,7 @@ openssl rand -hex 32
 
 ```bash
 # 4. Create data directories (for local version)
-mkdir -p data postgres_data redis_data
+mkdir -p data postgres_data redis_data migration_artifacts
 
 # 5. Start all services
 # Option A: Local directory version (recommended - easy migration)
@@ -287,6 +287,26 @@ tar xzf sub2api-complete.tar.gz
 cd sub2api-deploy/
 docker compose -f docker-compose.local.yml up -d
 ```
+
+#### Full-Instance Migration Archive
+
+Use the Compose `migration` service to move the full PostgreSQL database and every file in `/app/data` between instances. The archive contains credentials and runtime configuration, so keep it private.
+
+Export on the source server after stopping the application, so database data and `/app/data` are captured at the same point in time:
+
+```bash
+docker compose stop sub2api
+MIGRATION_MODE=export docker compose run --rm migration
+```
+
+The export is written to `migration_artifacts/sub2api-full-instance.tar.gz`. Copy that file into the target deployment directory, then import it directly through Compose:
+
+```bash
+mkdir -p migration_artifacts
+MIGRATION_MODE=import docker compose up -d
+```
+
+The migration job waits for PostgreSQL, restores the archive, and must exit successfully before `sub2api` starts. After the import, set `MIGRATION_MODE=none` so later restarts do not restore the archive again.
 
 #### Useful Commands
 

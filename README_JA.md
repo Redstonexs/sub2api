@@ -227,7 +227,7 @@ openssl rand -hex 32
 
 ```bash
 # 4. データディレクトリを作成（ローカルバージョンの場合）
-mkdir -p data postgres_data redis_data
+mkdir -p data postgres_data redis_data migration_artifacts
 
 # 5. すべてのサービスを起動
 # オプション A: ローカルディレクトリバージョン（推奨 - 移行が容易）
@@ -287,6 +287,26 @@ tar xzf sub2api-complete.tar.gz
 cd sub2api-deploy/
 docker compose -f docker-compose.local.yml up -d
 ```
+
+#### 完全インスタンス移行アーカイブ
+
+Compose の `migration` サービスを使って、PostgreSQL データベース全体と `/app/data` 内のすべてのファイルを別インスタンスへ移行できます。アーカイブには資格情報と実行時設定が含まれるため、厳重に管理してください。
+
+移行元サーバーでは、データベースと `/app/data` を同じ時点で取得できるよう、アプリケーションを停止してからエクスポートします:
+
+```bash
+docker compose stop sub2api
+MIGRATION_MODE=export docker compose run --rm migration
+```
+
+エクスポート結果は `migration_artifacts/sub2api-full-instance.tar.gz` に保存されます。そのファイルを移行先のデプロイディレクトリへコピーし、Compose 内で直接インポートします:
+
+```bash
+mkdir -p migration_artifacts
+MIGRATION_MODE=import docker compose up -d
+```
+
+移行ジョブは PostgreSQL の準備を待ってアーカイブを復元し、正常終了するまで `sub2api` は起動しません。インポート後は `MIGRATION_MODE=none` に戻し、後続の再起動でアーカイブを再復元しないようにしてください。
 
 #### よく使うコマンド
 

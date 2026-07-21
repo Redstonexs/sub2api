@@ -228,7 +228,7 @@ openssl rand -hex 32
 
 ```bash
 # 4. 创建数据目录（本地版）
-mkdir -p data postgres_data redis_data
+mkdir -p data postgres_data redis_data migration_artifacts
 
 # 5. 启动所有服务
 # 选项 A：本地目录版（推荐 - 易于迁移）
@@ -300,6 +300,26 @@ tar xzf sub2api-complete.tar.gz
 cd sub2api-deploy/
 docker compose -f docker-compose.local.yml up -d
 ```
+
+#### 完整实例迁移归档
+
+使用 Compose 的 `migration` 服务在实例之间迁移完整 PostgreSQL 数据库以及 `/app/data` 中的所有文件。归档包含凭据和运行时配置，请妥善保存并避免公开传输。
+
+先在源服务器停止应用，再导出，确保数据库与 `/app/data` 处于同一时间点：
+
+```bash
+docker compose stop sub2api
+MIGRATION_MODE=export docker compose run --rm migration
+```
+
+导出生成 `migration_artifacts/sub2api-full-instance.tar.gz`。把该文件复制到目标实例的部署目录后，直接在 Compose 内导入：
+
+```bash
+mkdir -p migration_artifacts
+MIGRATION_MODE=import docker compose up -d
+```
+
+迁移任务会等待 PostgreSQL 就绪、恢复归档，并必须成功退出后 `sub2api` 才会启动。导入完成后，将 `MIGRATION_MODE` 设回 `none`，避免后续重启再次恢复归档。
 
 #### 常用命令
 
