@@ -5,10 +5,24 @@ set -eu
 mode="${MIGRATION_MODE:-none}"
 archive="${MIGRATION_ARCHIVE:-/migration/sub2api-full-instance.tar.gz}"
 data_dir="${MIGRATION_DATA_DIR:-/app/data}"
+force="${MIGRATION_FORCE:-0}"
+
+archive_dir="$(dirname "${archive}")"
+marker="${archive_dir}/.$(basename "${archive}").imported"
 
 fail() {
     printf '%s\n' "$*" >&2
     exit 1
+}
+
+archive_hash() {
+    sha256sum "${archive}" | awk '{print $1}'
+}
+
+write_import_marker() {
+    marker_tmp="$(mktemp "${archive_dir}/.$(basename "${archive}").imported.XXXXXX")"
+    printf '%s\n' "$1" >"${marker_tmp}"
+    mv "${marker_tmp}" "${marker}"
 }
 
 create_archive() {
@@ -38,6 +52,7 @@ restore_archive() {
     mkdir -p "${data_dir}"
     find "${data_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     cp -a "${work_dir}/app-data/." "${data_dir}/"
+    write_import_marker "$(archive_hash)"
 }
 
 case "${mode}" in
@@ -45,9 +60,23 @@ case "${mode}" in
         exit 0
         ;;
     export)
+        if [ -f "${archive}" ] && [ "${force}" != 1 ]; then
+            printf '%s\n' "migration archive already exists: ${archive}; skipping export (set MIGRATION_FORCE=1 to overwrite)"
+            exit 0
+        fi
         create_archive
         ;;
     import)
+        if [ "${force}" != 1 ] && [ -f "${marker}" ]; then
+            if [ ! -f "${archive}" ]; then
+                printf '%s\n' "migration archive already imported: ${archive}"
+                exit 0
+            fi
+            if [ "$(cat "${marker}")" = "$(archive_hash)" ]; then
+                printf '%s\n' "migration archive already imported: ${archive}"
+                exit 0
+            fi
+        fi
         restore_archive
         ;;
     *)

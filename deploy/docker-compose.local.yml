@@ -203,6 +203,7 @@ services:
       - MIGRATION_MODE=${MIGRATION_MODE:-none}
       - MIGRATION_ARCHIVE=/migration/${MIGRATION_ARCHIVE_NAME:-sub2api-full-instance.tar.gz}
       - MIGRATION_DATA_DIR=/app/data
+      - MIGRATION_FORCE=${MIGRATION_FORCE:-0}
     volumes:
       - ./full-instance-migration.sh:/usr/local/bin/sub2api-migrate:ro,Z
       - ./migration_artifacts:/migration:Z

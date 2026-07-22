@@ -31,6 +31,9 @@ write_fake_postgres_clients() {
     mkdir -p "${bin_dir}"
     cat >"${bin_dir}/pg_dump" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n "${PG_DUMP_COUNTER:-}" ]]; then
+    printf '%s\n' 'pg_dump' >>"${PG_DUMP_COUNTER}"
+fi
 printf '%s\n' '-- fixture PostgreSQL dump'
 EOF
     cat >"${bin_dir}/psql" <<'EOF'
@@ -131,6 +134,248 @@ test_import_rejects_missing_or_corrupt_archive() {
     [[ ! -e "${psql_capture}" ]] || fail 'Import invoked psql for a corrupt archive'
 }
 
+test_import_writes_marker_and_skips_reimport() {
+    local root="${TEST_ROOT}/import-marker"
+    local archive="${root}/migration/instance.tar.gz"
+    local source_data="${root}/source-data"
+    local target_data="${root}/target-data"
+    local psql_capture="${root}/psql-input"
+    local marker="${root}/migration/.instance.tar.gz.imported"
+    local archive_hash
+
+    mkdir -p "${source_data}/templates" "${target_data}" "$(dirname "${archive}")"
+    printf '%s\n' 'server: migrated' >"${source_data}/config.yaml"
+    printf '%s\n' 'custom instructions' >"${source_data}/templates/codex.md.tmpl"
+    write_fake_postgres_clients "${root}/bin"
+
+    PATH="${root}/bin:${PATH}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}"
+
+    archive_hash="$(sha256sum "${archive}" | awk '{print $1}')"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    assert_exists "${marker}"
+    assert_equals "${archive_hash}" "$(<"${marker}")"
+
+    printf '%s\n' 'keep-me' >"${target_data}/sentinel"
+    printf '%s\n' 'server: mutated' >"${target_data}/config.yaml"
+    rm -f "${psql_capture}"
+
+    if ! PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}" >"${root}/import.log" 2>&1; then
+        fail 'Skipped import exited non-zero'
+    fi
+
+    grep -Fqi 'already imported' "${root}/import.log" || fail 'Import did not report that the archive was already imported'
+    [[ ! -e "${psql_capture}" ]] || fail 'Import invoked psql during a skipped reimport'
+    assert_equals 'keep-me' "$(<"${target_data}/sentinel")"
+    assert_equals 'server: mutated' "$(<"${target_data}/config.yaml")"
+}
+
+test_import_reruns_when_archive_changes() {
+    local root="${TEST_ROOT}/import-change"
+    local archive="${root}/migration/instance.tar.gz"
+    local source_v1="${root}/source-v1"
+    local source_v2="${root}/source-v2"
+    local target_data="${root}/target-data"
+    local psql_capture="${root}/psql-input"
+    local marker="${root}/migration/.instance.tar.gz.imported"
+    local archive_hash
+
+    mkdir -p "${source_v1}/templates" "${source_v2}/templates" "${target_data}" "$(dirname "${archive}")"
+    printf '%s\n' 'server: migrated' >"${source_v1}/config.yaml"
+    printf '%s\n' 'custom instructions' >"${source_v1}/templates/codex.md.tmpl"
+    printf '%s\n' 'server: migrated-v2' >"${source_v2}/config.yaml"
+    printf '%s\n' 'custom instructions v2' >"${source_v2}/templates/codex.md.tmpl"
+    write_fake_postgres_clients "${root}/bin"
+
+    PATH="${root}/bin:${PATH}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_v1}" \
+        /bin/sh "${RUNNER}"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    # Model the user replacing the archive file with a newer one; an existing
+    # archive makes export skip unless forced, so remove it first.
+    rm -f "${archive}"
+
+    PATH="${root}/bin:${PATH}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_v2}" \
+        /bin/sh "${RUNNER}"
+
+    archive_hash="$(sha256sum "${archive}" | awk '{print $1}')"
+    rm -f "${psql_capture}"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    assert_exists "${psql_capture}"
+    assert_equals 'server: migrated-v2' "$(<"${target_data}/config.yaml")"
+    assert_exists "${marker}"
+    assert_equals "${archive_hash}" "$(<"${marker}")"
+}
+
+test_import_skips_when_archive_missing_but_marker_present() {
+    local root="${TEST_ROOT}/import-missing-archive"
+    local archive="${root}/migration/instance.tar.gz"
+    local source_data="${root}/source-data"
+    local target_data="${root}/target-data"
+    local psql_capture="${root}/psql-input"
+    local marker="${root}/migration/.instance.tar.gz.imported"
+
+    mkdir -p "${source_data}/templates" "${target_data}" "$(dirname "${archive}")"
+    printf '%s\n' 'server: migrated' >"${source_data}/config.yaml"
+    printf '%s\n' 'custom instructions' >"${source_data}/templates/codex.md.tmpl"
+    write_fake_postgres_clients "${root}/bin"
+
+    PATH="${root}/bin:${PATH}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    rm -f "${archive}"
+    rm -f "${psql_capture}"
+
+    if ! PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}" >"${root}/import.log" 2>&1; then
+        fail 'Import exited non-zero when the archive was missing but the marker existed'
+    fi
+
+    grep -Fqi 'already imported' "${root}/import.log" || fail 'Import did not report that the archive was already imported after cleanup'
+    [[ ! -e "${psql_capture}" ]] || fail 'Import invoked psql after the archive was removed but the marker remained'
+    assert_exists "${marker}"
+}
+
+test_import_force_bypasses_marker() {
+    local root="${TEST_ROOT}/import-force"
+    local archive="${root}/migration/instance.tar.gz"
+    local source_data="${root}/source-data"
+    local target_data="${root}/target-data"
+    local psql_capture="${root}/psql-input"
+
+    mkdir -p "${source_data}/templates" "${target_data}" "$(dirname "${archive}")"
+    printf '%s\n' 'server: migrated' >"${source_data}/config.yaml"
+    printf '%s\n' 'custom instructions' >"${source_data}/templates/codex.md.tmpl"
+    write_fake_postgres_clients "${root}/bin"
+
+    PATH="${root}/bin:${PATH}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    printf '%s\n' 'keep-me' >"${target_data}/sentinel"
+    printf '%s\n' 'server: mutated' >"${target_data}/config.yaml"
+    rm -f "${psql_capture}"
+
+    PATH="${root}/bin:${PATH}" \
+        PSQL_CAPTURE="${psql_capture}" \
+        MIGRATION_FORCE=1 \
+        MIGRATION_MODE=import \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${target_data}" \
+        /bin/sh "${RUNNER}"
+
+    assert_exists "${psql_capture}"
+    assert_equals 'server: migrated' "$(<"${target_data}/config.yaml")"
+    [[ ! -e "${target_data}/sentinel" ]] || fail 'Forced import retained stale target data'
+}
+
+test_export_skips_existing_archive_unless_forced() {
+    local root="${TEST_ROOT}/export-force"
+    local archive="${root}/migration/instance.tar.gz"
+    local source_data="${root}/source-data"
+    local archive_hash_before
+    local archive_hash_after
+    local pg_dump_counter="${root}/pg-dump-count"
+
+    mkdir -p "${source_data}/templates" "$(dirname "${archive}")"
+    printf '%s\n' 'server: migrated' >"${source_data}/config.yaml"
+    printf '%s\n' 'custom instructions' >"${source_data}/templates/codex.md.tmpl"
+    write_fake_postgres_clients "${root}/bin"
+
+    PATH="${root}/bin:${PATH}" \
+        PG_DUMP_COUNTER="${pg_dump_counter}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}"
+
+    archive_hash_before="$(sha256sum "${archive}" | awk '{print $1}')"
+
+    rm -f "${pg_dump_counter}"
+    PATH="${root}/bin:${PATH}" \
+        PG_DUMP_COUNTER="${pg_dump_counter}" \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}" >"${root}/export-skip.log" 2>&1
+
+    grep -Fqi 'skip' "${root}/export-skip.log" || fail 'Export did not report a skip for an existing archive'
+    archive_hash_after="$(sha256sum "${archive}" | awk '{print $1}')"
+    assert_equals "${archive_hash_before}" "${archive_hash_after}"
+    [[ ! -e "${pg_dump_counter}" ]] || fail 'Export re-ran pg_dump when it should have skipped'
+
+    PATH="${root}/bin:${PATH}" \
+        PG_DUMP_COUNTER="${pg_dump_counter}" \
+        MIGRATION_FORCE=1 \
+        MIGRATION_MODE=export \
+        MIGRATION_ARCHIVE="${archive}" \
+        MIGRATION_DATA_DIR="${source_data}" \
+        /bin/sh "${RUNNER}" >"${root}/export-force.log" 2>&1
+
+    assert_exists "${pg_dump_counter}"
+    # Archive bytes embed creation timestamps, so hash equality across runs is
+    # not stable; the counter above proves pg_dump re-ran. Assert the forced
+    # export still produced a valid archive instead.
+    tar -tzf "${archive}" >/dev/null 2>&1 || fail 'Forced export produced an invalid archive'
+}
+
 test_none_mode_leaves_target_untouched() {
     local root="${TEST_ROOT}/none"
     local target_data="${root}/data"
@@ -151,6 +396,7 @@ test_compose_gates_sub2api_after_migration() {
         rendered="$(POSTGRES_PASSWORD=test-password docker compose -f "${DEPLOY_DIR}/${compose_file}" config)"
         grep -q '^  migration:$' <<<"${rendered}" || fail "${compose_file} does not define migration"
         grep -q '^        condition: service_completed_successfully$' <<<"${rendered}" || fail "${compose_file} does not gate startup on migration completion"
+        grep -q 'MIGRATION_FORCE' <<<"${rendered}" || fail "${compose_file} does not pass MIGRATION_FORCE to migration"
     done
 }
 
@@ -210,6 +456,11 @@ EOF
 test_export_archive_contains_postgres_sql_and_app_data
 test_import_restores_postgres_sql_and_app_data
 test_import_rejects_missing_or_corrupt_archive
+test_import_writes_marker_and_skips_reimport
+test_import_reruns_when_archive_changes
+test_import_skips_when_archive_missing_but_marker_present
+test_import_force_bypasses_marker
+test_export_skips_existing_archive_unless_forced
 test_none_mode_leaves_target_untouched
 test_compose_gates_sub2api_after_migration
 test_deploy_script_downloads_migration_runner

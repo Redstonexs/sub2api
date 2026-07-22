@@ -292,21 +292,33 @@ docker compose -f docker-compose.local.yml up -d
 
 Compose の `migration` サービスを使って、PostgreSQL データベース全体と `/app/data` 内のすべてのファイルを別インスタンスへ移行できます。アーカイブには資格情報と実行時設定が含まれるため、厳重に管理してください。
 
-移行元サーバーでは、データベースと `/app/data` を同じ時点で取得できるよう、アプリケーションを停止してからエクスポートします:
+移行元サーバーでスタックがすでに動いている場合は、アーカイブ作成中に書き込みが発生しないよう、先に `sub2api` を停止してください。その後 `MIGRATION_MODE=export` を `.env` に設定してスタックを再起動します。移行ジョブは `sub2api` が再び起動する前に実行されます:
 
 ```bash
 docker compose stop sub2api
-MIGRATION_MODE=export docker compose run --rm migration
+
+# .env
+MIGRATION_MODE=export
+
+docker compose up -d
 ```
 
-エクスポート結果は `migration_artifacts/sub2api-full-instance.tar.gz` に保存されます。そのファイルを移行先のデプロイディレクトリへコピーし、Compose 内で直接インポートします:
+エクスポート結果は `migration_artifacts/sub2api-full-instance.tar.gz` に保存されます。そのファイルを新しいサーバーへコピーしてください。エクスポートは 1 回だけ実行されるため、アーカイブが残っている間は次回以降の `up -d` で自動的にスキップされます。再度エクスポートするには `MIGRATION_FORCE=1` を設定するか、古いアーカイブを削除します。
 
 ```bash
+# 新しいサーバーで
 mkdir -p migration_artifacts
-MIGRATION_MODE=import docker compose up -d
+cp sub2api-full-instance.tar.gz migration_artifacts/
+
+# .env
+MIGRATION_MODE=import
+
+docker compose up -d
 ```
 
-移行ジョブは PostgreSQL の準備を待ってアーカイブを復元し、正常終了するまで `sub2api` は起動しません。インポート後は `MIGRATION_MODE=none` に戻し、後続の再起動でアーカイブを再復元しないようにしてください。
+移行ジョブは PostgreSQL の準備を待って dump と `/app/data` を復元し、アーカイブの横にインポートマーカーを書き込みます。`sub2api` はそれが成功するまで起動しません。インポート成功後は、後続の再起動や `up -d` でもアーカイブは自動的にスキップされます。`MIGRATION_MODE` を `none` に戻す必要はありません。
+
+再度移行する場合は、`migration_artifacts/` のアーカイブを新しいファイルに差し替えてください。内容が違えばチェックサムで検出され、再インポートされます。同じアーカイブを強制的に再インポートしたい場合は `MIGRATION_FORCE=1` を設定します。インポート後にアーカイブを削除しても問題ありません。マーカーは残ります。
 
 #### よく使うコマンド
 

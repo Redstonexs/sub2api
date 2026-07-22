@@ -305,21 +305,33 @@ docker compose -f docker-compose.local.yml up -d
 
 使用 Compose 的 `migration` 服务在实例之间迁移完整 PostgreSQL 数据库以及 `/app/data` 中的所有文件。归档包含凭据和运行时配置，请妥善保存并避免公开传输。
 
-先在源服务器停止应用，再导出，确保数据库与 `/app/data` 处于同一时间点：
+在源服务器上，如果当前栈已经在运行，先停止 `sub2api`，避免导出期间继续写入数据。然后把 `MIGRATION_MODE=export` 写入 `.env` 并重新启动栈；迁移任务会在 `sub2api` 重新上线前先运行：
 
 ```bash
 docker compose stop sub2api
-MIGRATION_MODE=export docker compose run --rm migration
+
+# .env
+MIGRATION_MODE=export
+
+docker compose up -d
 ```
 
-导出生成 `migration_artifacts/sub2api-full-instance.tar.gz`。把该文件复制到目标实例的部署目录后，直接在 Compose 内导入：
+导出结果是 `migration_artifacts/sub2api-full-instance.tar.gz`。把该文件复制到新服务器。导出只会执行一次，所以如果归档还在，之后再次执行 `up -d` 会自动跳过。要重新导出，可以设置 `MIGRATION_FORCE=1`，或者删除旧归档。
 
 ```bash
+# 在新服务器上
 mkdir -p migration_artifacts
-MIGRATION_MODE=import docker compose up -d
+cp sub2api-full-instance.tar.gz migration_artifacts/
+
+# .env
+MIGRATION_MODE=import
+
+docker compose up -d
 ```
 
-迁移任务会等待 PostgreSQL 就绪、恢复归档，并必须成功退出后 `sub2api` 才会启动。导入完成后，将 `MIGRATION_MODE` 设回 `none`，避免后续重启再次恢复归档。
+迁移任务会等待 PostgreSQL 就绪，恢复 dump 和 `/app/data`，在归档旁写入导入标记，并且必须在 `sub2api` 启动前成功完成。导入成功后，后续重启和 `up -d` 会自动跳过该归档，不需要把 `MIGRATION_MODE` 设回 `none`。
+
+如果要再次迁移，直接替换 `migration_artifacts/` 里的归档文件即可。内容不同会通过校验和识别并重新导入。也可以设置 `MIGRATION_FORCE=1` 强制用同一个归档重新导入。导入后删除归档也没问题，导入标记会保留。
 
 #### 常用命令
 

@@ -292,21 +292,33 @@ docker compose -f docker-compose.local.yml up -d
 
 Use the Compose `migration` service to move the full PostgreSQL database and every file in `/app/data` between instances. The archive contains credentials and runtime configuration, so keep it private.
 
-Export on the source server after stopping the application, so database data and `/app/data` are captured at the same point in time:
+Export on the source server with a one-shot Compose run. If the source stack is already running, stop `sub2api` first so no writes happen while the archive is created. Then set `MIGRATION_MODE=export` in `.env` and start the stack again; the migration job runs before `sub2api` comes back online:
 
 ```bash
 docker compose stop sub2api
-MIGRATION_MODE=export docker compose run --rm migration
+
+# .env
+MIGRATION_MODE=export
+
+docker compose up -d
 ```
 
-The export is written to `migration_artifacts/sub2api-full-instance.tar.gz`. Copy that file into the target deployment directory, then import it directly through Compose:
+The export is written to `migration_artifacts/sub2api-full-instance.tar.gz`. Copy that file to the new server. The export runs once, so later `up -d` runs skip it automatically if the archive is still present. Use `MIGRATION_FORCE=1` or delete the archive to export again.
 
 ```bash
+# on the new server
 mkdir -p migration_artifacts
-MIGRATION_MODE=import docker compose up -d
+cp sub2api-full-instance.tar.gz migration_artifacts/
+
+# .env
+MIGRATION_MODE=import
+
+docker compose up -d
 ```
 
-The migration job waits for PostgreSQL, restores the archive, and must exit successfully before `sub2api` starts. After the import, set `MIGRATION_MODE=none` so later restarts do not restore the archive again.
+The migration job waits for PostgreSQL, restores the dump and `/app/data`, writes an import marker next to the archive, and must finish before `sub2api` starts. After a successful import, later restarts and `up -d` runs skip the archive automatically. There is no need to set `MIGRATION_MODE` back to `none`.
+
+To migrate again, replace the archive in `migration_artifacts/` with a new file. Different content is detected by checksum and imported again. You can also set `MIGRATION_FORCE=1` to import the same archive again. Deleting the archive after import is fine, because the marker stays in place.
 
 #### Useful Commands
 
