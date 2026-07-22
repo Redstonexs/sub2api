@@ -9,6 +9,7 @@ const mockListSystemLogs = vi.fn()
 const mockCleanupSystemLogs = vi.fn()
 const mockGetSystemLogSinkHealth = vi.fn()
 const mockGetRuntimeLogConfig = vi.fn()
+const confirmMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/admin/ops', () => ({
   opsAPI: {
@@ -23,6 +24,12 @@ vi.mock('@/stores', () => ({
   useAppStore: () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
+  }),
+}))
+
+vi.mock('@/composables/useConfirm', () => ({
+  useConfirm: () => ({
+    confirm: confirmMock,
   }),
 }))
 
@@ -73,7 +80,7 @@ const sinkHealth = {
 describe('OpsSystemLogTable host support', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmMock.mockResolvedValue(true)
     mockListSystemLogs.mockResolvedValue({
       items: [
         {
@@ -111,14 +118,14 @@ describe('OpsSystemLogTable host support', () => {
     expect(hostLabel).toBeDefined()
     await hostLabel!.find('input').setValue(' api-node-2 ')
 
-    const searchButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ops.systemLogs.search')
+    const searchButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ops.systemLog.query')
     expect(searchButton).toBeDefined()
     await searchButton!.trigger('click')
     await flushPromises()
 
     expect(mockListSystemLogs).toHaveBeenLastCalledWith(expect.objectContaining({ host: 'api-node-2' }))
 
-    const cleanupButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ops.systemLogs.cleanCurrentFilters')
+    const cleanupButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ops.systemLog.cleanupCurrent')
     expect(cleanupButton).toBeDefined()
     await cleanupButton!.trigger('click')
     await flushPromises()

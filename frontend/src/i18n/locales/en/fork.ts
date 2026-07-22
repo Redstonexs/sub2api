@@ -47,6 +47,15 @@ export default {
       privacyOnlyLabel: "Allow only accounts with privacy protection set",
       privacyOnlyEnabledHint: "Enabled — accounts without Privacy set are excluded",
       accountCountLabel: "{count} accounts",
+      modelRouting: {
+        claudeMaxSimulation: {
+          title: "Claude Max usage simulation",
+          tooltip: "When enabled, Claude models whose upstream response omits cache-write usage are deterministically mapped to a small input amount plus 1-hour cache creation while preserving the total token count.",
+          enabled: "Enabled (simulate 1h cache)",
+          disabled: "Disabled",
+          hint: "Only adjusts token classification in usage billing logs; no per-request mapping state is persisted.",
+        },
+      },
     },
     channels: {
       noGroupsSelected: "No groups selected for {platform}. Please select at least one group.",
