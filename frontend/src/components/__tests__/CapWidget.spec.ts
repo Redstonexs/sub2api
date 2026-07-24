@@ -25,4 +25,20 @@ describe('CapCaptchaWidget', () => {
     }))
     expect(wrapper.emitted('verify')).toEqual([['cap-token']])
   })
+
+  it('configures the Cap host to fill the responsive form column', async () => {
+    const wrapper = mount(CapCaptchaWidget, {
+      props: {
+        apiEndpoint: 'https://cap.example.com',
+        siteKey: 'public-site-key'
+      }
+    })
+
+    await flushPromises()
+
+    const widget = wrapper.get('cap-widget')
+    expect(widget.classes()).toContain('cap-widget--form-control')
+    expect(widget.attributes('style')).toContain('--cap-widget-width: 100%')
+    expect(widget.attributes('style')).toContain('--cap-widget-height: 64px')
+  })
 })

@@ -275,6 +275,57 @@ func TestSecurityHeaders(t *testing.T) {
 	})
 }
 
+func TestSecurityHeaders_AddsCAPCapabilities_when_CAPEnabled(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		capEnabled bool
+		wantCAPCSP bool
+	}{
+		{name: "does not relax policy when CAP is disabled", capEnabled: false, wantCAPCSP: false},
+		{name: "allows WASM and blob workers when CAP is enabled", capEnabled: true, wantCAPCSP: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given
+			cfg := config.CSPConfig{
+				Enabled: true,
+				Policy:  "default-src 'self'; script-src 'self' __CSP_NONCE__",
+			}
+			middleware := SecurityHeaders(cfg, nil, func() bool {
+				return tt.capEnabled
+			})
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+			// When
+			middleware(c)
+
+			// Then
+			csp := w.Header().Get("Content-Security-Policy")
+			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", "'wasm-unsafe-eval'"))
+			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "worker-src", "blob:"))
+			assert.NotContains(t, csp, "'unsafe-eval'")
+		})
+	}
+
+	t.Run("replaces an explicit worker-src none policy", func(t *testing.T) {
+		cfg := config.CSPConfig{
+			Enabled: true,
+			Policy:  "default-src 'self'; script-src 'self' __CSP_NONCE__; worker-src 'none'",
+		}
+		middleware := SecurityHeaders(cfg, nil, func() bool { return true })
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+		middleware(c)
+
+		csp := w.Header().Get("Content-Security-Policy")
+		assert.True(t, directiveHasValue(csp, "worker-src", CapBlobWorkerSource))
+		assert.False(t, directiveHasValue(csp, "worker-src", "'none'"))
+	})
+}
+
 func TestCSPNonceKey(t *testing.T) {
 	t.Run("constant_value", func(t *testing.T) {
 		assert.Equal(t, "csp_nonce", CSPNonceKey)

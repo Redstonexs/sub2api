@@ -28,6 +28,10 @@ const (
 	AirwallexDemoStaticDomain = "https://static-demo.airwallex.com"
 	// AirwallexDemoCheckoutDomain 是 Airwallex 沙箱环境收银台元素和 iframe 域名。
 	AirwallexDemoCheckoutDomain = "https://checkout-demo.airwallex.com"
+	// CapWASMUnsafeEval permits Cap's WebAssembly solver without enabling JavaScript eval.
+	CapWASMUnsafeEval = "'wasm-unsafe-eval'"
+	// CapBlobWorkerSource permits Cap's Blob-backed solver workers.
+	CapBlobWorkerSource = "blob:"
 )
 
 var requiredCSPDirectiveValues = []struct {
@@ -70,9 +74,9 @@ func GetNonceFromContext(c *gin.Context) string {
 }
 
 // SecurityHeaders sets baseline security headers for all responses.
-// getFrameSrcOrigins is an optional function that returns extra origins to inject into frame-src;
-// pass nil to disable dynamic frame-src injection.
-func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) gin.HandlerFunc {
+// getFrameSrcOrigins is an optional function that returns extra origins to inject into frame-src.
+// getCAPEnabled optionally reports whether a complete Cap configuration is active.
+func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string, getCAPEnabled ...func() bool) gin.HandlerFunc {
 	policy := strings.TrimSpace(cfg.Policy)
 	if policy == "" {
 		policy = config.DefaultCSPPolicy
@@ -80,6 +84,10 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 
 	// Enhance policy with required directives (nonce placeholder and Cloudflare Insights)
 	policy = enhanceCSPPolicy(policy)
+	var capEnabled func() bool
+	if len(getCAPEnabled) > 0 {
+		capEnabled = getCAPEnabled[0]
+	}
 
 	return func(c *gin.Context) {
 		finalPolicy := policy
@@ -89,6 +97,9 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 					finalPolicy = addToDirective(finalPolicy, "frame-src", origin)
 				}
 			}
+		}
+		if capEnabled != nil && capEnabled() {
+			finalPolicy = enhanceCAPCSPPolicy(finalPolicy)
 		}
 
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -144,6 +155,17 @@ func enhanceCSPPolicy(policy string) string {
 	return policy
 }
 
+// enhanceCAPCSPPolicy adds only the CSP capabilities Cap needs for its WASM solver and Blob workers.
+func enhanceCAPCSPPolicy(policy string) string {
+	if !directiveHasValue(policy, "script-src", CapWASMUnsafeEval) {
+		policy = addToDirective(policy, "script-src", CapWASMUnsafeEval)
+	}
+	if !directiveHasValue(policy, "worker-src", CapBlobWorkerSource) {
+		policy = addToDirective(policy, "worker-src", CapBlobWorkerSource)
+	}
+	return policy
+}
+
 func directiveHasValue(policy, directive, value string) bool {
 	for _, rawDirective := range strings.Split(policy, ";") {
 		fields := strings.Fields(strings.TrimSpace(rawDirective))
@@ -183,15 +205,17 @@ func addToDirective(policy, directive, value string) string {
 		return directive + " 'self' " + value + "; " + policy
 	}
 
-	// Find the end of this directive (next semicolon or end of string)
-	endIdx := strings.Index(policy[idx:], ";")
-
-	if endIdx == -1 {
-		// No semicolon found, directive goes to end of string
-		return policy + " " + value
+	// Find the end of this directive (next semicolon or end of string).
+	insertPos := len(policy)
+	if endIdx := strings.Index(policy[idx:], ";"); endIdx != -1 {
+		insertPos = idx + endIdx
 	}
 
-	// Insert value before the semicolon
-	insertPos := idx + endIdx
+	currentDirective := policy[idx:insertPos]
+	if strings.Contains(currentDirective, "'none'") {
+		currentDirective = strings.Join(strings.Fields(strings.ReplaceAll(currentDirective, "'none'", "")), " ")
+		return policy[:idx] + currentDirective + " " + value + policy[insertPos:]
+	}
+
 	return policy[:insertPos] + " " + value + policy[insertPos:]
 }

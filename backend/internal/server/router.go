@@ -37,22 +37,28 @@ func SetupRouter(
 	redisClient *redis.Client,
 ) *gin.Engine {
 	middleware2.SetIngressRejectRecorder(opsService)
-	// 缓存 iframe 页面的 origin 列表，用于动态注入 CSP frame-src
+	// 缓存动态 CSP 配置，避免每个请求读取设置表。
 	var cachedFrameOrigins atomic.Pointer[[]string]
 	emptyOrigins := []string{}
 	cachedFrameOrigins.Store(&emptyOrigins)
+	var cachedCAPEnabled atomic.Bool
 
-	refreshFrameOrigins := func() {
+	refreshCSPSettings := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), frameSrcRefreshTimeout)
 		defer cancel()
 		origins, err := settingService.GetFrameSrcOrigins(ctx)
 		if err != nil {
 			// 获取失败时保留已有缓存，避免 frame-src 被意外清空
-			return
+		} else {
+			cachedFrameOrigins.Store(&origins)
 		}
-		cachedFrameOrigins.Store(&origins)
+		cachedCAPEnabled.Store(
+			settingService.GetCaptchaProvider(ctx) == service.CaptchaProviderCAP &&
+				settingService.GetCapAPIEndpoint(ctx) != "" &&
+				settingService.GetCapSiteKey(ctx) != "",
+		)
 	}
-	refreshFrameOrigins() // 启动时初始化
+	refreshCSPSettings() // 启动时初始化
 
 	// 应用中间件
 	r.Use(middleware2.RequestLogger())
@@ -66,7 +72,7 @@ func SetupRouter(
 			return *p
 		}
 		return nil
-	}))
+	}, cachedCAPEnabled.Load))
 	r.Use(middleware2.ServerTiming(cfg.Server.EnableServerTiming))
 
 	// Serve embedded frontend with settings injection if available
@@ -75,17 +81,17 @@ func SetupRouter(
 		if err != nil {
 			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
 			r.Use(web.ServeEmbeddedFrontend())
-			settingService.SetOnUpdateCallback(refreshFrameOrigins)
+			settingService.SetOnUpdateCallback(refreshCSPSettings)
 		} else {
-			// Register combined callback: invalidate HTML cache + refresh frame origins
+			// Register combined callback: invalidate HTML cache + refresh dynamic CSP settings
 			settingService.SetOnUpdateCallback(func() {
 				frontendServer.InvalidateCache()
-				refreshFrameOrigins()
+				refreshCSPSettings()
 			})
 			r.Use(frontendServer.Middleware())
 		}
 	} else {
-		settingService.SetOnUpdateCallback(refreshFrameOrigins)
+		settingService.SetOnUpdateCallback(refreshCSPSettings)
 	}
 
 	// 注册路由
