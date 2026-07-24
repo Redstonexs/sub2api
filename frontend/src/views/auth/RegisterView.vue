@@ -182,14 +182,16 @@
           </transition>
         </div>
 
-        <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
-          <TurnstileWidget
-            ref="turnstileRef"
-            :site-key="turnstileSiteKey"
-            @verify="onTurnstileVerify"
-            @expire="onTurnstileExpire"
-            @error="onTurnstileError"
+        <div v-if="captchaProvider !== 'none'">
+          <CaptchaWidget
+            ref="captchaRef"
+            :provider="captchaProvider"
+            :turnstile-site-key="turnstileSiteKey"
+            :cap-a-p-i-endpoint="capAPIEndpoint"
+            :cap-site-key="capSiteKey"
+            @verify="onCaptchaVerify"
+            @expire="onCaptchaExpire"
+            @error="onCaptchaError"
           />
         </div>
 
@@ -208,7 +210,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="registrationActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="registrationActionDisabled || (captchaProvider !== 'none' && !captchaToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -308,7 +310,7 @@ import WechatOAuthSection from '@/components/auth/WechatOAuthSection.vue'
 import EmailOAuthButtons from '@/components/auth/EmailOAuthButtons.vue'
 import LoginAgreementPrompt from '@/components/auth/LoginAgreementPrompt.vue'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CaptchaWidget from '@/components/CaptchaWidget.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
   getPublicSettings,
@@ -327,7 +329,8 @@ import {
   loadAffiliateReferralCode,
   resolveAffiliateReferralCode
 } from '@/utils/oauthAffiliate'
-import type { LoginAgreementDocument } from '@/types'
+import type { CaptchaProvider, LoginAgreementDocument } from '@/types'
+import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
 
 const { t, locale } = useI18n()
 const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
@@ -351,8 +354,10 @@ const registrationEnabled = ref<boolean>(true)
 const emailVerifyEnabled = ref<boolean>(false)
 const promoCodeEnabled = ref<boolean>(true)
 const invitationCodeEnabled = ref<boolean>(false)
-const turnstileEnabled = ref<boolean>(false)
+const captchaProvider = ref<CaptchaProvider>('none')
 const turnstileSiteKey = ref<string>('')
+const capAPIEndpoint = ref<string>('')
+const capSiteKey = ref<string>('')
 const siteName = ref<string>('Sub2API')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
@@ -369,9 +374,8 @@ const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
 const agreementAccepted = ref<boolean>(false)
 const showAgreementModal = ref<boolean>(false)
 
-// Turnstile
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-const turnstileToken = ref<string>('')
+const captchaRef = ref<InstanceType<typeof CaptchaWidget> | null>(null)
+const captchaToken = ref<string>('')
 
 // Promo code validation
 const promoValidating = ref<boolean>(false)
@@ -403,7 +407,7 @@ const formData = reactive({
 const errors = reactive({
   email: '',
   password: '',
-  turnstile: '',
+  captcha: '',
   invitation_code: ''
 })
 
@@ -413,7 +417,7 @@ const validationToastMessage = computed(() =>
   (invitationValidation.invalid ? invitationValidation.message : '') ||
   errors.invitation_code ||
   (promoValidation.invalid ? promoValidation.message : '') ||
-  errors.turnstile ||
+  errors.captcha ||
   ''
 )
 
@@ -459,8 +463,10 @@ onMounted(async () => {
     emailVerifyEnabled.value = settings.email_verify_enabled
     promoCodeEnabled.value = settings.promo_code_enabled
     invitationCodeEnabled.value = settings.invitation_code_enabled
-    turnstileEnabled.value = settings.turnstile_enabled
+    captchaProvider.value = resolveCaptchaProvider(settings)
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    capAPIEndpoint.value = settings.cap_api_endpoint || ''
+    capSiteKey.value = settings.cap_site_key || ''
     siteName.value = settings.site_name || 'Sub2API'
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
@@ -707,21 +713,19 @@ function getInvitationErrorMessage(errorCode?: string): string {
   }
 }
 
-// ==================== Turnstile Handlers ====================
-
-function onTurnstileVerify(token: string): void {
-  turnstileToken.value = token
-  errors.turnstile = ''
+function onCaptchaVerify(token: string): void {
+  captchaToken.value = token
+  errors.captcha = ''
 }
 
-function onTurnstileExpire(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileExpired')
+function onCaptchaExpire(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileExpired')
 }
 
-function onTurnstileError(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileFailed')
+function onCaptchaError(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileFailed')
 }
 
 // ==================== Validation ====================
@@ -751,7 +755,7 @@ function validateForm(): boolean {
   // Reset errors
   errors.email = ''
   errors.password = ''
-  errors.turnstile = ''
+  errors.captcha = ''
   errors.invitation_code = ''
 
   let isValid = true
@@ -795,9 +799,8 @@ function validateForm(): boolean {
     }
   }
 
-  // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
-    errors.turnstile = t('auth.completeVerification')
+  if (captchaProvider.value !== 'none' && !captchaToken.value) {
+    errors.captcha = t('auth.completeVerification')
     isValid = false
   }
 
@@ -869,7 +872,7 @@ async function handleRegister(): Promise<void> {
         JSON.stringify({
           email: formData.email,
           password: formData.password,
-          turnstile_token: turnstileToken.value,
+          ...captchaPayload(captchaProvider.value, captchaToken.value),
           promo_code: formData.promo_code || undefined,
           invitation_code: formData.invitation_code || undefined,
           ...(affCode ? { aff_code: affCode } : {})
@@ -885,7 +888,7 @@ async function handleRegister(): Promise<void> {
     await authStore.register({
       email: formData.email,
       password: formData.password,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined,
+      ...captchaPayload(captchaProvider.value, captchaToken.value),
       promo_code: formData.promo_code || undefined,
       invitation_code: formData.invitation_code || undefined,
       ...(affCode ? { aff_code: affCode } : {})
@@ -898,10 +901,9 @@ async function handleRegister(): Promise<void> {
     // Redirect to dashboard
     await router.push('/dashboard')
   } catch (error: unknown) {
-    // Reset Turnstile on error
-    if (turnstileRef.value) {
-      turnstileRef.value.reset()
-      turnstileToken.value = ''
+    if (captchaRef.value) {
+      captchaRef.value.reset()
+      captchaToken.value = ''
     }
 
     // Handle registration error

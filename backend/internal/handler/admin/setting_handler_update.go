@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -55,6 +56,10 @@ type UpdateSettingsRequest struct {
 	TurnstileEnabled   bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey   string `json:"turnstile_site_key"`
 	TurnstileSecretKey string `json:"turnstile_secret_key"`
+	CaptchaProvider    string `json:"captcha_provider"`
+	CapAPIEndpoint     string `json:"cap_api_endpoint"`
+	CapSiteKey         string `json:"cap_site_key"`
+	CapSecretKey       string `json:"cap_secret_key"`
 
 	// API Key IP 访问控制设置
 	APIKeyACLTrustForwardedIP *bool     `json:"api_key_acl_trust_forwarded_ip"`
@@ -554,8 +559,61 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.SMTPUseTLS = previousSettings.SMTPUseTLS
 	}
 
-	// Turnstile 参数验证
-	if req.TurnstileEnabled {
+	captchaProvider := strings.ToLower(strings.TrimSpace(req.CaptchaProvider))
+	if captchaProvider == "" {
+		switch {
+		case req.TurnstileEnabled:
+			captchaProvider = string(service.CaptchaProviderTurnstile)
+		case previousSettings.CaptchaProvider == service.CaptchaProviderTurnstile:
+			captchaProvider = string(service.CaptchaProviderNone)
+		default:
+			captchaProvider = string(previousSettings.CaptchaProvider)
+		}
+	}
+	provider, valid := service.ParseCaptchaProvider(captchaProvider)
+	if !valid {
+		response.BadRequest(c, "captcha_provider must be none, turnstile, or cap")
+		return
+	}
+	req.CaptchaProvider = string(provider)
+	req.CapAPIEndpoint = strings.TrimSpace(req.CapAPIEndpoint)
+	req.CapSiteKey = strings.TrimSpace(req.CapSiteKey)
+	req.CapSecretKey = strings.TrimSpace(req.CapSecretKey)
+
+	if provider == service.CaptchaProviderCAP {
+		if req.CapAPIEndpoint == "" {
+			req.CapAPIEndpoint = previousSettings.CapAPIEndpoint
+		}
+		if req.CapSiteKey == "" {
+			req.CapSiteKey = previousSettings.CapSiteKey
+		}
+		if req.CapSecretKey == "" {
+			req.CapSecretKey = previousSettings.CapSecretKey
+		}
+		endpoint, err := url.ParseRequestURI(req.CapAPIEndpoint)
+		if err != nil || endpoint == nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+			response.BadRequest(c, "CAP API endpoint must be an absolute HTTP or HTTPS URL without a query or fragment")
+			return
+		}
+		if req.CapSiteKey == "" {
+			response.BadRequest(c, "CAP Site Key is required when CAP is selected")
+			return
+		}
+		if req.CapSecretKey == "" {
+			response.BadRequest(c, "CAP Secret Key is required when CAP is selected")
+			return
+		}
+	}
+
+	if provider != service.CaptchaProviderTurnstile {
+		req.TurnstileEnabled = false
+	}
+
+	if provider == service.CaptchaProviderTurnstile {
+		if !req.TurnstileEnabled {
+			response.BadRequest(c, "Turnstile must be enabled when selected as the captcha provider")
+			return
+		}
 		// 检查必填字段
 		if req.TurnstileSiteKey == "" {
 			response.BadRequest(c, "Turnstile Site Key is required when enabled")
@@ -1321,6 +1379,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileEnabled:                 req.TurnstileEnabled,
 		TurnstileSiteKey:                 req.TurnstileSiteKey,
 		TurnstileSecretKey:               req.TurnstileSecretKey,
+		CaptchaProvider:                  provider,
+		CapAPIEndpoint:                   req.CapAPIEndpoint,
+		CapSiteKey:                       req.CapSiteKey,
+		CapSecretKey:                     req.CapSecretKey,
 		APIKeyACLTrustForwardedIP: func() bool {
 			if req.APIKeyACLTrustForwardedIP != nil {
 				return *req.APIKeyACLTrustForwardedIP
@@ -1866,6 +1928,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileEnabled:                                       updatedSettings.TurnstileEnabled,
 		TurnstileSiteKey:                                       updatedSettings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:                           updatedSettings.TurnstileSecretKeyConfigured,
+		CaptchaProvider:                                        string(updatedSettings.CaptchaProvider),
+		CapAPIEndpoint:                                         updatedSettings.CapAPIEndpoint,
+		CapSiteKey:                                             updatedSettings.CapSiteKey,
+		CapSecretKeyConfigured:                                 updatedSettings.CapSecretKeyConfigured,
 		APIKeyACLTrustForwardedIP:                              updatedSettings.APIKeyACLTrustForwardedIP,
 		ForwardedClientIPHeaders:                               updatedSettings.ForwardedClientIPHeaders,
 		LinuxDoConnectEnabled:                                  updatedSettings.LinuxDoConnectEnabled,

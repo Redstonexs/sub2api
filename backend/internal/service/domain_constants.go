@@ -168,6 +168,10 @@ const (
 	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Turnstile 验证
 	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key
 	SettingKeyTurnstileSecretKey = "turnstile_secret_key" // Turnstile Secret Key
+	SettingKeyCaptchaProvider    = "captcha_provider"     // 验证码提供商：none|turnstile|cap
+	SettingKeyCapAPIEndpoint     = "cap_api_endpoint"     // CAP Standalone API 地址
+	SettingKeyCapSiteKey         = "cap_site_key"         // CAP Site Key
+	SettingKeyCapSecretKey       = "cap_secret_key"       // CAP Secret Key
 
 	// API Key IP 访问控制设置
 	SettingKeyAPIKeyACLTrustForwardedIP = "api_key_acl_trust_forwarded_ip" // API Key IP 白/黑名单是否信任转发 IP

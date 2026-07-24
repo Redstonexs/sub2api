@@ -85,7 +85,13 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      vue(),
+      vue({
+        template: {
+          compilerOptions: {
+            isCustomElement: (tag) => tag === 'cap-widget'
+          }
+        }
+      }),
       checker({
         vueTsc: true
       }),

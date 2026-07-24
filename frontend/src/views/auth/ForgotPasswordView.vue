@@ -66,21 +66,23 @@
           </div>
         </div>
 
-        <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
-          <TurnstileWidget
-            ref="turnstileRef"
-            :site-key="turnstileSiteKey"
-            @verify="onTurnstileVerify"
-            @expire="onTurnstileExpire"
-            @error="onTurnstileError"
+        <div v-if="captchaProvider !== 'none'">
+          <CaptchaWidget
+            ref="captchaRef"
+            :provider="captchaProvider"
+            :turnstile-site-key="turnstileSiteKey"
+            :cap-a-p-i-endpoint="capAPIEndpoint"
+            :cap-site-key="capSiteKey"
+            @verify="onCaptchaVerify"
+            @expire="onCaptchaExpire"
+            @error="onCaptchaError"
           />
         </div>
 
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="isLoading || (turnstileEnabled && !turnstileToken)"
+          :disabled="isLoading || (captchaProvider !== 'none' && !captchaToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -129,9 +131,11 @@ import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CaptchaWidget from '@/components/CaptchaWidget.vue'
 import { useAppStore } from '@/stores'
 import { getPublicSettings, forgotPassword } from '@/api/auth'
+import type { CaptchaProvider } from '@/types'
+import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
 
 const { t } = useI18n()
 
@@ -146,12 +150,13 @@ const isSubmitted = ref<boolean>(false)
 const errorMessage = ref<string>('')
 
 // Public settings
-const turnstileEnabled = ref<boolean>(false)
+const captchaProvider = ref<CaptchaProvider>('none')
 const turnstileSiteKey = ref<string>('')
+const capAPIEndpoint = ref<string>('')
+const capSiteKey = ref<string>('')
 
-// Turnstile
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-const turnstileToken = ref<string>('')
+const captchaRef = ref<InstanceType<typeof CaptchaWidget> | null>(null)
+const captchaToken = ref<string>('')
 
 const formData = reactive({
   email: ''
@@ -159,10 +164,10 @@ const formData = reactive({
 
 const errors = reactive({
   email: '',
-  turnstile: ''
+  captcha: ''
 })
 
-const validationToastMessage = computed(() => errors.email || errors.turnstile || '')
+const validationToastMessage = computed(() => errors.email || errors.captcha || '')
 
 watch(validationToastMessage, (value, previousValue) => {
   if (value && value !== previousValue) {
@@ -175,35 +180,35 @@ watch(validationToastMessage, (value, previousValue) => {
 onMounted(async () => {
   try {
     const settings = await getPublicSettings()
-    turnstileEnabled.value = settings.turnstile_enabled
+    captchaProvider.value = resolveCaptchaProvider(settings)
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    capAPIEndpoint.value = settings.cap_api_endpoint || ''
+    capSiteKey.value = settings.cap_site_key || ''
   } catch (error) {
     console.error('Failed to load public settings:', error)
   }
 })
 
-// ==================== Turnstile Handlers ====================
-
-function onTurnstileVerify(token: string): void {
-  turnstileToken.value = token
-  errors.turnstile = ''
+function onCaptchaVerify(token: string): void {
+  captchaToken.value = token
+  errors.captcha = ''
 }
 
-function onTurnstileExpire(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileExpired')
+function onCaptchaExpire(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileExpired')
 }
 
-function onTurnstileError(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileFailed')
+function onCaptchaError(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileFailed')
 }
 
 // ==================== Validation ====================
 
 function validateForm(): boolean {
   errors.email = ''
-  errors.turnstile = ''
+  errors.captcha = ''
 
   let isValid = true
 
@@ -216,9 +221,8 @@ function validateForm(): boolean {
     isValid = false
   }
 
-  // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
-    errors.turnstile = t('auth.completeVerification')
+  if (captchaProvider.value !== 'none' && !captchaToken.value) {
+    errors.captcha = t('auth.completeVerification')
     isValid = false
   }
 
@@ -239,16 +243,15 @@ async function handleSubmit(): Promise<void> {
   try {
     await forgotPassword({
       email: formData.email,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      ...captchaPayload(captchaProvider.value, captchaToken.value)
     })
 
     isSubmitted.value = true
     appStore.showSuccess(t('auth.resetEmailSent'))
   } catch (error: unknown) {
-    // Reset Turnstile on error
-    if (turnstileRef.value) {
-      turnstileRef.value.reset()
-      turnstileToken.value = ''
+    if (captchaRef.value) {
+      captchaRef.value.reset()
+      captchaToken.value = ''
     }
 
     const err = error as { message?: string; response?: { data?: { detail?: string } } }

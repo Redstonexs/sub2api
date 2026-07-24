@@ -23,6 +23,7 @@
     "@tanstack/vue-virtual": "^3.13.23",
     "@vueuse/core": "^10.7.0",
     "axios": "^1.18.1",
+    "cap-widget": "^0.1.56",
     "chart.js": "^4.4.1",
     "dompurify": "^3.4.11",
     "driver.js": "^1.4.0",

@@ -147,6 +147,20 @@ export default {
         secretKeyHint: 'Server-side verification key (keep this secret)',
         secretKeyConfiguredHint: 'Secret key configured. Leave empty to keep the current value.'
       },
+      captcha: {
+        title: 'Human Verification',
+        description: 'Protect sign-in, registration, and verification code requests.',
+        provider: 'Provider',
+        none: 'Disabled',
+        turnstile: 'Cloudflare Turnstile',
+        cap: 'CAP',
+        capEndpoint: 'CAP API Endpoint',
+        capEndpointHint: 'Base URL of your Cap Standalone instance.',
+        capSiteKey: 'CAP Site Key',
+        capSecretKey: 'CAP Secret Key',
+        capSecretKeyHint: 'Server-side verification key. Keep it secret.',
+        capSecretKeyConfiguredHint: 'Secret key configured. Leave empty to keep the current value.'
+      },
       apiKeyAcl: {
         title: 'API Key IP Access Control',
         description:

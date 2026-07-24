@@ -35,6 +35,7 @@ export interface NotifyEmailEntry {
 // ==================== User & Auth Types ====================
 
 export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk'
+export type CaptchaProvider = 'none' | 'turnstile' | 'cap'
 
 export interface UserAuthBindingStatus {
   bound?: boolean
@@ -114,6 +115,7 @@ export interface AdminUser extends User {
 export interface LoginRequest {
   email: string
   password: string
+  captcha_token?: string
   turnstile_token?: string
 }
 
@@ -121,6 +123,7 @@ export interface RegisterRequest {
   email: string
   password: string
   verify_code?: string
+  captcha_token?: string
   turnstile_token?: string
   promo_code?: string
   invitation_code?: string
@@ -155,6 +158,7 @@ export interface AffiliateTransferResponse {
 
 export interface SendVerifyCodeRequest {
   email: string
+  captcha_token?: string
   turnstile_token?: string
   pending_auth_token?: string
   pending_oauth_token?: string
@@ -200,6 +204,9 @@ export interface PublicSettings {
   login_agreement_updated_at?: string
   login_agreement_revision?: string
   login_agreement_documents?: LoginAgreementDocument[]
+  captcha_provider?: CaptchaProvider
+  cap_api_endpoint?: string
+  cap_site_key?: string
   turnstile_enabled: boolean
   turnstile_site_key: string
   site_name: string

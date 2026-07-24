@@ -170,6 +170,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyLoginAgreementDocuments,
 		SettingKeyTurnstileEnabled,
 		SettingKeyTurnstileSiteKey,
+		SettingKeyCaptchaProvider,
+		SettingKeyCapAPIEndpoint,
+		SettingKeyCapSiteKey,
 		SettingKeyAPIKeyACLTrustForwardedIP,
 		SettingKeySiteName,
 		SettingKeySiteLogo,
@@ -274,6 +277,13 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	if loginAgreementUpdatedAt == "" {
 		loginAgreementUpdatedAt = defaultLoginAgreementDate
 	}
+	captchaProvider := captchaProviderFromSettings(settings)
+	capAPIEndpoint := ""
+	capSiteKey := ""
+	if captchaProvider == CaptchaProviderCAP {
+		capAPIEndpoint = strings.TrimSpace(settings[SettingKeyCapAPIEndpoint])
+		capSiteKey = strings.TrimSpace(settings[SettingKeyCapSiteKey])
+	}
 
 	var balanceLowNotifyThreshold float64
 	if v, err := strconv.ParseFloat(settings[SettingKeyBalanceLowNotifyThreshold], 64); err == nil && v >= 0 {
@@ -294,8 +304,11 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
 		LoginAgreementRevision:           buildLoginAgreementRevision(loginAgreementUpdatedAt, loginAgreementDocuments),
 		LoginAgreementDocuments:          loginAgreementDocuments,
-		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
+		TurnstileEnabled:                 captchaProvider == CaptchaProviderTurnstile && settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
+		CaptchaProvider:                  captchaProvider,
+		CapAPIEndpoint:                   capAPIEndpoint,
+		CapSiteKey:                       capSiteKey,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
@@ -453,6 +466,9 @@ type PublicSettingsInjectionPayload struct {
 	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
+	CaptchaProvider                  CaptchaProvider          `json:"captcha_provider"`
+	CapAPIEndpoint                   string                   `json:"cap_api_endpoint"`
+	CapSiteKey                       string                   `json:"cap_site_key"`
 	SiteName                         string                   `json:"site_name"`
 	SiteLogo                         string                   `json:"site_logo"`
 	SiteSubtitle                     string                   `json:"site_subtitle"`
@@ -522,6 +538,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		LoginAgreementDocuments:          settings.LoginAgreementDocuments,
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
+		CaptchaProvider:                  settings.CaptchaProvider,
+		CapAPIEndpoint:                   settings.CapAPIEndpoint,
+		CapSiteKey:                       settings.CapSiteKey,
 		SiteName:                         settings.SiteName,
 		SiteLogo:                         settings.SiteLogo,
 		SiteSubtitle:                     settings.SiteSubtitle,

@@ -78,21 +78,23 @@
           </div>
         </div>
 
-        <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
-          <TurnstileWidget
-            ref="turnstileRef"
-            :site-key="turnstileSiteKey"
-            @verify="onTurnstileVerify"
-            @expire="onTurnstileExpire"
-            @error="onTurnstileError"
+        <div v-if="captchaProvider !== 'none'">
+          <CaptchaWidget
+            ref="captchaRef"
+            :provider="captchaProvider"
+            :turnstile-site-key="turnstileSiteKey"
+            :cap-a-p-i-endpoint="capAPIEndpoint"
+            :cap-site-key="capSiteKey"
+            @verify="onCaptchaVerify"
+            @expire="onCaptchaExpire"
+            @error="onCaptchaError"
           />
         </div>
 
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="authActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="authActionDisabled || (captchaProvider !== 'none' && !captchaToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -210,11 +212,12 @@ import EmailOAuthButtons from '@/components/auth/EmailOAuthButtons.vue'
 import LoginAgreementPrompt from '@/components/auth/LoginAgreementPrompt.vue'
 import TotpLoginModal from '@/components/auth/TotpLoginModal.vue'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CaptchaWidget from '@/components/CaptchaWidget.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import { getPublicSettings, isTotp2FARequired, isWeChatWebOAuthEnabled } from '@/api/auth'
-import type { LoginAgreementDocument, TotpLoginResponse } from '@/types'
+import type { CaptchaProvider, LoginAgreementDocument, TotpLoginResponse } from '@/types'
 import { extractI18nErrorMessage } from '@/utils/apiError'
+import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
 
 const { t } = useI18n()
@@ -234,8 +237,10 @@ const showPassword = ref<boolean>(false)
 const publicSettingsLoaded = ref<boolean>(false)
 
 // Public settings
-const turnstileEnabled = ref<boolean>(false)
+const captchaProvider = ref<CaptchaProvider>('none')
 const turnstileSiteKey = ref<string>('')
+const capAPIEndpoint = ref<string>('')
+const capSiteKey = ref<string>('')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const dingtalkOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
@@ -253,9 +258,8 @@ const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
 const agreementAccepted = ref<boolean>(false)
 const showAgreementModal = ref<boolean>(false)
 
-// Turnstile
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-const turnstileToken = ref<string>('')
+const captchaRef = ref<InstanceType<typeof CaptchaWidget> | null>(null)
+const captchaToken = ref<string>('')
 
 // 2FA state
 const show2FAModal = ref<boolean>(false)
@@ -271,11 +275,11 @@ const formData = reactive({
 const errors = reactive({
   email: '',
   password: '',
-  turnstile: ''
+  captcha: ''
 })
 
 const validationToastMessage = computed(
-  () => errors.email || errors.password || errors.turnstile || ''
+  () => errors.email || errors.password || errors.captcha || ''
 )
 
 const agreementGateActive = computed(
@@ -316,8 +320,10 @@ onMounted(async () => {
 
   try {
     const settings = await getPublicSettings()
-    turnstileEnabled.value = settings.turnstile_enabled
+    captchaProvider.value = resolveCaptchaProvider(settings)
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    capAPIEndpoint.value = settings.cap_api_endpoint || ''
+    capSiteKey.value = settings.cap_site_key || ''
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     dingtalkOAuthEnabled.value = settings.dingtalk_oauth_enabled ?? false
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
@@ -400,21 +406,19 @@ function rejectLoginAgreement(): void {
   appStore.showWarning(t('auth.agreementPrompt.warnDisabledLogin'))
 }
 
-// ==================== Turnstile Handlers ====================
-
-function onTurnstileVerify(token: string): void {
-  turnstileToken.value = token
-  errors.turnstile = ''
+function onCaptchaVerify(token: string): void {
+  captchaToken.value = token
+  errors.captcha = ''
 }
 
-function onTurnstileExpire(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileExpired')
+function onCaptchaExpire(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileExpired')
 }
 
-function onTurnstileError(): void {
-  turnstileToken.value = ''
-  errors.turnstile = t('auth.turnstileFailed')
+function onCaptchaError(): void {
+  captchaToken.value = ''
+  errors.captcha = t('auth.turnstileFailed')
 }
 
 // ==================== Validation ====================
@@ -423,7 +427,7 @@ function validateForm(): boolean {
   // Reset errors
   errors.email = ''
   errors.password = ''
-  errors.turnstile = ''
+  errors.captcha = ''
 
   let isValid = true
 
@@ -453,9 +457,8 @@ function validateForm(): boolean {
     isValid = false
   }
 
-  // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
-    errors.turnstile = t('auth.completeVerification')
+  if (captchaProvider.value !== 'none' && !captchaToken.value) {
+    errors.captcha = t('auth.completeVerification')
     isValid = false
   }
 
@@ -480,7 +483,7 @@ async function handleLogin(): Promise<void> {
     const response = await authStore.login({
       email: formData.email,
       password: formData.password,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      ...captchaPayload(captchaProvider.value, captchaToken.value)
     })
 
     // Check if 2FA is required
@@ -501,10 +504,9 @@ async function handleLogin(): Promise<void> {
     const redirectTo = (router.currentRoute.value.query.redirect as string) || '/dashboard'
     await router.push(redirectTo)
   } catch (error: unknown) {
-    // Reset Turnstile on error
-    if (turnstileRef.value) {
-      turnstileRef.value.reset()
-      turnstileToken.value = ''
+    if (captchaRef.value) {
+      captchaRef.value.reset()
+      captchaToken.value = ''
     }
 
     errorMessage.value = extractI18nErrorMessage(error, t, 'auth.errors', t('auth.loginFailed'))

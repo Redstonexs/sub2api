@@ -74,6 +74,7 @@ type AuthService struct {
 	settingService        *SettingService
 	emailService          *EmailService
 	turnstileService      *TurnstileService
+	capService            *CapService
 	emailQueueService     *EmailQueueService
 	promoService          *PromoService
 	affiliateService      *AffiliateService
@@ -384,9 +385,52 @@ func (s *AuthService) VerifyTurnstileForRegister(ctx context.Context, token, rem
 	return s.VerifyTurnstile(ctx, token, remoteIP)
 }
 
+// VerifyCaptcha verifies the selected provider while accepting the legacy
+// Turnstile field for existing API clients.
+func (s *AuthService) VerifyCaptcha(ctx context.Context, captchaToken, turnstileToken, remoteIP string) error {
+	if s.settingService == nil {
+		if s.captchaRequired() {
+			return ErrCaptchaNotConfigured
+		}
+		return nil
+	}
+
+	switch s.settingService.GetCaptchaProvider(ctx) {
+	case CaptchaProviderCAP:
+		if s.capService == nil {
+			return ErrCapNotConfigured
+		}
+		return s.capService.VerifyToken(ctx, captchaToken)
+	case CaptchaProviderTurnstile:
+		if s.turnstileService == nil || !s.settingService.IsTurnstileEnabled(ctx) || s.settingService.GetTurnstileSecretKey(ctx) == "" {
+			return ErrTurnstileNotConfigured
+		}
+		return s.VerifyTurnstile(ctx, firstNonEmpty(captchaToken, turnstileToken), remoteIP)
+	default:
+		if s.captchaRequired() {
+			return ErrCaptchaNotConfigured
+		}
+		return nil
+	}
+}
+
+// VerifyCaptchaForRegister avoids reusing a one-time token after an email
+// verification code was already issued through the same CAPTCHA-protected flow.
+func (s *AuthService) VerifyCaptchaForRegister(ctx context.Context, captchaToken, turnstileToken, remoteIP, verifyCode string) error {
+	if s.IsEmailVerifyEnabled(ctx) && strings.TrimSpace(verifyCode) != "" {
+		logger.LegacyPrintf("service.auth", "%s", "[Auth] Email verify flow detected, skip duplicate CAPTCHA check on register")
+		return nil
+	}
+	return s.VerifyCaptcha(ctx, captchaToken, turnstileToken, remoteIP)
+}
+
+func (s *AuthService) captchaRequired() bool {
+	return s.cfg != nil && s.cfg.Server.Mode == "release" && s.cfg.Turnstile.Required
+}
+
 // VerifyTurnstile 验证Turnstile token
 func (s *AuthService) VerifyTurnstile(ctx context.Context, token string, remoteIP string) error {
-	required := s.cfg != nil && s.cfg.Server.Mode == "release" && s.cfg.Turnstile.Required
+	required := s.captchaRequired()
 
 	if required {
 		if s.settingService == nil {

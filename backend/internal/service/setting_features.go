@@ -408,6 +408,47 @@ func (s *SettingService) GetTurnstileSecretKey(ctx context.Context) string {
 	return value
 }
 
+// GetCaptchaProvider returns the explicit provider, preserving enabled legacy
+// Turnstile installations that predate the provider setting.
+func (s *SettingService) GetCaptchaProvider(ctx context.Context) CaptchaProvider {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyCaptchaProvider)
+	if err == nil && strings.TrimSpace(value) != "" {
+		provider, valid := ParseCaptchaProvider(value)
+		if valid {
+			return provider
+		}
+		return CaptchaProviderNone
+	}
+	if s.IsTurnstileEnabled(ctx) {
+		return CaptchaProviderTurnstile
+	}
+	return CaptchaProviderNone
+}
+
+func (s *SettingService) GetCapAPIEndpoint(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyCapAPIEndpoint)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func (s *SettingService) GetCapSiteKey(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyCapSiteKey)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func (s *SettingService) GetCapSecretKey(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyCapSecretKey)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
 // IsIdentityPatchEnabled 检查是否启用身份补丁（Claude -> Gemini systemInstruction 注入）
 func (s *SettingService) IsIdentityPatchEnabled(ctx context.Context) bool {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyEnableIdentityPatch)

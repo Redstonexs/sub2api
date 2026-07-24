@@ -1724,35 +1724,41 @@
             </div>
           </div>
 
-          <!-- Cloudflare Turnstile Settings -->
           <div class="card">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                {{ t("admin.settings.turnstile.title") }}
+                {{ t("admin.settings.captcha.title") }}
               </h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ t("admin.settings.turnstile.description") }}
+                {{ t("admin.settings.captcha.description") }}
               </p>
             </div>
             <div class="space-y-5 p-6">
-              <!-- Enable Turnstile -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <label class="font-medium text-gray-900 dark:text-white">{{
-                    t("admin.settings.turnstile.enableTurnstile")
-                  }}</label>
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.turnstile.enableTurnstileHint") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.turnstile_enabled" />
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  for="captcha-provider"
+                >
+                  {{ t("admin.settings.captcha.provider") }}
+                </label>
+                <select
+                  id="captcha-provider"
+                  v-model="form.captcha_provider"
+                  class="input"
+                  @change="onCaptchaProviderChange"
+                >
+                  <option value="none">{{ t("admin.settings.captcha.none") }}</option>
+                  <option value="turnstile">
+                    {{ t("admin.settings.captcha.turnstile") }}
+                  </option>
+                  <option value="cap">{{ t("admin.settings.captcha.cap") }}</option>
+                </select>
               </div>
 
-              <!-- Turnstile Keys - Only show when enabled -->
               <div
-                v-if="form.turnstile_enabled"
+                v-if="form.captcha_provider === 'turnstile'"
                 class="border-t border-gray-100 pt-4 dark:border-dark-700"
               >
                 <div class="grid grid-cols-1 gap-6">
@@ -1799,6 +1805,61 @@
                               "admin.settings.turnstile.secretKeyConfiguredHint",
                             )
                           : t("admin.settings.turnstile.secretKeyHint")
+                      }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-else-if="form.captcha_provider === 'cap'"
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <div class="grid grid-cols-1 gap-6">
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.captcha.capEndpoint") }}
+                    </label>
+                    <input
+                      v-model="form.cap_api_endpoint"
+                      type="url"
+                      class="input font-mono text-sm"
+                      placeholder="https://cap.example.com"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.captcha.capEndpointHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.captcha.capSiteKey") }}
+                    </label>
+                    <input
+                      v-model="form.cap_site_key"
+                      type="text"
+                      class="input font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.captcha.capSecretKey") }}
+                    </label>
+                    <input
+                      v-model="form.cap_secret_key"
+                      type="password"
+                      class="input font-mono text-sm"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{
+                        form.cap_secret_key_configured
+                          ? t("admin.settings.captcha.capSecretKeyConfiguredHint")
+                          : t("admin.settings.captcha.capSecretKeyHint")
                       }}
                     </p>
                   </div>
@@ -8568,6 +8629,7 @@ type SettingsForm = Omit<
   smtp_password: string;
   email_api_key: string;
   turnstile_secret_key: string;
+  cap_secret_key: string;
   linuxdo_connect_client_secret: string;
   dingtalk_connect_client_secret: string;
   wechat_connect_app_secret: string;
@@ -8698,6 +8760,11 @@ const form = reactive<SettingsForm>({
   turnstile_site_key: "",
   turnstile_secret_key: "",
   turnstile_secret_key_configured: false,
+  captcha_provider: "none",
+  cap_api_endpoint: "",
+  cap_site_key: "",
+  cap_secret_key_configured: false,
+  cap_secret_key: "",
   api_key_acl_trust_forwarded_ip: true,
   forwarded_client_ip_headers: [],
   // LinuxDo Connect OAuth 登录
@@ -8852,6 +8919,10 @@ const form = reactive<SettingsForm>({
   // Allow user view error requests
   allow_user_view_error_requests: false,
 });
+
+function onCaptchaProviderChange(): void {
+  form.turnstile_enabled = form.captcha_provider === "turnstile";
+}
 
 type OpenAIAdvancedSchedulerOverrideKey =
   | "openai_advanced_scheduler_lb_top_k"
@@ -9784,6 +9855,13 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.captcha_provider =
+      settings.captcha_provider === "cap" ||
+      settings.captcha_provider === "turnstile"
+        ? settings.captcha_provider
+        : form.turnstile_enabled
+          ? "turnstile"
+          : "none";
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
         defaultClaudeOAuthSystemPromptBlocks;
@@ -9844,6 +9922,7 @@ async function loadSettings() {
     smtpPasswordManuallyEdited.value = false;
     form.email_api_key = "";
     form.turnstile_secret_key = "";
+    form.cap_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";
     form.github_oauth_client_secret = "";
@@ -10220,6 +10299,10 @@ async function saveSettings() {
       turnstile_enabled: form.turnstile_enabled,
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
+      captcha_provider: form.captcha_provider,
+      cap_api_endpoint: form.cap_api_endpoint,
+      cap_site_key: form.cap_site_key,
+      cap_secret_key: form.cap_secret_key || undefined,
       api_key_acl_trust_forwarded_ip: form.api_key_acl_trust_forwarded_ip,
       forwarded_client_ip_headers: form.forwarded_client_ip_headers,
       linuxdo_connect_enabled: form.linuxdo_connect_enabled,

@@ -16,13 +16,16 @@
       :placeholder="t('auth.passwordPlaceholder')"
       :disabled="isSubmitting"
     />
-    <div v-if="emailVerifyEnabled && turnstileEnabled && turnstileSiteKey" class="space-y-2">
-      <TurnstileWidget
-        ref="turnstileRef"
-        :site-key="turnstileSiteKey"
-        @verify="onTurnstileVerify"
-        @expire="onTurnstileExpire"
-        @error="onTurnstileError"
+    <div v-if="emailVerifyEnabled && captchaProvider !== 'none'" class="space-y-2">
+      <CaptchaWidget
+        ref="captchaRef"
+        :provider="captchaProvider"
+        :turnstile-site-key="turnstileSiteKey"
+        :cap-a-p-i-endpoint="capAPIEndpoint"
+        :cap-site-key="capSiteKey"
+        @verify="onCaptchaVerify"
+        @expire="onCaptchaExpire"
+        @error="onCaptchaError"
       />
     </div>
     <div v-if="emailVerifyEnabled" class="flex gap-3">
@@ -40,7 +43,7 @@
         :data-testid="`${testIdPrefix}-create-account-send-code`"
         type="button"
         class="btn btn-secondary shrink-0"
-        :disabled="isSubmitting || isSendingCode || countdown > 0 || !email.trim() || (turnstileEnabled && !turnstileToken)"
+        :disabled="isSubmitting || isSendingCode || countdown > 0 || !email.trim() || (captchaProvider !== 'none' && !captchaToken)"
         @click="handleSendCode"
       >
         {{
@@ -90,9 +93,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CaptchaWidget from '@/components/CaptchaWidget.vue'
 import { getPublicSettings, sendPendingOAuthVerifyCode } from '@/api/auth'
 import { useAppStore } from '@/stores'
+import type { CaptchaProvider } from '@/types'
+import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
 
 export type PendingOAuthCreateAccountPayload = {
   email: string
@@ -126,10 +131,12 @@ const sendCodeSuccess = ref(false)
 const countdown = ref(0)
 const invitationCodeEnabled = ref(false)
 const emailVerifyEnabled = ref(true)
-const turnstileEnabled = ref(false)
+const captchaProvider = ref<CaptchaProvider>('none')
 const turnstileSiteKey = ref('')
-const turnstileToken = ref('')
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const capAPIEndpoint = ref('')
+const capSiteKey = ref('')
+const captchaToken = ref('')
+const captchaRef = ref<InstanceType<typeof CaptchaWidget> | null>(null)
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -187,23 +194,23 @@ function getRequestErrorMessage(error: unknown, fallback: string): string {
   return err.response?.data?.detail || err.response?.data?.message || err.message || fallback
 }
 
-function resetTurnstile() {
-  turnstileToken.value = ''
-  turnstileRef.value?.reset()
+function resetCaptcha() {
+  captchaToken.value = ''
+  captchaRef.value?.reset()
 }
 
-function onTurnstileVerify(token: string) {
-  turnstileToken.value = token
+function onCaptchaVerify(token: string) {
+  captchaToken.value = token
   sendCodeError.value = ''
 }
 
-function onTurnstileExpire() {
-  turnstileToken.value = ''
+function onCaptchaExpire() {
+  captchaToken.value = ''
   sendCodeError.value = t('auth.turnstileExpired')
 }
 
-function onTurnstileError() {
-  turnstileToken.value = ''
+function onCaptchaError() {
+  captchaToken.value = ''
   sendCodeError.value = t('auth.turnstileFailed')
 }
 
@@ -213,7 +220,7 @@ async function handleSendCode() {
     return
   }
 
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if (captchaProvider.value !== 'none' && !captchaToken.value) {
     sendCodeError.value = t('auth.completeVerification')
     return
   }
@@ -225,12 +232,12 @@ async function handleSendCode() {
   try {
     const response = await sendPendingOAuthVerifyCode({
       email: trimmedEmail,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      ...captchaPayload(captchaProvider.value, captchaToken.value)
     })
     sendCodeSuccess.value = true
     startCountdown(response.countdown)
-    if (turnstileEnabled.value) {
-      resetTurnstile()
+    if (captchaProvider.value !== 'none') {
+      resetCaptcha()
     }
   } catch (error: unknown) {
     sendCodeError.value = getRequestErrorMessage(error, t('auth.sendCodeFailed'))
@@ -262,13 +269,17 @@ onMounted(async () => {
     const settings = await getPublicSettings()
     invitationCodeEnabled.value = settings.invitation_code_enabled === true
     emailVerifyEnabled.value = settings.email_verify_enabled !== false
-    turnstileEnabled.value = settings.turnstile_enabled === true
+    captchaProvider.value = resolveCaptchaProvider(settings)
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    capAPIEndpoint.value = settings.cap_api_endpoint || ''
+    capSiteKey.value = settings.cap_site_key || ''
   } catch {
     invitationCodeEnabled.value = false
     emailVerifyEnabled.value = true
-    turnstileEnabled.value = false
+    captchaProvider.value = 'none'
     turnstileSiteKey.value = ''
+    capAPIEndpoint.value = ''
+    capSiteKey.value = ''
   }
 })
 

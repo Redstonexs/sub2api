@@ -7,6 +7,7 @@ import { apiClient } from "../client";
 import type {
   CustomEndpoint,
   CustomMenuItem,
+  CaptchaProvider,
   LoginAgreementDocument,
   NotifyEmailEntry,
 } from "@/types";
@@ -454,10 +455,13 @@ export interface SystemSettings {
   email_provider: string;
   email_api_base_url: string;
   email_api_key_configured: boolean;
-  // Cloudflare Turnstile settings
   turnstile_enabled: boolean;
   turnstile_site_key: string;
   turnstile_secret_key_configured: boolean;
+  captcha_provider: CaptchaProvider;
+  cap_api_endpoint: string;
+  cap_site_key: string;
+  cap_secret_key_configured: boolean;
   api_key_acl_trust_forwarded_ip: boolean;
   forwarded_client_ip_headers: string[];
 
@@ -770,6 +774,10 @@ export interface UpdateSettingsRequest {
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;
+  captcha_provider?: CaptchaProvider;
+  cap_api_endpoint?: string;
+  cap_site_key?: string;
+  cap_secret_key?: string;
   api_key_acl_trust_forwarded_ip?: boolean;
   forwarded_client_ip_headers?: string[];
   linuxdo_connect_enabled?: boolean;

@@ -147,6 +147,20 @@ export default {
         secretKeyHint: '服务端验证密钥（请保密）',
         secretKeyConfiguredHint: '密钥已配置，留空以保留当前值。'
       },
+      captcha: {
+        title: '人机验证',
+        description: '保护登录、注册和验证码发送请求。',
+        provider: '服务商',
+        none: '禁用',
+        turnstile: 'Cloudflare Turnstile',
+        cap: 'CAP',
+        capEndpoint: 'CAP API 地址',
+        capEndpointHint: 'Cap Standalone 实例的基础地址。',
+        capSiteKey: 'CAP 站点密钥',
+        capSecretKey: 'CAP 私密密钥',
+        capSecretKeyHint: '仅供服务端验证使用，请妥善保密。',
+        capSecretKeyConfiguredHint: '密钥已配置，留空以保留当前值。'
+      },
       apiKeyAcl: {
         title: 'API Key IP 访问控制',
         description: '控制 API Key 白/黑名单、操作审计日志与会话 IP/UA 绑定使用哪个客户端 IP 判断',

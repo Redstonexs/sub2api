@@ -453,4 +453,44 @@ describe('EmailVerifyView', () => {
     expect(apiClientPostMock).not.toHaveBeenCalled()
     expect(pushMock).toHaveBeenCalledWith('/dashboard')
   })
+
+  it('sends the stored CAP token when issuing an email verification code', async () => {
+    getPublicSettingsMock.mockResolvedValue({
+      captcha_provider: 'cap',
+      cap_api_endpoint: 'https://cap.example.com',
+      cap_site_key: 'public-site-key',
+      turnstile_enabled: false,
+      turnstile_site_key: '',
+      site_name: 'Sub2API',
+      registration_email_suffix_whitelist: [],
+    })
+    sessionStorage.setItem(
+      'register_data',
+      JSON.stringify({
+        email: 'cap@example.com',
+        password: 'secret-456',
+        captcha_token: 'cap-token',
+      })
+    )
+
+    mount(EmailVerifyView, {
+      global: {
+        stubs: {
+          AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+          CaptchaWidget: true,
+          Icon: true,
+          transition: false,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(sendVerifyCodeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'cap@example.com',
+        captcha_token: 'cap-token',
+      })
+    )
+  })
 })

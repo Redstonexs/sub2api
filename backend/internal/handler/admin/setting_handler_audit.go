@@ -113,6 +113,18 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if req.TurnstileSecretKey != "" {
 		changed = append(changed, "turnstile_secret_key")
 	}
+	if before.CaptchaProvider != after.CaptchaProvider {
+		changed = append(changed, "captcha_provider")
+	}
+	if before.CapAPIEndpoint != after.CapAPIEndpoint {
+		changed = append(changed, "cap_api_endpoint")
+	}
+	if before.CapSiteKey != after.CapSiteKey {
+		changed = append(changed, "cap_site_key")
+	}
+	if req.CapSecretKey != "" {
+		changed = append(changed, "cap_secret_key")
+	}
 	if before.APIKeyACLTrustForwardedIP != after.APIKeyACLTrustForwardedIP {
 		changed = append(changed, "api_key_acl_trust_forwarded_ip")
 	}

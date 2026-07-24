@@ -164,3 +164,24 @@ func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabil
 	require.False(t, settings.WeChatOAuthMPEnabled)
 	require.False(t, settings.WeChatOAuthMobileEnabled)
 }
+
+func TestSettingService_GetPublicSettings_ExposesCAPConfigurationWithoutSecret(t *testing.T) {
+	// Given
+	svc := NewSettingService(&settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyCaptchaProvider: "cap",
+			SettingKeyCapAPIEndpoint:  "https://cap.example.com",
+			SettingKeyCapSiteKey:      "public-site-key",
+			SettingKeyCapSecretKey:    "server-secret",
+		},
+	}, &config.Config{})
+
+	// When
+	settings, err := svc.GetPublicSettings(context.Background())
+
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, CaptchaProviderCAP, settings.CaptchaProvider)
+	require.Equal(t, "https://cap.example.com", settings.CapAPIEndpoint)
+	require.Equal(t, "public-site-key", settings.CapSiteKey)
+}

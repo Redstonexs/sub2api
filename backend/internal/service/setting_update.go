@@ -168,6 +168,21 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if settings.TurnstileSecretKey != "" {
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
+	captchaProvider := CaptchaProviderNone
+	if strings.TrimSpace(string(settings.CaptchaProvider)) != "" {
+		var valid bool
+		captchaProvider, valid = ParseCaptchaProvider(string(settings.CaptchaProvider))
+		if !valid {
+			return nil, infraerrors.BadRequest("INVALID_CAPTCHA_PROVIDER", "captcha provider must be none, turnstile, or cap")
+		}
+	}
+	settings.CaptchaProvider = captchaProvider
+	updates[SettingKeyCaptchaProvider] = string(captchaProvider)
+	updates[SettingKeyCapAPIEndpoint] = strings.TrimSpace(settings.CapAPIEndpoint)
+	updates[SettingKeyCapSiteKey] = strings.TrimSpace(settings.CapSiteKey)
+	if strings.TrimSpace(settings.CapSecretKey) != "" {
+		updates[SettingKeyCapSecretKey] = strings.TrimSpace(settings.CapSecretKey)
+	}
 	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
 	forwardedClientIPHeadersJSON, err := json.Marshal(settings.ForwardedClientIPHeaders)
 	if err != nil {

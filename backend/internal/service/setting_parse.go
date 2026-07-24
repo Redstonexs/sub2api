@@ -168,6 +168,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeySMTPPort:                                  "587",
 		SettingKeySMTPUseTLS:                                "false",
 		SettingKeyEmailProvider:                             string(EmailProviderSMTP),
+		SettingKeyCaptchaProvider:                           string(CaptchaProviderNone),
+		SettingKeyCapAPIEndpoint:                            "",
+		SettingKeyCapSiteKey:                                "",
+		SettingKeyCapSecretKey:                              "",
 		// Model fallback defaults
 		SettingKeyEnableModelFallback:      "false",
 		SettingKeyFallbackModelAnthropic:   "claude-3-5-sonnet-20241022",
@@ -320,6 +324,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
+		CaptchaProvider:                  captchaProviderFromSettings(settings),
+		CapAPIEndpoint:                   strings.TrimSpace(settings[SettingKeyCapAPIEndpoint]),
+		CapSiteKey:                       strings.TrimSpace(settings[SettingKeyCapSiteKey]),
+		CapSecretKeyConfigured:           settings[SettingKeyCapSecretKey] != "",
 		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
 		ForwardedClientIPHeaders:         forwardedClientIPHeaders,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
@@ -390,6 +398,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
 	result.TurnstileSecretKey = settings[SettingKeyTurnstileSecretKey]
+	result.CapSecretKey = settings[SettingKeyCapSecretKey]
 	result.EmailAPIKey = settings[SettingKeyEmailAPIKey]
 
 	// LinuxDo Connect 设置：
