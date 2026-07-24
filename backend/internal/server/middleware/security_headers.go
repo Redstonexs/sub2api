@@ -28,8 +28,10 @@ const (
 	AirwallexDemoStaticDomain = "https://static-demo.airwallex.com"
 	// AirwallexDemoCheckoutDomain 是 Airwallex 沙箱环境收银台元素和 iframe 域名。
 	AirwallexDemoCheckoutDomain = "https://checkout-demo.airwallex.com"
-	// CapWASMUnsafeEval permits Cap's WebAssembly solver without enabling JavaScript eval.
+	// CapWASMUnsafeEval permits Cap's WebAssembly solver.
 	CapWASMUnsafeEval = "'wasm-unsafe-eval'"
+	// CapUnsafeEval permits Cap's instrumentation fingerprinting code (which uses eval/new Function).
+	CapUnsafeEval = "'unsafe-eval'"
 	// CapBlobWorkerSource permits Cap's Blob-backed solver workers.
 	CapBlobWorkerSource = "blob:"
 )
@@ -155,10 +157,13 @@ func enhanceCSPPolicy(policy string) string {
 	return policy
 }
 
-// enhanceCAPCSPPolicy adds the CSP capabilities Cap needs: WASM solver and Blob workers.
+// enhanceCAPCSPPolicy adds the CSP capabilities Cap needs: WASM solver, instrumentation eval, and Blob workers.
 func enhanceCAPCSPPolicy(policy string) string {
 	if !directiveHasValue(policy, "script-src", CapWASMUnsafeEval) {
 		policy = addToDirective(policy, "script-src", CapWASMUnsafeEval)
+	}
+	if !directiveHasValue(policy, "script-src", CapUnsafeEval) {
+		policy = addToDirective(policy, "script-src", CapUnsafeEval)
 	}
 	if !directiveHasValue(policy, "worker-src", CapBlobWorkerSource) {
 		policy = addToDirective(policy, "worker-src", CapBlobWorkerSource)
