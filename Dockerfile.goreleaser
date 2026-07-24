@@ -42,10 +42,11 @@ RUN addgroup -g 1000 sub2api && \
 
 WORKDIR /app
 
+ARG TARGETPLATFORM
 ARG VERSION
 
 # Copy pre-built binary from GoReleaser
-COPY sub2api /app/sub2api
+COPY $TARGETPLATFORM/sub2api /app/sub2api
 RUN test -n "$VERSION" && /app/sub2api -version 2>&1 | grep -F "Sub2API ${VERSION} "
 
 # Create data directory
