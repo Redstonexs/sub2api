@@ -30,14 +30,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Update VERSION file with tag version
-  update-version:
+  validate-release-tag:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Update VERSION file
+      - name: Validate release tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG_NAME=${{ github.event.inputs.tag }}
@@ -50,15 +49,6 @@ jobs:
             echo "Fork releases must use the 1.x.y version line. Upstream v0.1.x tags are ignored."
             exit 1
           fi
-          echo "$VERSION" > backend/cmd/server/VERSION
-          echo "Updated VERSION file to: $VERSION"
-
-      - name: Upload VERSION artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: version-file
-          path: backend/cmd/server/VERSION
-          retention-days: 1
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -94,7 +84,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [update-version, build-frontend]
+    needs: [validate-release-tag, build-frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -102,12 +92,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
-
-      - name: Download VERSION artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: version-file
-          path: backend/cmd/server/
 
       - name: Download frontend artifact
         uses: actions/download-artifact@v8
