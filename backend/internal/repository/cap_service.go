@@ -29,7 +29,7 @@ func NewCapVerifier() service.CapVerifier {
 	return &capVerifier{httpClient: sharedClient}
 }
 
-func (v *capVerifier) VerifyToken(ctx context.Context, apiEndpoint, siteKey, secretKey, token string) (*service.CapVerifyResponse, error) {
+func (v *capVerifier) VerifyToken(ctx context.Context, apiEndpoint, siteKey, secretKey, token string) (result *service.CapVerifyResponse, err error) {
 	endpoint, err := url.Parse(strings.TrimSpace(apiEndpoint))
 	if err != nil {
 		return nil, fmt.Errorf("parse CAP API endpoint: %w", err)
@@ -66,14 +66,19 @@ func (v *capVerifier) VerifyToken(ctx context.Context, apiEndpoint, siteKey, sec
 	if err != nil {
 		return nil, fmt.Errorf("send CAP siteverify request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close CAP siteverify response: %w", closeErr)
+			result = nil
+		}
+	}()
 
-	var result service.CapVerifyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var verification service.CapVerifyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&verification); err != nil {
 		return nil, fmt.Errorf("decode CAP siteverify response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return &service.CapVerifyResponse{Success: false}, nil
 	}
-	return &result, nil
+	return &verification, nil
 }
