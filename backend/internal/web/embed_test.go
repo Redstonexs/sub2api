@@ -231,6 +231,8 @@ func TestFrontendServer_InjectSettings(t *testing.T) {
 		// Should contain the script with nonce placeholder
 		assert.Contains(t, string(result), `<script nonce="__CSP_NONCE_VALUE__">`)
 		assert.Contains(t, string(result), `window.__APP_CONFIG__={"test":"data"};`)
+		assert.Contains(t, string(result), `CAP_SCRIPT_NONCE="__CSP_NONCE_VALUE__"`)
+		assert.Contains(t, string(result), `CAP_CSS_NONCE="__CSP_NONCE_VALUE__"`)
 		assert.Contains(t, string(result), `</script></head>`)
 	})
 
@@ -883,7 +885,7 @@ func TestHTMLCache(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkReplaceNoncePlaceholder(b *testing.B) {
-	html := []byte(`<!DOCTYPE html><html><head><script nonce="__CSP_NONCE_VALUE__">window.__APP_CONFIG__={"test":"data"};</script></head><body></body></html>`)
+	html := []byte(`<!DOCTYPE html><html><head><script nonce="__CSP_NONCE_VALUE__">window.__APP_CONFIG__={"test":"data"};window.CAP_SCRIPT_NONCE="__CSP_NONCE_VALUE__";window.CAP_CSS_NONCE="__CSP_NONCE_VALUE__";</script></head><body></body></html>`)
 	nonce := "abcdefghijklmnop123456=="
 
 	b.ResetTimer()

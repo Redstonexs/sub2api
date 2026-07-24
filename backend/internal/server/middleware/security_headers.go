@@ -30,6 +30,9 @@ const (
 	AirwallexDemoCheckoutDomain = "https://checkout-demo.airwallex.com"
 	// CapWASMUnsafeEval permits Cap's WebAssembly solver without enabling JavaScript eval.
 	CapWASMUnsafeEval = "'wasm-unsafe-eval'"
+	// CapStrictDynamic permits scripts loaded by nonce-bearing scripts (needed for Cap's
+	// dynamically created <script> elements even when CAP_SCRIPT_NONCE is set).
+	CapStrictDynamic = "'strict-dynamic'"
 	// CapBlobWorkerSource permits Cap's Blob-backed solver workers.
 	CapBlobWorkerSource = "blob:"
 )
@@ -155,10 +158,14 @@ func enhanceCSPPolicy(policy string) string {
 	return policy
 }
 
-// enhanceCAPCSPPolicy adds only the CSP capabilities Cap needs for its WASM solver and Blob workers.
+// enhanceCAPCSPPolicy adds the CSP capabilities Cap needs: WASM solver, strict-dynamic
+// for its dynamically created scripts, and Blob workers.
 func enhanceCAPCSPPolicy(policy string) string {
 	if !directiveHasValue(policy, "script-src", CapWASMUnsafeEval) {
 		policy = addToDirective(policy, "script-src", CapWASMUnsafeEval)
+	}
+	if !directiveHasValue(policy, "script-src", CapStrictDynamic) {
+		policy = addToDirective(policy, "script-src", CapStrictDynamic)
 	}
 	if !directiveHasValue(policy, "worker-src", CapBlobWorkerSource) {
 		policy = addToDirective(policy, "worker-src", CapBlobWorkerSource)

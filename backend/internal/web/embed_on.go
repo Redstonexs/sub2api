@@ -204,7 +204,15 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 func (s *FrontendServer) injectSettings(settingsJSON []byte) []byte {
 	// Create the script tag to inject with nonce placeholder
 	// The placeholder will be replaced with actual nonce at request time
-	script := []byte(`<script nonce="` + NonceHTMLPlaceholder + `">window.__APP_CONFIG__=` + string(settingsJSON) + `;</script>`)
+	// Also inject CAP_SCRIPT_NONCE / CAP_CSS_NONCE so the Cap captcha widget can stamp
+	// nonces onto its dynamically created <script> and <style> elements.
+	// The NonceHTMLPlaceholder inside the JS string literal will be replaced with the
+	// real per-request nonce by replaceNoncePlaceholder, just like the nonce= attribute.
+	script := []byte(`<script nonce="` + NonceHTMLPlaceholder + `">` +
+		`window.__APP_CONFIG__=` + string(settingsJSON) + `;` +
+		`window.CAP_SCRIPT_NONCE="` + NonceHTMLPlaceholder + `";` +
+		`window.CAP_CSS_NONCE="` + NonceHTMLPlaceholder + `";` +
+		`</script>`)
 
 	// Inject before </head>
 	headClose := []byte("</head>")

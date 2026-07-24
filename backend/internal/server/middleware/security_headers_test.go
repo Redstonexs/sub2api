@@ -303,6 +303,7 @@ func TestSecurityHeaders_AddsCAPCapabilities_when_CAPEnabled(t *testing.T) {
 			// Then
 			csp := w.Header().Get("Content-Security-Policy")
 			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", "'wasm-unsafe-eval'"))
+			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", "'strict-dynamic'"))
 			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "worker-src", "blob:"))
 			assert.NotContains(t, csp, "'unsafe-eval'")
 		})
