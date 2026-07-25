@@ -119,6 +119,8 @@ backend/.installed
 tests
 !deploy/tests/
 !deploy/tests/**
+!tools/tests/
+!tools/tests/**
 CLAUDE.md
 .claude
 scripts

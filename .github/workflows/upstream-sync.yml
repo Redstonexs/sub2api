@@ -1,0 +1,374 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: '17 6,12,18,0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_tag:
+        description: 'Force sync to a specific upstream tag (overrides release poll)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-sync-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Bot identity mirrors release.yml; --local keeps it out of global config.
+      - name: Configure git identity
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve target upstream tag
+        id: tag
+        env:
+          FORCE_TAG: ${{ inputs.force_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if [ -n "$FORCE_TAG" ]; then
+            TAG="$FORCE_TAG"
+          else
+            TAG="$(gh api repos/Wei-Shaw/sub2api/releases/latest --jq '.tag_name')"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not resolve upstream tag (force_tag empty and release poll returned nothing)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Read stored tag and guard against no-op / backwards moves
+        id: stored
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -e
+          STORED=""
+          if [ -f .github/upstream-sync-tag ]; then
+            STORED="$(tr -d '[:space:]' < .github/upstream-sync-tag)"
+          fi
+          echo "stored=$STORED" >> "$GITHUB_OUTPUT"
+
+          # No-op guard: STATE_FILE already records the target tag.
+          if [ "$STORED" = "$TARGET_TAG" ]; then
+            echo "Stored tag equals target ($TARGET_TAG); nothing to do."
+            echo "noop=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "noop=false" >> "$GITHUB_OUTPUT"
+
+          # Tag-moved-backwards guard (only when stored is non-empty and differs).
+          # ISO 8601 timestamps compare lexicographically. If the stored tag's
+          # release 404s, STORED_PUBLISHED is empty and we proceed.
+          if [ -n "$STORED" ]; then
+            TARGET_PUBLISHED="$(gh api "repos/Wei-Shaw/sub2api/releases/tags/$TARGET_TAG" --jq '.published_at' 2>/dev/null || true)"
+            STORED_PUBLISHED="$(gh api "repos/Wei-Shaw/sub2api/releases/tags/$STORED" --jq '.published_at' 2>/dev/null || true)"
+            if [ -n "$STORED_PUBLISHED" ] && [ -n "$TARGET_PUBLISHED" ] && [[ "$TARGET_PUBLISHED" < "$STORED_PUBLISHED" ]]; then
+              echo "Target $TARGET_TAG (published $TARGET_PUBLISHED) is OLDER than stored $STORED (published $STORED_PUBLISHED); nothing to do."
+              echo "noop=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+      # Engine contract (tools/upstream_sync.sh, frozen): exit 0 = success or
+      # no-op; exit 10 = necessary conflict (paths on stdout, merge aborted,
+      # tree clean); exit 1 = error. On success it creates a merge commit plus
+      # a follow-up `chore: record last-synced upstream tag <tag> [skip ci]`
+      # commit updating STATE_FILE. It never pushes. We mask exit 10 below so
+      # the job can branch into conflict notification rather than hard-failing.
+      - name: Run upstream sync engine
+        id: engine
+        if: steps.stored.outputs.noop != 'true'
+        env:
+          UPSTREAM_URL: https://github.com/Wei-Shaw/sub2api.git
+          UPSTREAM_TAG: ${{ steps.tag.outputs.tag }}
+          BASE_BRANCH: main
+          STATE_FILE: .github/upstream-sync-tag
+        run: |
+          set +e
+          HEAD_BEFORE="$(git rev-parse HEAD)"
+          STDOUT_FILE="$(mktemp)"
+          STDERR_FILE="$(mktemp)"
+          bash tools/upstream_sync.sh >"$STDOUT_FILE" 2>"$STDERR_FILE"
+          CODE=$?
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          # Conflict classification: exit 10 => necessary conflict outside the
+          # fork-preservation whitelist; conflict paths are on stdout.
+          if [ "$CODE" -eq 10 ]; then
+            {
+              echo "conflicts<<UPSTREAM_SYNC_END"
+              cat "$STDOUT_FILE"
+              echo "UPSTREAM_SYNC_END"
+            } >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "stderr<<UPSTREAM_SYNC_END"
+            cat "$STDERR_FILE"
+            echo "UPSTREAM_SYNC_END"
+          } >> "$GITHUB_OUTPUT"
+          HEAD_AFTER="$(git rev-parse HEAD)"
+          if [ "$HEAD_BEFORE" != "$HEAD_AFTER" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f "$STDOUT_FILE" "$STDERR_FILE"
+          # Mask exit 10 as success so the job can branch on it downstream.
+          if [ "$CODE" -ne 0 ] && [ "$CODE" -ne 10 ]; then
+            exit 1
+          fi
+
+      # ── Verification: byte-for-byte parity with backend-ci.yml setup blocks. ──
+      # Gate: only when the engine merged something (skip on no-op / conflict).
+      - if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Go version
+        id: verify_go
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        run: |
+          go version | grep -q 'go1.26.5'
+
+      - name: Unit tests
+        id: unit_tests
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        working-directory: backend
+        run: make test-unit
+
+      - name: Integration tests
+        id: integration_tests
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        working-directory: backend
+        run: make test-integration
+
+      - name: Setup pnpm
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        id: install_frontend
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend typecheck and critical vitest
+        id: frontend_tests
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        run: make test-frontend
+
+      - name: Build
+        id: build
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        run: make build
+
+      - name: Push to main (with retry and PR fallback)
+        id: push
+        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ steps.tag.outputs.tag }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set +e
+          push_attempt() {
+            # git pull --rebase already fetches; a separate git fetch is redundant.
+            git pull --rebase origin main || { git rebase --abort 2>/dev/null || true; return 1; }
+            git push origin HEAD:main
+            return $?
+          }
+          if push_attempt; then
+            echo "result=pushed" >> "$GITHUB_OUTPUT"
+          else
+            # Race guard: retry once in case a concurrent commit landed mid-push.
+            if push_attempt; then
+              echo "result=pushed" >> "$GITHUB_OUTPUT"
+            else
+              # PR fallback: branch protection likely blocks the direct push.
+              git rebase --abort 2>/dev/null || true
+              BRANCH="upstream-sync/${TARGET_TAG}-${RUN_ID}"
+              git checkout -b "$BRANCH"
+              gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
+              git push origin "$BRANCH"
+              BODY_FILE="$(mktemp)"
+              printf '%s\n' \
+                "Automated upstream sync for tag ${TARGET_TAG}." \
+                "" \
+                "Direct push to main was rejected (likely branch protection). This PR carries the merged upstream release plus the state-file update." \
+                "" \
+                "Verification passed: Setup Go, Verify Go version, Unit tests, Integration tests, Setup pnpm, Setup Node.js, Install frontend dependencies, Frontend typecheck and critical vitest, Build." \
+                "" \
+                "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+                > "$BODY_FILE"
+              if gh pr create --base main --head "$BRANCH" \
+                --title "Upstream sync: ${TARGET_TAG}" \
+                --body-file "$BODY_FILE" \
+                --label upstream-sync; then
+                echo "result=pr" >> "$GITHUB_OUTPUT"
+                echo "pr_branch=$BRANCH" >> "$GITHUB_OUTPUT"
+              else
+                echo "result=failed" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+            fi
+          fi
+
+      - name: Notify on necessary conflict
+        id: notify_conflict
+        if: steps.engine.outputs.exit_code == '10'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ steps.tag.outputs.tag }}
+          CONFLICTS: ${{ steps.engine.outputs.conflicts }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+          BODY_FILE="$(mktemp)"
+          printf '%s\n' \
+            "Upstream sync of tag ${TARGET_TAG} is blocked by necessary conflicts outside the fork-preservation whitelist." \
+            "" \
+            "Conflicted paths (resolve manually):" \
+            "${CONFLICTS}" \
+            "" \
+            "Manual-resolution runbook:" \
+            "1. git fetch upstream --tags" \
+            "2. git merge --no-ff ${TARGET_TAG}" \
+            "3. Resolve the non-whitelist conflicts listed above (keep fork behavior)." \
+            "4. Run verification:" \
+            "   make -C backend test-unit" \
+            "   make -C backend test-integration" \
+            "   make test-frontend" \
+            "   make build" \
+            "5. Push to main." \
+            "6. Update .github/upstream-sync-tag to ${TARGET_TAG}." \
+            "7. Close this issue." \
+            "" \
+            "Workflow run: ${RUN_URL}" \
+            > "$BODY_FILE"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
+            echo "issue_number=$EXISTING" >> "$GITHUB_OUTPUT"
+            echo "action=commented" >> "$GITHUB_OUTPUT"
+          else
+            ISSUE_URL="$(gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Upstream sync blocked: necessary conflicts in ${TARGET_TAG}" \
+              --body-file "$BODY_FILE" \
+              --label upstream-sync)"
+            ISSUE_NUM="$(printf '%s' "$ISSUE_URL" | grep -oE '[0-9]+$')"
+            echo "issue_number=${ISSUE_NUM}" >> "$GITHUB_OUTPUT"
+            echo "action=created" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Notify on verification failure
+        if: failure() && steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true' && steps.push.outcome != 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ steps.tag.outputs.tag }}
+          VERIFY_GO: ${{ steps.verify_go.conclusion }}
+          UNIT_TESTS: ${{ steps.unit_tests.conclusion }}
+          INTEGRATION_TESTS: ${{ steps.integration_tests.conclusion }}
+          INSTALL_FRONTEND: ${{ steps.install_frontend.conclusion }}
+          FRONTEND_TESTS: ${{ steps.frontend_tests.conclusion }}
+          BUILD_CONC: ${{ steps.build.conclusion }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          FAILED=""
+          [ "$VERIFY_GO" = "failure" ] && FAILED="${FAILED} verify_go"
+          [ "$UNIT_TESTS" = "failure" ] && FAILED="${FAILED} unit_tests"
+          [ "$INTEGRATION_TESTS" = "failure" ] && FAILED="${FAILED} integration_tests"
+          [ "$INSTALL_FRONTEND" = "failure" ] && FAILED="${FAILED} install_frontend"
+          [ "$FRONTEND_TESTS" = "failure" ] && FAILED="${FAILED} frontend_tests"
+          [ "$BUILD_CONC" = "failure" ] && FAILED="${FAILED} build"
+          if [ -z "$FAILED" ]; then
+            FAILED=" (setup/infrastructure step - see run logs)"
+          fi
+          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+          BODY_FILE="$(mktemp)"
+          printf '%s\n' \
+            "Upstream sync of tag ${TARGET_TAG} failed verification. No changes were pushed." \
+            "" \
+            "Failing step(s):${FAILED}" \
+            "" \
+            "Re-run verification locally or inspect the failing step in the run." \
+            "" \
+            "Workflow run: ${RUN_URL}" \
+            > "$BODY_FILE"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Upstream sync failed verification: ${TARGET_TAG}" \
+              --body-file "$BODY_FILE" \
+              --label upstream-sync
+          fi
+          exit 0
+
+      # Make the run visibly red on the necessary-conflict path.
+      - name: Fail run on necessary conflict
+        if: steps.engine.outputs.exit_code == '10'
+        run: |
+          echo "Necessary conflict detected (engine exit 10); failing the run for visibility."
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          TARGET_TAG: ${{ steps.tag.outputs.tag }}
+          STORED_TAG: ${{ steps.stored.outputs.stored }}
+          NOOP: ${{ steps.stored.outputs.noop }}
+          EXIT_CODE: ${{ steps.engine.outputs.exit_code }}
+          CHANGED: ${{ steps.engine.outputs.changed }}
+          PUSH_RESULT: ${{ steps.push.outputs.result }}
+          PR_BRANCH: ${{ steps.push.outputs.pr_branch }}
+          CONFLICT_ISSUE: ${{ steps.notify_conflict.outputs.issue_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "## Upstream Sync"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Target tag | ${TARGET_TAG:-unknown} |"
+            echo "| Stored tag | ${STORED_TAG:-<none>} |"
+            echo "| No-op guard | ${NOOP:-false} |"
+            echo "| Engine exit | ${EXIT_CODE:-skipped} |"
+            echo "| HEAD changed | ${CHANGED:-skipped} |"
+            echo "| Push result | ${PUSH_RESULT:-skipped} |"
+            if [ -n "$PR_BRANCH" ]; then echo "| PR branch | ${PR_BRANCH} |"; fi
+            if [ -n "$CONFLICT_ISSUE" ]; then echo "| Tracking issue | #${CONFLICT_ISSUE} |"; fi
+            echo "| Run | ${RUN_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
