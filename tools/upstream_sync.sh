@@ -11,6 +11,9 @@
 # UPSTREAM_URL may be an https URL or a plain filesystem path (the offline
 # test harness uses local fixture repos). This script never pushes.
 #
+# Tag hygiene: the upstream tag is fetched into refs/upstream-sync/<tag> (never
+# refs/tags) so upstream releases cannot pollute the fork's own version line.
+#
 # Requires: bash, git. Run from anywhere inside the fork working tree.
 
 set -u
@@ -22,6 +25,7 @@ UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/Wei-Shaw/sub2api.git}"
 UPSTREAM_TAG="${UPSTREAM_TAG:-}"
 BASE_BRANCH="${BASE_BRANCH:-main}"
 STATE_FILE="${STATE_FILE:-.github/upstream-sync-tag}"
+SYNC_REF=""
 
 # Fork-preservation whitelist — source of truth: AGENTS.md "FORK-SPECIFIC PRESERVATION". Conflicts limited to these files are "invalid conflicts" and auto-resolve to OURS; anything else is a necessary conflict -> abort + exit 10.
 WHITELIST=(
@@ -126,26 +130,31 @@ noop_check() {
 }
 
 fetch_tag() {
+  # Private namespace, NOT refs/tags: keeps upstream release tags out of the
+  # fork's tag space even when this engine runs in a developer's own clone.
+  SYNC_REF="refs/upstream-sync/$UPSTREAM_TAG"
   log "fetching tag $UPSTREAM_TAG from $UPSTREAM_URL"
-  if ! git fetch --no-tags "$UPSTREAM_URL" "refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG" >&2; then
-    log "refspec fetch failed; falling back to plain tag fetch"
-    if ! git fetch "$UPSTREAM_URL" "$UPSTREAM_TAG" >&2; then
-      err "failed to fetch tag $UPSTREAM_TAG from $UPSTREAM_URL"
-      exit 1
-    fi
+  if ! git fetch --no-tags "$UPSTREAM_URL" "refs/tags/$UPSTREAM_TAG:$SYNC_REF" >&2; then
+    err "failed to fetch tag $UPSTREAM_TAG from $UPSTREAM_URL"
+    exit 1
   fi
 
   local tag_commit
-  if ! tag_commit="$(git rev-parse --verify "${UPSTREAM_TAG}^{commit}" 2>/dev/null)"; then
-    err "cannot resolve ${UPSTREAM_TAG}^{commit} after fetch"
+  if ! tag_commit="$(git rev-parse --verify "$SYNC_REF^{commit}" 2>/dev/null)"; then
+    err "cannot resolve $SYNC_REF^{commit} after fetch"
     exit 1
   fi
   log "resolved $UPSTREAM_TAG -> $tag_commit"
 }
 
+cleanup_sync_ref() {
+  git update-ref -d "$SYNC_REF" 2>/dev/null || true
+}
+
 merge_tag() {
-  if git merge --no-ff --no-edit "$UPSTREAM_TAG" >&2; then
+  if git merge --no-ff -m "Merge upstream tag $UPSTREAM_TAG" "$SYNC_REF" >&2; then
     log "clean merge of $UPSTREAM_TAG"
+    cleanup_sync_ref
     return
   fi
 
@@ -159,6 +168,7 @@ merge_tag() {
   if ((${#conflicts[@]} == 0)); then
     err "merge failed without unmerged paths; attempting abort"
     git merge --abort >&2 2>&1 || true
+    cleanup_sync_ref
     exit 1
   fi
 
@@ -180,6 +190,7 @@ merge_tag() {
 
   if ((${#necessary[@]} > 0)); then
     git merge --abort >&2 2>&1
+    cleanup_sync_ref
     log "necessary conflict(s) outside the whitelist; merge aborted"
     printf '%s\n' "${necessary[@]}"
     exit 10
@@ -189,6 +200,7 @@ merge_tag() {
     err "failed to conclude the merge commit"
     exit 1
   fi
+  cleanup_sync_ref
   log "merge conflicts auto-resolved (whitelist); merge committed"
 }
 

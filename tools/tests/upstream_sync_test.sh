@@ -171,6 +171,15 @@ assert_git_clean() {
   fi
 }
 
+# Tag-hygiene contract: upstream release tags must never enter the fork's
+# refs/tags (they would corrupt git describe-based fork version resolution).
+assert_ref_absent() {
+  local repo="$1" ref="$2" label="$3"
+  if git -C "$repo" show-ref --verify --quiet "$ref"; then
+    record_failure "$label: ref '$ref' should not exist"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Fixture helpers
 # ---------------------------------------------------------------------------
@@ -308,6 +317,8 @@ func pickAccount() string {
 func pickAccount() string {
   return "upstream-v1.1.0"
 }' "S1 upstream change present"
+  assert_ref_absent "$fork" "refs/tags/v1.1.0" "S1 upstream tag not leaked into refs/tags"
+  assert_ref_absent "$fork" "refs/upstream-sync/v1.1.0" "S1 temp sync ref cleaned"
 
   end_scenario "S1 clean merge of non-whitelist upstream change"
 }
@@ -382,6 +393,8 @@ func pickAccount() string {
 func pickAccount() string {
   return "fork-v1.1.0"
 }' "S3 fork content preserved by abort"
+  assert_ref_absent "$fork" "refs/tags/v1.1.0" "S3 upstream tag not leaked into refs/tags"
+  assert_ref_absent "$fork" "refs/upstream-sync/v1.1.0" "S3 temp sync ref cleaned after abort"
 
   end_scenario "S3 necessary conflict on non-whitelist file aborts merge"
 }
