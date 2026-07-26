@@ -88,6 +88,8 @@
 
     <!-- Hero -->
     <main data-testid="home-hero" class="relative z-10 mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8 lg:pt-20">
+      <!-- Aurora ambient background -->
+      <div class="aurora" aria-hidden="true"></div>
       <div class="grid gap-12 lg:grid-cols-2 lg:gap-16">
         <!-- Left Column -->
         <div class="text-center lg:text-left">
@@ -97,7 +99,7 @@
           </p>
 
           <!-- Title -->
-          <h1 class="mt-4 font-serif text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl lg:text-6xl xl:text-7xl fade-slide-up-2">
+          <h1 class="home-title mt-4 font-serif text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl lg:text-6xl xl:text-7xl fade-slide-up-2">
             {{ t('homeV2.title') }}
           </h1>
 
@@ -174,14 +176,20 @@
               <!-- Key Card (Left) -->
               <rect class="nc" x="20" y="170" width="120" height="60" rx="12" />
               <text x="80" y="198" text-anchor="middle" class="svg-label">API KEY</text>
-              <text x="80" y="216" text-anchor="middle" class="svg-label svg-label-value">{{ t('homeV2.diagramLabelKey') }}</text>
+              <text x="80" y="216" text-anchor="middle" class="svg-label svg-label-value svg-label-cjk">{{ t('homeV2.diagramLabelKey') }}</text>
 
               <!-- Gateway Hexagon (Center) -->
               <polygon class="gw" points="280,155 320,178 320,222 280,245 240,222 240,178" />
-              <text x="280" y="204" text-anchor="middle" class="svg-label svg-label-gw">{{ t('homeV2.diagramLabelGateway') }}</text>
+              <text x="280" y="204" text-anchor="middle" class="svg-label svg-label-gw svg-label-cjk">{{ t('homeV2.diagramLabelGateway') }}</text>
 
               <!-- Halo Ring -->
               <polygon class="d-halo" points="280,145 330,173 330,227 280,255 230,227 230,173" />
+
+              <!-- Gateway Rotating Ring + Orbit Dot -->
+              <polygon class="gw-ring" points="280,132 342,167 342,233 280,268 218,233 218,167" />
+              <g class="gw-orbit">
+                <circle cx="280" cy="132" r="3" fill="#3EB4AB" opacity="0.8" />
+              </g>
 
               <!-- Providers Label -->
               <text x="490" y="30" text-anchor="middle" class="svg-label svg-label-providers">{{ t('homeV2.diagramLabelProviders').toUpperCase() }}</text>
@@ -211,7 +219,7 @@
               <!-- More -->
               <rect class="nc" x="430" y="295" width="120" height="40" rx="10" />
               <text x="455" y="320" class="svg-mark svg-mark-gray">+</text>
-              <text x="475" y="314" class="svg-label">{{ t('homeV2.providerMore') }}</text>
+              <text x="475" y="314" class="svg-label svg-label-cjk">{{ t('homeV2.providerMore') }}</text>
               <rect class="nc-badge" x="500" y="318" width="40" height="13" rx="4" />
               <text x="520" y="328" text-anchor="middle" class="svg-label svg-label-soon">{{ t('homeV2.providerSoon') }}</text>
             </svg>
@@ -232,11 +240,11 @@
                 <!-- Key chip -->
                 <rect class="nc" x="8" y="26" width="96" height="36" rx="10" />
                 <text x="56" y="41" text-anchor="middle" class="svg-label svg-label-sm">API KEY</text>
-                <text x="56" y="54" text-anchor="middle" class="svg-label svg-label-value svg-label-sm">{{ t('homeV2.diagramLabelKey') }}</text>
+                <text x="56" y="54" text-anchor="middle" class="svg-label svg-label-value svg-label-sm svg-label-cjk">{{ t('homeV2.diagramLabelKey') }}</text>
 
                 <!-- Gateway hexagon -->
                 <polygon class="gw" points="170,22 189,33 189,55 170,66 151,55 151,33" />
-                <text x="170" y="48" text-anchor="middle" class="svg-label svg-label-gw svg-label-sm">{{ t('homeV2.diagramLabelGateway') }}</text>
+                <text x="170" y="48" text-anchor="middle" class="svg-label svg-label-gw svg-label-sm svg-label-cjk">{{ t('homeV2.diagramLabelGateway') }}</text>
 
                 <!-- Provider mini chips -->
                 <rect class="nc" x="240" y="12" width="92" height="20" rx="6" />
@@ -249,7 +257,7 @@
 
                 <rect class="nc" x="240" y="56" width="92" height="20" rx="6" />
                 <text x="252" y="70" class="svg-mark svg-mark-gray svg-mark-sm">+</text>
-                <text x="264" y="70" class="svg-label svg-label-sm">{{ t('homeV2.providerMore') }}</text>
+                <text x="264" y="70" class="svg-label svg-label-sm svg-label-cjk">{{ t('homeV2.providerMore') }}</text>
               </svg>
             </div>
 
@@ -266,7 +274,7 @@
     <section class="mx-auto mt-16 max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         <!-- Gateway (spans 2 cols on lg) -->
-        <div class="group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700 lg:col-span-2">
+        <div class="fade-slide-up-5 group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700 lg:col-span-2">
           <div class="flex items-start gap-4">
             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-dark-800 dark:text-blue-400">
               <Icon name="server" size="md" />
@@ -279,7 +287,7 @@
         </div>
 
         <!-- Scheduling -->
-        <div class="group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700">
+        <div class="fade-slide-up-6 group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700">
           <div class="flex items-start gap-4">
             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-dark-800 dark:text-blue-400">
               <Icon name="cpu" size="md" />
@@ -292,7 +300,7 @@
         </div>
 
         <!-- Billing -->
-        <div class="group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700">
+        <div class="fade-slide-up-7 group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700">
           <div class="flex items-start gap-4">
             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-dark-800 dark:text-blue-400">
               <Icon name="chart" size="md" />
@@ -305,7 +313,7 @@
         </div>
 
         <!-- Sticky Sessions -->
-        <div class="group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700 md:col-span-2 lg:col-span-1">
+        <div class="fade-slide-up-8 group rounded-2xl border border-blue-100/60 bg-white/70 p-6 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-dark-800/60 dark:bg-dark-900/60 dark:hover:border-blue-700 md:col-span-2 lg:col-span-1">
           <div class="flex items-start gap-4">
             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-dark-800 dark:text-blue-400">
               <Icon name="shield" size="md" />
@@ -564,29 +572,36 @@ onMounted(() => {
   stroke: #5b8bb5;
 }
 
+/* SVG Diagram — typography */
+
 .svg-diagram .svg-label {
-  font-family: ui-monospace, monospace;
-  fill: #4b5563;
-  font-size: 10px;
+  font-family: 'SFMono-Regular', ui-monospace, 'Menlo', 'Consolas', monospace;
+  fill: #475569;
+  font-size: 10.5px;
 }
 
 :deep(.dark) .svg-diagram .svg-label {
-  fill: #9ca3af;
+  fill: #cbd5e1;
+}
+
+/* CJK labels: proper sans-CJK stack, works fine for Latin too */
+.svg-diagram .svg-label-cjk {
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', ui-sans-serif, system-ui, sans-serif;
 }
 
 .svg-diagram .svg-label-value {
-  fill: #1f2937;
-  font-size: 11px;
-  font-weight: 600;
+  fill: #1e293b;
+  font-size: 11.5px;
+  font-weight: 700;
 }
 
 :deep(.dark) .svg-diagram .svg-label-value {
-  fill: #e5e7eb;
+  fill: #e2e8f0;
 }
 
 .svg-diagram .svg-label-gw {
   fill: #2563eb;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -595,8 +610,8 @@ onMounted(() => {
 }
 
 .svg-diagram .svg-label-providers {
-  font-size: 9px;
-  letter-spacing: 2px;
+  font-size: 9.5px;
+  letter-spacing: 2.5px;
   fill: #9ca3af;
 }
 
@@ -614,7 +629,7 @@ onMounted(() => {
 }
 
 .svg-diagram .svg-mark {
-  font-family: ui-monospace, monospace;
+  font-family: 'SFMono-Regular', ui-monospace, 'Menlo', 'Consolas', monospace;
   font-size: 13px;
   font-weight: 700;
 }
@@ -658,10 +673,116 @@ onMounted(() => {
   transform-origin: 280px 200px;
 }
 
+/* Gateway rotating ring */
+.svg-diagram .gw-ring {
+  stroke: #3EB4AB;
+  stroke-width: 1;
+  fill: none;
+  opacity: 0.3;
+  stroke-dasharray: 6 4;
+  animation: gw-rotate 18s linear infinite;
+  transform-origin: 280px 200px;
+}
+
+:deep(.dark) .svg-diagram .gw-ring {
+  stroke: #5ec4c0;
+  opacity: 0.25;
+}
+
+.svg-diagram .gw-orbit {
+  animation: gw-rotate 18s linear infinite;
+  transform-origin: 280px 200px;
+}
+
+@keyframes gw-rotate {
+  to { transform: rotate(360deg); }
+}
+
 .d-blink {
   animation: status-blink 2s ease-in-out infinite;
 }
 
+/* Hero title shimmer — uses ::after highlight translated across text */
+.home-title {
+  position: relative;
+  display: inline-block;
+}
+
+.home-title::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -20%;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
+  animation: title-shimmer 7s ease-in-out infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+
+:deep(.dark) .home-title::after {
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+}
+
+@keyframes title-shimmer {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(400%); }
+}
+
+/* Aurora ambient drift */
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.aurora::before,
+.aurora::after {
+  content: '';
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.aurora::before {
+  top: -15%;
+  left: -10%;
+  background: radial-gradient(circle, rgba(62, 180, 171, 0.12) 0%, transparent 70%);
+  animation: aurora-drift-1 24s ease-in-out infinite alternate;
+}
+
+.aurora::after {
+  bottom: -20%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(55, 111, 192, 0.10) 0%, transparent 70%);
+  animation: aurora-drift-2 26s ease-in-out infinite alternate;
+  animation-delay: -8s;
+}
+
+:deep(.dark) .aurora::before {
+  background: radial-gradient(circle, rgba(62, 180, 171, 0.08) 0%, transparent 70%);
+}
+
+:deep(.dark) .aurora::after {
+  background: radial-gradient(circle, rgba(55, 111, 192, 0.06) 0%, transparent 70%);
+}
+
+@keyframes aurora-drift-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(8vw, 6vh) scale(1.08); }
+}
+
+@keyframes aurora-drift-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-6vw, -4vh) scale(1.05); }
+}
+
+/* Hero hero entrance stagger */
 .fade-slide-up-1 {
   animation: fade-slide-up 0.6s ease-out both;
   animation-delay: 0.1s;
@@ -682,14 +803,45 @@ onMounted(() => {
   animation-delay: 0.4s;
 }
 
+/* Feature-card staggered reveal (one-shot, zero ongoing cost) */
+.fade-slide-up-5 {
+  animation: fade-slide-up 0.6s ease-out both;
+  animation-delay: 0.5s;
+}
+
+.fade-slide-up-6 {
+  animation: fade-slide-up 0.6s ease-out both;
+  animation-delay: 0.6s;
+}
+
+.fade-slide-up-7 {
+  animation: fade-slide-up 0.6s ease-out both;
+  animation-delay: 0.7s;
+}
+
+.fade-slide-up-8 {
+  animation: fade-slide-up 0.6s ease-out both;
+  animation-delay: 0.8s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .svg-diagram .d-halo,
   .svg-diagram .pp,
+  .svg-diagram .gw-ring,
+  .svg-diagram .gw-orbit,
   .d-blink,
   .fade-slide-up-1,
   .fade-slide-up-2,
   .fade-slide-up-3,
-  .fade-slide-up-4 {
+  .fade-slide-up-4,
+  .fade-slide-up-5,
+  .fade-slide-up-6,
+  .fade-slide-up-7,
+  .fade-slide-up-8,
+  .aurora,
+  .aurora::before,
+  .aurora::after,
+  .home-title::after {
     animation: none !important;
     opacity: 1;
     transform: none;

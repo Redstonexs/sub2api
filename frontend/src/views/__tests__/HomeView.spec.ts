@@ -72,13 +72,15 @@ async function mountHomeViewWithRouter() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/home', component: { template: '<div>Home</div>' } },
+      { path: '/', component: { template: '<div>Home</div>' } },
+      { path: '/home', redirect: '/' },
       { path: '/login', component: { template: '<div>Login</div>' } },
       { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
       { path: '/admin/dashboard', component: { template: '<div>Admin</div>' } },
     ],
   })
   await router.push('/home')
+  expect(router.currentRoute.value.path).toBe('/')
   await router.isReady()
 
   const wrapper = mount(HomeView, {
