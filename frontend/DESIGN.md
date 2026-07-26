@@ -107,6 +107,31 @@ surface utilities cannot reintroduce the upstream palette.
 - Focus-visible state remains visible; reduced-motion media rules disable
   non-essential dialog transitions.
 
+### Public Homepage Motion Story
+
+The public homepage is the one intentionally cinematic surface in the product.
+Its motion explains an operational story rather than decorating the page:
+request intake, gateway routing, fallback selection, and a usage receipt. The
+story reinforces the primary action without moving controls away from their
+resting position or hiding the core message.
+
+- The default homepage may use GSAP only inside its `home-motion-story` root.
+  Admin-configured `home_content` is a hard bypass and never initializes the
+  story.
+- On desktop (1024px and above), one short ScrollTrigger-pinned relay sequence
+  may scrub through the request lifecycle. It must leave a clear exit into the
+  conversion and setup content.
+- On smaller screens, preserve the same sequence as readable stacked panels;
+  do not pin, horizontally trap, or require scroll precision.
+- For `prefers-reduced-motion: reduce`, render the final, legible state with no
+  entrance timeline, scrub, pin, orbit, or looping signal. Content must remain
+  visible if JavaScript does not run.
+- GSAP instances are scoped with `gsap.context()` and responsive conditions use
+  `gsap.matchMedia()`. Component teardown calls `context.revert()` so route
+  changes restore styles and destroy ScrollTriggers.
+- Timelines animate only transforms and opacity. The route diagram, CTA, text,
+  keyboard focus order, and CJK copy remain stable throughout playback.
+
 ## 7. Depth & Surface
 
 The system uses a mixed strategy: warm tonal shifts and 1px warm borders define

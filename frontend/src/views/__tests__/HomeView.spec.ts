@@ -9,8 +9,21 @@ import type { PublicSettings, User } from '@/types'
 const fetchPublicSettings = vi.fn()
 const checkAuth = vi.fn()
 
-const appStoreState = {
-  cachedPublicSettings: null as PublicSettings | null,
+type HomeContentSettings = Pick<PublicSettings, 'home_content'>
+
+const appStoreState: {
+  cachedPublicSettings: HomeContentSettings | null
+  docUrl: string
+  fetchPublicSettings: typeof fetchPublicSettings
+  publicSettingsLoaded: boolean
+  showError: ReturnType<typeof vi.fn>
+  showInfo: ReturnType<typeof vi.fn>
+  showSuccess: ReturnType<typeof vi.fn>
+  showWarning: ReturnType<typeof vi.fn>
+  siteLogo: string
+  siteName: string
+} = {
+  cachedPublicSettings: null,
   siteName: 'Sub2API',
   siteLogo: '',
   docUrl: '',
@@ -27,6 +40,24 @@ const authStoreState = {
   isAdmin: false,
   user: null as User | null,
   checkAuth,
+}
+
+function createUser(email: string, role: User['role']): User {
+  return {
+    allowed_groups: null,
+    balance: 0,
+    balance_notify_enabled: false,
+    balance_notify_extra_emails: [],
+    balance_notify_threshold: null,
+    concurrency: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    email,
+    id: 1,
+    role,
+    status: 'active',
+    updated_at: '2026-01-01T00:00:00Z',
+    username: email.split('@')[0],
+  }
 }
 
 const messages: Record<string, string> = {
@@ -155,6 +186,18 @@ describe('HomeView', () => {
       wrapper.unmount()
     })
 
+    it('mounts a semantic request-to-receipt motion story on the default page', async () => {
+      const wrapper = mountHomeView()
+      await flushPromises()
+      await nextTick()
+
+      const story = wrapper.get('[data-testid="home-motion-story"]')
+      expect(story.find('h1').text().trim().length).toBeGreaterThan(0)
+      expect(story.findAll('[data-motion-relay-panel]')).toHaveLength(3)
+
+      wrapper.unmount()
+    })
+
     it('renders nav with locale, theme, and auth controls', async () => {
       const wrapper = mountHomeView()
       await flushPromises()
@@ -211,7 +254,7 @@ describe('HomeView', () => {
     it('renders iframe override and hides hero when home_content is a URL', async () => {
       appStoreState.cachedPublicSettings = {
         home_content: 'https://example.com/custom',
-      } as unknown as PublicSettings
+      }
 
       const wrapper = mountHomeView()
       await flushPromises()
@@ -221,6 +264,7 @@ describe('HomeView', () => {
       expect(iframe.exists()).toBe(true)
       expect(iframe.attributes('src')).toBe('https://example.com/custom')
       expect(wrapper.find('[data-testid="home-hero"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="home-motion-story"]').exists()).toBe(false)
 
       wrapper.unmount()
     })
@@ -228,7 +272,7 @@ describe('HomeView', () => {
     it('renders HTML override and hides hero when home_content is HTML', async () => {
       appStoreState.cachedPublicSettings = {
         home_content: '<div class="custom">Hello Custom</div>',
-      } as unknown as PublicSettings
+      }
 
       const wrapper = mountHomeView()
       await flushPromises()
@@ -238,6 +282,7 @@ describe('HomeView', () => {
       expect(htmlOverride.exists()).toBe(true)
       expect(htmlOverride.html()).toContain('Hello Custom')
       expect(wrapper.find('[data-testid="home-hero"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="home-motion-story"]').exists()).toBe(false)
 
       wrapper.unmount()
     })
@@ -260,10 +305,7 @@ describe('HomeView', () => {
     it('authenticated non-admin: nav auth points to /dashboard', async () => {
       authStoreState.isAuthenticated = true
       authStoreState.isAdmin = false
-      authStoreState.user = {
-        email: 'user@example.com',
-        role: 'user',
-      } as unknown as User
+      authStoreState.user = createUser('user@example.com', 'user')
 
       const { wrapper } = await mountHomeViewWithRouter()
 
@@ -275,10 +317,7 @@ describe('HomeView', () => {
     it('authenticated admin: nav auth points to /admin/dashboard', async () => {
       authStoreState.isAuthenticated = true
       authStoreState.isAdmin = true
-      authStoreState.user = {
-        email: 'admin@example.com',
-        role: 'admin',
-      } as unknown as User
+      authStoreState.user = createUser('admin@example.com', 'admin')
 
       const { wrapper } = await mountHomeViewWithRouter()
 
