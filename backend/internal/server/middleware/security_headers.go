@@ -16,8 +16,6 @@ const (
 	CSPNonceKey = "csp_nonce"
 	// NonceTemplate is the placeholder in CSP policy for nonce
 	NonceTemplate = "__CSP_NONCE__"
-	// CloudflareInsightsDomain is the domain for Cloudflare Web Analytics
-	CloudflareInsightsDomain = "https://static.cloudflareinsights.com"
 	// StripeDomain is the domain for Stripe.js SDK
 	StripeDomain = "https://*.stripe.com"
 	// AirwallexStaticDomain 是 Airwallex 生产环境 SDK 脚本域名。
@@ -40,7 +38,6 @@ var requiredCSPDirectiveValues = []struct {
 	directive string
 	value     string
 }{
-	{"script-src", CloudflareInsightsDomain},
 	{"script-src", StripeDomain},
 	{"frame-src", StripeDomain},
 	{"script-src", AirwallexStaticDomain},
@@ -76,6 +73,7 @@ func GetNonceFromContext(c *gin.Context) string {
 }
 
 // SecurityHeaders sets baseline security headers for all responses.
+// HSTS is intentionally not set here; the CDN/reverse proxy owns Strict-Transport-Security.
 // getFrameSrcOrigins is an optional function that returns extra origins to inject into frame-src.
 // getCAPEnabled optionally reports whether a complete Cap configuration is active.
 func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string, getCAPEnabled ...func() bool) gin.HandlerFunc {
@@ -84,7 +82,7 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string, g
 		policy = config.DefaultCSPPolicy
 	}
 
-	// Enhance policy with required directives (nonce placeholder and Cloudflare Insights)
+	// Enhance policy with required directives (nonce placeholder and payment SDK domains)
 	policy = enhanceCSPPolicy(policy)
 	var capEnabled func() bool
 	if len(getCAPEnabled) > 0 {
@@ -107,6 +105,9 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string, g
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
+		c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		c.Header("Cross-Origin-Resource-Policy", "same-origin")
 		if isAPIRoutePath(c) {
 			c.Next()
 			return

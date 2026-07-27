@@ -69,6 +69,8 @@ const messages: Record<string, string> = {
   'homeV2.hero.subtitle': 'AI API Gateway',
   'homeV2.cta.start': 'Get Started',
   'homeV2.footer.copyright': 'All rights reserved',
+  'disclaimer.independentService':
+    '{siteName} is an independent API gateway service and is not affiliated with or endorsed by Anthropic, OpenAI, Google, xAI, or any AI model provider.',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -224,6 +226,18 @@ describe('HomeView', () => {
 
       wrapper.unmount()
     })
+
+    it('renders the independent-service disclaimer inside the footer', async () => {
+      const wrapper = mountHomeView()
+      await flushPromises()
+      await nextTick()
+
+      const footer = wrapper.get('[data-testid="home-footer"]')
+      expect(footer.text()).toContain('independent API gateway')
+      expect(footer.text()).toContain('not affiliated')
+
+      wrapper.unmount()
+    })
   })
 
   describe('M1 responsive routing diagram', () => {
@@ -263,6 +277,8 @@ describe('HomeView', () => {
       const iframe = wrapper.find('[data-testid="home-iframe-override"]')
       expect(iframe.exists()).toBe(true)
       expect(iframe.attributes('src')).toBe('https://example.com/custom')
+      expect(iframe.attributes('sandbox')).toContain('allow-scripts')
+      expect(iframe.attributes('referrerpolicy')).toBe('no-referrer')
       expect(wrapper.find('[data-testid="home-hero"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="home-motion-story"]').exists()).toBe(false)
 
@@ -283,6 +299,23 @@ describe('HomeView', () => {
       expect(htmlOverride.html()).toContain('Hello Custom')
       expect(wrapper.find('[data-testid="home-hero"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="home-motion-story"]').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('sanitizes script tags out of the HTML override', async () => {
+      appStoreState.cachedPublicSettings = {
+        home_content: '<script>window.x=1</script><div>ok</div>',
+      }
+
+      const wrapper = mountHomeView()
+      await flushPromises()
+      await nextTick()
+
+      const htmlOverride = wrapper.find('[data-testid="home-html-override"]')
+      expect(htmlOverride.exists()).toBe(true)
+      expect(htmlOverride.html()).not.toContain('<script')
+      expect(htmlOverride.html()).toContain('ok')
 
       wrapper.unmount()
     })

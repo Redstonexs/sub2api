@@ -5,9 +5,11 @@
       data-testid="home-iframe-override"
       :src="homeContent.trim()"
       class="h-screen w-full border-0"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      referrerpolicy="no-referrer"
       allowfullscreen
     ></iframe>
-    <div v-else data-testid="home-html-override" v-html="homeContent"></div>
+    <div v-else data-testid="home-html-override" v-html="sanitizedHomeContent"></div>
   </div>
 
   <div
@@ -99,6 +101,11 @@
           </a>
         </div>
       </div>
+      <div class="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+        <p class="text-center font-mono text-xs text-gray-400 dark:text-gray-500">
+          {{ t('disclaimer.independentService', { siteName }) }}
+        </p>
+      </div>
     </footer>
   </div>
 </template>
@@ -106,6 +113,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import DOMPurify from 'dompurify'
 import HomeMotionStory from '@/components/home/HomeMotionStory.vue'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -122,6 +130,12 @@ const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 const isHomeContentUrl = computed(() => /^https?:\/\//.test(homeContent.value.trim()))
+const sanitizedHomeContent = computed(() =>
+  DOMPurify.sanitize(homeContent.value, {
+    ADD_TAGS: ['iframe'],
+    ADD_ATTR: ['src', 'sandbox', 'allowfullscreen', 'referrerpolicy', 'allow', 'name', 'loading', 'frameborder'],
+  })
+)
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')

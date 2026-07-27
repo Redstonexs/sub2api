@@ -185,12 +185,12 @@
 
           <template #cell-location="{ row }">
             <div class="flex items-center gap-2">
-              <img
+              <span
                 v-if="row.country_code"
-                :src="flagUrl(row.country_code)"
-                :alt="row.country || row.country_code"
-                class="h-4 w-6 rounded-sm"
-              />
+                class="inline-flex items-center justify-center rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-dark-700 dark:text-dark-300"
+              >
+                {{ row.country_code.toUpperCase() }}
+              </span>
               <span v-if="formatLocation(row)" class="text-sm text-gray-700 dark:text-gray-200">
                 {{ formatLocation(row) }}
               </span>
@@ -1528,9 +1528,6 @@ const formatLocation = (proxy: Proxy) => {
   const parts = [proxy.country, proxy.city].filter(Boolean) as string[]
   return parts.join(' · ')
 }
-
-const flagUrl = (code: string) =>
-  `https://unpkg.com/flag-icons/flags/4x3/${code.toLowerCase()}.svg`
 
 const startTestingProxy = (proxyId: number) => {
   testingProxyIds.value = new Set([...testingProxyIds.value, proxyId])

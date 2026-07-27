@@ -15,6 +15,12 @@ export default {
     tableOfContents: "目录",
     failed: "失败",
   },
+  version: {
+    rollbackInstructions: "查看手动回退说明",
+  },
+  disclaimer: {
+    independentService: "{siteName} 是独立的 API 网关服务，与 Anthropic、OpenAI、Google、xAI 及任何 AI 模型提供商均无附属或认可关系。",
+  },
   auth: {
     agreementPrompt: {
       agreeRead: "我已阅读并同意",

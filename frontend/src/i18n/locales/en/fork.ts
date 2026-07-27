@@ -15,6 +15,12 @@ export default {
     tableOfContents: "Contents",
     failed: "Failed",
   },
+  version: {
+    rollbackInstructions: "View manual rollback instructions",
+  },
+  disclaimer: {
+    independentService: "{siteName} is an independent API gateway service and is not affiliated with or endorsed by Anthropic, OpenAI, Google, xAI, or any AI model provider.",
+  },
   auth: {
     agreementPrompt: {
       agreeRead: "I have read and agree to",

@@ -125,10 +125,10 @@ func TestSecurityHeaders(t *testing.T) {
 
 		csp := w.Header().Get("Content-Security-Policy")
 		assert.NotEmpty(t, csp)
-		// Policy is auto-enhanced with nonce and Cloudflare Insights domain
+		// Policy is auto-enhanced with nonce; dead Cloudflare Insights origin is not injected
 		assert.Contains(t, csp, "default-src 'self'")
 		assert.Contains(t, csp, "'nonce-")
-		assert.Contains(t, csp, CloudflareInsightsDomain)
+		assert.NotContains(t, csp, "https://static.cloudflareinsights.com")
 	})
 
 	t.Run("api_route_skips_csp_nonce_generation", func(t *testing.T) {
@@ -275,6 +275,58 @@ func TestSecurityHeaders(t *testing.T) {
 	})
 }
 
+func TestSecurityHeaders_IsolationHeaders(t *testing.T) {
+	// HSTS is intentionally NOT emitted by the app — the CDN/reverse proxy owns HSTS.
+	// These tests lock that contract: isolation headers are always present, HSTS never is.
+
+	t.Run("emits_isolation_headers_on_plain_http", func(t *testing.T) {
+		middleware := SecurityHeaders(config.CSPConfig{Enabled: false}, nil)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+		middleware(c)
+
+		assert.Empty(t, w.Header().Get("Strict-Transport-Security"))
+		assert.Equal(t, "geolocation=(), microphone=(), camera=(), payment=()", w.Header().Get("Permissions-Policy"))
+		assert.Equal(t, "same-origin", w.Header().Get("Cross-Origin-Opener-Policy"))
+		assert.Equal(t, "same-origin", w.Header().Get("Cross-Origin-Resource-Policy"))
+	})
+
+	t.Run("does_not_emit_hsts_even_when_forwarded_proto_https", func(t *testing.T) {
+		middleware := SecurityHeaders(config.CSPConfig{Enabled: false}, nil)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		c.Request = req
+
+		middleware(c)
+
+		assert.Empty(t, w.Header().Get("Strict-Transport-Security"))
+		assert.Equal(t, "same-origin", w.Header().Get("Cross-Origin-Opener-Policy"))
+		assert.Equal(t, "same-origin", w.Header().Get("Cross-Origin-Resource-Policy"))
+	})
+}
+
+func TestDefaultCSPPolicy_ExcludesDeadOrigins(t *testing.T) {
+	deadOrigins := []string{
+		"https://static.cloudflareinsights.com",
+		"https://fonts.googleapis.com",
+		"https://fonts.gstatic.com",
+	}
+	for _, origin := range deadOrigins {
+		assert.NotContains(t, config.DefaultCSPPolicy, origin)
+		assert.NotContains(t, enhanceCSPPolicy(config.DefaultCSPPolicy), origin)
+	}
+
+	assert.Contains(t, config.DefaultCSPPolicy, "https://challenges.cloudflare.com")
+	assert.Contains(t, config.DefaultCSPPolicy, "https://*.stripe.com")
+	assert.Contains(t, config.DefaultCSPPolicy, "https://static.airwallex.com")
+}
+
 func TestSecurityHeaders_AddsCAPCapabilities_when_CAPEnabled(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
@@ -344,7 +396,7 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 		enhanced := enhanceCSPPolicy(policy)
 
 		assert.Contains(t, enhanced, NonceTemplate)
-		assert.Contains(t, enhanced, CloudflareInsightsDomain)
+		assert.NotContains(t, enhanced, "https://static.cloudflareinsights.com")
 	})
 
 	t.Run("does_not_duplicate_nonce_placeholder", func(t *testing.T) {
@@ -356,12 +408,11 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 		assert.Equal(t, 1, count)
 	})
 
-	t.Run("does_not_duplicate_cloudflare_domain", func(t *testing.T) {
-		policy := "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com"
+	t.Run("does_not_inject_cloudflare_insights_domain", func(t *testing.T) {
+		policy := "default-src 'self'; script-src 'self'"
 		enhanced := enhanceCSPPolicy(policy)
 
-		count := strings.Count(enhanced, CloudflareInsightsDomain)
-		assert.Equal(t, 1, count)
+		assert.NotContains(t, enhanced, "https://static.cloudflareinsights.com")
 	})
 
 	t.Run("handles_policy_without_script_src", func(t *testing.T) {
@@ -370,7 +421,7 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 
 		assert.Contains(t, enhanced, "script-src")
 		assert.Contains(t, enhanced, NonceTemplate)
-		assert.Contains(t, enhanced, CloudflareInsightsDomain)
+		assert.NotContains(t, enhanced, "https://static.cloudflareinsights.com")
 	})
 
 	t.Run("preserves_existing_nonce", func(t *testing.T) {
