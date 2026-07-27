@@ -8,8 +8,9 @@
 
       <template v-else-if="stats">
         <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <!-- Row 1: Core Stats -->
-          <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div class="space-y-4">
+            <!-- Row 1: Core Stats -->
+            <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <!-- Total API Keys -->
             <div class="card p-4">
             <div class="flex items-center gap-3">
@@ -94,14 +95,10 @@
               </div>
             </div>
             </div>
-          </div>
-          <aside class="order-first min-w-0 xl:order-last">
-            <GroupQuotaCard :is-admin="true" />
-          </aside>
-        </div>
+            </div>
 
-        <!-- Row 2: Token Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <!-- Row 2: Token Stats -->
+            <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Today Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
@@ -219,16 +216,16 @@
               </div>
             </div>
           </div>
-        </div>
+            </div>
 
-        <!-- Quick Actions -->
-        <div class="card p-4">
+            <!-- Quick Actions -->
+            <div class="card p-4">
           <div class="mb-3 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
               {{ t('admin.dashboard.quickActions') }}
             </h2>
           </div>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div :class="['grid grid-cols-1 gap-3', { 'md:grid-cols-2': canUseBatchImage }]">
             <button
               v-if="canUseBatchImage"
               type="button"
@@ -267,12 +264,10 @@
               <Icon name="chevronRight" size="sm" class="text-gray-400 group-hover:text-emerald-500" />
             </button>
           </div>
-        </div>
+            </div>
 
-        <!-- Charts Section -->
-        <div class="space-y-6">
-          <!-- Date Range Filter -->
-          <div class="card p-4">
+            <!-- Date Range Filter -->
+            <div class="card p-4">
             <div class="flex flex-wrap items-center gap-4">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -300,8 +295,15 @@
                 </div>
               </div>
             </div>
+            </div>
           </div>
+          <aside class="order-first min-w-0 xl:order-last">
+            <GroupQuotaCard :is-admin="true" />
+          </aside>
+        </div>
 
+        <!-- Charts Section -->
+        <div class="space-y-6">
           <!-- Charts Grid -->
           <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ModelDistributionChart
