@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import GroupQuotaCard from '../GroupQuotaCard.vue'
 import UsageProgressBar from '@/components/account/UsageProgressBar.vue'
+import Select from '@/components/common/Select.vue'
 import type { GroupQuotaCard as GroupQuotaCardType, ViewableGroup, AdminGroup } from '@/types'
 
 // Mock i18n — return keys so assertions check for 'dashboard.groupQuotaCard.title' etc.
@@ -176,8 +177,8 @@ describe('GroupQuotaCard', () => {
     expect(mockUserGetGroupQuotaCard).toHaveBeenCalledWith(1, '5h')
 
     // 5h button active initially, 7d inactive
-    expect(wrapper.get('[data-testid="sort-5h"]').classes()).toContain('bg-blue-100')
-    expect(wrapper.get('[data-testid="sort-7d"]').classes()).not.toContain('bg-emerald-100')
+    expect(wrapper.get('[data-testid="sort-5h"]').classes()).toContain('bg-primary-50')
+    expect(wrapper.get('[data-testid="sort-7d"]').classes()).not.toContain('bg-primary-50')
 
     // Click the 7d sort button
     await wrapper.get('[data-testid="sort-7d"]').trigger('click')
@@ -186,8 +187,66 @@ describe('GroupQuotaCard', () => {
     expect(mockUserGetGroupQuotaCard).toHaveBeenCalledTimes(2)
     expect(mockUserGetGroupQuotaCard).toHaveBeenLastCalledWith(1, '7d')
     // Active state switched to 7d
-    expect(wrapper.get('[data-testid="sort-7d"]').classes()).toContain('bg-emerald-100')
-    expect(wrapper.get('[data-testid="sort-5h"]').classes()).not.toContain('bg-blue-100')
+    expect(wrapper.get('[data-testid="sort-7d"]').classes()).toContain('bg-primary-50')
+    expect(wrapper.get('[data-testid="sort-5h"]').classes()).not.toContain('bg-primary-50')
+  })
+
+  it('changes the selected group through the shared selector', async () => {
+    mockGetMyViewableGroups.mockResolvedValue(SAMPLE_GROUPS)
+    mockUserGetGroupQuotaCard.mockResolvedValue(SAMPLE_CARD)
+
+    const wrapper = mount(GroupQuotaCard, { props: { isAdmin: false } })
+    await flushPromises()
+
+    await wrapper.findComponent(Select).vm.$emit('update:modelValue', 2)
+    await flushPromises()
+
+    expect(mockUserGetGroupQuotaCard).toHaveBeenLastCalledWith(2, '5h')
+    expect(wrapper.findComponent(Select).props('modelValue')).toBe(2)
+    expect(mockAdminGetAll).not.toHaveBeenCalled()
+    expect(mockAdminGetGroupQuotaCard).not.toHaveBeenCalled()
+  })
+
+  it('keeps the controls and cached usage visible while a new quota window loads', async () => {
+    let resolveRefresh: (value: GroupQuotaCardType) => void = () => {
+      throw new Error('Refresh resolver was not initialized')
+    }
+    const pendingRefresh = new Promise<GroupQuotaCardType>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const refreshedCard: GroupQuotaCardType = {
+      ...SAMPLE_CARD,
+      total_remaining_5h: 40,
+      accounts: [{ ...SAMPLE_CARD.accounts[0], display_name: 'account-bravo' }]
+    }
+
+    // Given cached quota data and a pending refresh.
+    mockGetMyViewableGroups.mockResolvedValue(SAMPLE_GROUPS)
+    mockUserGetGroupQuotaCard
+      .mockResolvedValueOnce(SAMPLE_CARD)
+      .mockImplementationOnce(() => pendingRefresh)
+
+    const wrapper = mount(GroupQuotaCard, { props: { isAdmin: false } })
+    await flushPromises()
+
+    // When the user changes the displayed quota window.
+    await wrapper.get('[data-testid="sort-7d"]').trigger('click')
+
+    // Then controls and the cached data stay available behind a local loading status.
+    expect(wrapper.get('[data-testid="sort-5h"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="sort-7d"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="group-quota-content"]').classes()).not.toContain('group-quota-data-leave-active')
+    expect(wrapper.text()).toContain('account-alpha')
+    expect(wrapper.get('[data-testid="group-quota-data-viewport"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[data-testid="group-quota-data-loading"]').exists()).toBe(true)
+
+    resolveRefresh(refreshedCard)
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="group-quota-data-loading"]').exists()).toBe(false)
+    })
+    expect(wrapper.text()).toContain('account-bravo')
   })
 
   // ========== MODE TESTS ==========
@@ -230,10 +289,11 @@ describe('GroupQuotaCard', () => {
     await flushPromises()
 
     expect(mockAdminGetAll).toHaveBeenCalled()
-    // Gemini filtered out client-side — only anthropic + openai remain in the selector
-    expect(wrapper.text()).not.toContain('Gemini Group')
-    expect(wrapper.text()).toContain('Claude Group')
-    expect(wrapper.text()).toContain('OpenAI Group')
+    // Gemini is filtered out before options are passed to the shared selector.
+    expect(wrapper.findComponent(Select).props('options')).toEqual([
+      { value: 1, label: 'Claude Group' },
+      { value: 2, label: 'OpenAI Group' }
+    ])
   })
 
   // ========== EMPTY STATE TESTS ==========

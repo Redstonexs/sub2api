@@ -7,12 +7,11 @@
       </div>
 
       <template v-else-if="stats">
-        <GroupQuotaCard :is-admin="true" />
-
-        <!-- Row 1: Core Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <!-- Total API Keys -->
-          <div class="card p-4">
+        <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <!-- Row 1: Core Stats -->
+          <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <!-- Total API Keys -->
+            <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
                 <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
@@ -29,10 +28,10 @@
                 </p>
               </div>
             </div>
-          </div>
+            </div>
 
-          <!-- Service Accounts -->
-          <div class="card p-4">
+            <!-- Service Accounts -->
+            <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
                 <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
@@ -54,10 +53,10 @@
                 </p>
               </div>
             </div>
-          </div>
+            </div>
 
-          <!-- Today Requests -->
-          <div class="card p-4">
+            <!-- Today Requests -->
+            <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
                 <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
@@ -74,10 +73,10 @@
                 </p>
               </div>
             </div>
-          </div>
+            </div>
 
-          <!-- New Users Today -->
-          <div class="card p-4">
+            <!-- New Users Today -->
+            <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
                 <Icon name="userPlus" size="md" class="text-emerald-600 dark:text-emerald-400" :stroke-width="2" />
@@ -94,7 +93,11 @@
                 </p>
               </div>
             </div>
+            </div>
           </div>
+          <aside class="order-first min-w-0 xl:order-last">
+            <GroupQuotaCard :is-admin="true" />
+          </aside>
         </div>
 
         <!-- Row 2: Token Stats -->
