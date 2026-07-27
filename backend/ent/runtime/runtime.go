@@ -22,6 +22,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/groupviewgrant"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -1181,6 +1182,29 @@ func init() {
 	groupDescReasoningEffortMappings := groupFields[48].Descriptor()
 	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
 	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
+	groupviewgrantMixin := schema.GroupViewGrant{}.Mixin()
+	groupviewgrantMixinHooks1 := groupviewgrantMixin[1].Hooks()
+	groupviewgrant.Hooks[0] = groupviewgrantMixinHooks1[0]
+	groupviewgrantMixinInters1 := groupviewgrantMixin[1].Interceptors()
+	groupviewgrant.Interceptors[0] = groupviewgrantMixinInters1[0]
+	groupviewgrantMixinFields0 := groupviewgrantMixin[0].Fields()
+	_ = groupviewgrantMixinFields0
+	groupviewgrantFields := schema.GroupViewGrant{}.Fields()
+	_ = groupviewgrantFields
+	// groupviewgrantDescCreatedAt is the schema descriptor for created_at field.
+	groupviewgrantDescCreatedAt := groupviewgrantMixinFields0[0].Descriptor()
+	// groupviewgrant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	groupviewgrant.DefaultCreatedAt = groupviewgrantDescCreatedAt.Default.(func() time.Time)
+	// groupviewgrantDescUpdatedAt is the schema descriptor for updated_at field.
+	groupviewgrantDescUpdatedAt := groupviewgrantMixinFields0[1].Descriptor()
+	// groupviewgrant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	groupviewgrant.DefaultUpdatedAt = groupviewgrantDescUpdatedAt.Default.(func() time.Time)
+	// groupviewgrant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	groupviewgrant.UpdateDefaultUpdatedAt = groupviewgrantDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// groupviewgrantDescGrantedAt is the schema descriptor for granted_at field.
+	groupviewgrantDescGrantedAt := groupviewgrantFields[3].Descriptor()
+	// groupviewgrant.DefaultGrantedAt holds the default value on creation for the granted_at field.
+	groupviewgrant.DefaultGrantedAt = groupviewgrantDescGrantedAt.Default.(func() time.Time)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0

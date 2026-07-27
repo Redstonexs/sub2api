@@ -41,6 +41,7 @@ type AdminHandlers struct {
 	Affiliate              *admin.AffiliateHandler
 	Compliance             *admin.ComplianceHandler
 	AuditLog               *admin.AuditLogHandler
+	GroupQuota             *admin.GroupQuotaHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -63,6 +64,7 @@ type Handlers struct {
 	AvailableChannel *AvailableChannelHandler
 	AsyncImage       *AsyncImageHandler
 	BatchImage       *BatchImageHandler
+	GroupQuota       *GroupQuotaHandler
 }
 
 // BuildInfo contains build-time information

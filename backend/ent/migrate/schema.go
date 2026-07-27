@@ -994,6 +994,52 @@ var (
 			},
 		},
 	}
+	// GroupViewGrantsColumns holds the columns for the "group_view_grants" table.
+	GroupViewGrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "granted_by_user_id", Type: field.TypeInt64},
+		{Name: "granted_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+	}
+	// GroupViewGrantsTable holds the schema information for the "group_view_grants" table.
+	GroupViewGrantsTable = &schema.Table{
+		Name:       "group_view_grants",
+		Columns:    GroupViewGrantsColumns,
+		PrimaryKey: []*schema.Column{GroupViewGrantsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "group_view_grants_groups_group_view_grants",
+				Columns:    []*schema.Column{GroupViewGrantsColumns[6]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "group_view_grants_users_group_view_grants",
+				Columns:    []*schema.Column{GroupViewGrantsColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "groupviewgrant_user_id_group_id",
+				Unique:  true,
+				Columns: []*schema.Column{GroupViewGrantsColumns[7], GroupViewGrantsColumns[6]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "deleted_at IS NULL",
+				},
+			},
+			{
+				Name:    "groupviewgrant_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{GroupViewGrantsColumns[6]},
+			},
+		},
+	}
 	// IdempotencyRecordsColumns holds the columns for the "idempotency_records" table.
 	IdempotencyRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2080,6 +2126,7 @@ var (
 		CompositeModelRoutesTable,
 		ErrorPassthroughRulesTable,
 		GroupsTable,
+		GroupViewGrantsTable,
 		IdempotencyRecordsTable,
 		IdentityAdoptionDecisionsTable,
 		PaymentAuditLogsTable,
@@ -2170,6 +2217,11 @@ func init() {
 	}
 	GroupsTable.Annotation = &entsql.Annotation{
 		Table: "groups",
+	}
+	GroupViewGrantsTable.ForeignKeys[0].RefTable = GroupsTable
+	GroupViewGrantsTable.ForeignKeys[1].RefTable = UsersTable
+	GroupViewGrantsTable.Annotation = &entsql.Annotation{
+		Table: "group_view_grants",
 	}
 	IdempotencyRecordsTable.Annotation = &entsql.Annotation{
 		Table: "idempotency_records",

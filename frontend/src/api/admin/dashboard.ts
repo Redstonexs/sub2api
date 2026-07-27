@@ -13,7 +13,9 @@ import type {
   UserUsageTrendPoint,
   UserSpendingRankingResponse,
   UserBreakdownItem,
-  UsageRequestType
+  UsageRequestType,
+  GroupQuotaCard,
+  GroupViewGrantItem,
 } from '@/types'
 
 /**
@@ -324,6 +326,55 @@ export async function getBatchApiKeysUsage(
   return data
 }
 
+/**
+ * Get group quota card for admin view (real account names).
+ */
+export async function getGroupQuotaCard(
+  groupId: number,
+  sortBy?: '5h' | '7d'
+): Promise<GroupQuotaCard> {
+  const params = sortBy ? { sort: sortBy } : {}
+  const { data } = await apiClient.get<GroupQuotaCard>(
+    `/admin/groups/${groupId}/quota-card`,
+    { params }
+  )
+  return data
+}
+
+/**
+ * Get view grants for a group.
+ */
+export async function getGroupViewGrants(
+  groupId: number
+): Promise<GroupViewGrantItem[]> {
+  const { data } = await apiClient.get<GroupViewGrantItem[]>(
+    `/admin/groups/${groupId}/view-grants`
+  )
+  return data
+}
+
+/**
+ * Grant a user permission to view a group's quota card.
+ */
+export async function addGroupViewGrant(
+  groupId: number,
+  userId: number
+): Promise<void> {
+  await apiClient.post(`/admin/groups/${groupId}/view-grants`, {
+    user_id: userId
+  })
+}
+
+/**
+ * Revoke a user's permission to view a group's quota card.
+ */
+export async function removeGroupViewGrant(
+  groupId: number,
+  userId: number
+): Promise<void> {
+  await apiClient.delete(`/admin/groups/${groupId}/view-grants/${userId}`)
+}
+
 export const dashboardAPI = {
   getStats,
   getRealtimeMetrics,
@@ -335,7 +386,11 @@ export const dashboardAPI = {
   getUserUsageTrend,
   getUserSpendingRanking,
   getBatchUsersUsage,
-  getBatchApiKeysUsage
+  getBatchApiKeysUsage,
+  getGroupQuotaCard,
+  getGroupViewGrants,
+  addGroupViewGrant,
+  removeGroupViewGrant,
 }
 
 export default dashboardAPI

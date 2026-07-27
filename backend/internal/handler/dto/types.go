@@ -681,3 +681,44 @@ type PromoCodeUsage struct {
 
 	User *User `json:"user,omitempty"`
 }
+
+// GroupQuotaCard 分组配额卡片：聚合分组内各账号 5h/7d 窗口用量。
+// total_remaining_* 与窗口字段为指针：无数据时序列化为 null。
+type GroupQuotaCard struct {
+	GroupID          int64                   `json:"group_id"`
+	GroupName        string                  `json:"group_name"`
+	Platform         string                  `json:"platform"`
+	TotalRemaining5h *float64                `json:"total_remaining_5h"`
+	TotalRemaining7d *float64                `json:"total_remaining_7d"`
+	Accounts         []GroupQuotaCardAccount `json:"accounts"`
+}
+
+// GroupQuotaCardAccount 配额卡片中的单个账号条目。
+// AccountID 为指针：匿名化（普通用户视角）时序列化为 null。
+type GroupQuotaCardAccount struct {
+	AccountID   *int64                `json:"account_id"`
+	DisplayName string                `json:"display_name"`
+	FiveHour    *GroupQuotaCardWindow `json:"five_hour"`
+	SevenDay    *GroupQuotaCardWindow `json:"seven_day"`
+}
+
+// GroupQuotaCardWindow 单个时间窗口的用量摘要。
+type GroupQuotaCardWindow struct {
+	Utilization float64    `json:"utilization"`
+	ResetsAt    *time.Time `json:"resets_at"`
+}
+
+// GroupViewGrantEntry 分组额度卡片查看授权记录（管理端列表）。
+type GroupViewGrantEntry struct {
+	UserID    int64     `json:"user_id"`
+	Username  string    `json:"username"`
+	GrantedBy string    `json:"granted_by"`
+	GrantedAt time.Time `json:"granted_at"`
+}
+
+// ViewableGroupEntry 普通用户可查看额度卡片的分组。
+type ViewableGroupEntry struct {
+	GroupID   int64  `json:"group_id"`
+	GroupName string `json:"group_name"`
+	Platform  string `json:"platform"`
+}

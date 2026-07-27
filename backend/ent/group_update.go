@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/groupviewgrant"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -1043,6 +1044,21 @@ func (_u *GroupUpdate) AddAllowedUsers(v ...*User) *GroupUpdate {
 	return _u.AddAllowedUserIDs(ids...)
 }
 
+// AddGroupViewGrantIDs adds the "group_view_grants" edge to the GroupViewGrant entity by IDs.
+func (_u *GroupUpdate) AddGroupViewGrantIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.AddGroupViewGrantIDs(ids...)
+	return _u
+}
+
+// AddGroupViewGrants adds the "group_view_grants" edges to the GroupViewGrant entity.
+func (_u *GroupUpdate) AddGroupViewGrants(v ...*GroupViewGrant) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupViewGrantIDs(ids...)
+}
+
 // Mutation returns the GroupMutation object of the builder.
 func (_u *GroupUpdate) Mutation() *GroupMutation {
 	return _u.mutation
@@ -1172,6 +1188,27 @@ func (_u *GroupUpdate) RemoveAllowedUsers(v ...*User) *GroupUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAllowedUserIDs(ids...)
+}
+
+// ClearGroupViewGrants clears all "group_view_grants" edges to the GroupViewGrant entity.
+func (_u *GroupUpdate) ClearGroupViewGrants() *GroupUpdate {
+	_u.mutation.ClearGroupViewGrants()
+	return _u
+}
+
+// RemoveGroupViewGrantIDs removes the "group_view_grants" edge to GroupViewGrant entities by IDs.
+func (_u *GroupUpdate) RemoveGroupViewGrantIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.RemoveGroupViewGrantIDs(ids...)
+	return _u
+}
+
+// RemoveGroupViewGrants removes "group_view_grants" edges to GroupViewGrant entities.
+func (_u *GroupUpdate) RemoveGroupViewGrants(v ...*GroupViewGrant) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupViewGrantIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1836,6 +1873,51 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupViewGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupViewGrantsIDs(); len(nodes) > 0 && !_u.mutation.GroupViewGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupViewGrantsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -2865,6 +2947,21 @@ func (_u *GroupUpdateOne) AddAllowedUsers(v ...*User) *GroupUpdateOne {
 	return _u.AddAllowedUserIDs(ids...)
 }
 
+// AddGroupViewGrantIDs adds the "group_view_grants" edge to the GroupViewGrant entity by IDs.
+func (_u *GroupUpdateOne) AddGroupViewGrantIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.AddGroupViewGrantIDs(ids...)
+	return _u
+}
+
+// AddGroupViewGrants adds the "group_view_grants" edges to the GroupViewGrant entity.
+func (_u *GroupUpdateOne) AddGroupViewGrants(v ...*GroupViewGrant) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupViewGrantIDs(ids...)
+}
+
 // Mutation returns the GroupMutation object of the builder.
 func (_u *GroupUpdateOne) Mutation() *GroupMutation {
 	return _u.mutation
@@ -2994,6 +3091,27 @@ func (_u *GroupUpdateOne) RemoveAllowedUsers(v ...*User) *GroupUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAllowedUserIDs(ids...)
+}
+
+// ClearGroupViewGrants clears all "group_view_grants" edges to the GroupViewGrant entity.
+func (_u *GroupUpdateOne) ClearGroupViewGrants() *GroupUpdateOne {
+	_u.mutation.ClearGroupViewGrants()
+	return _u
+}
+
+// RemoveGroupViewGrantIDs removes the "group_view_grants" edge to GroupViewGrant entities by IDs.
+func (_u *GroupUpdateOne) RemoveGroupViewGrantIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.RemoveGroupViewGrantIDs(ids...)
+	return _u
+}
+
+// RemoveGroupViewGrants removes "group_view_grants" edges to GroupViewGrant entities.
+func (_u *GroupUpdateOne) RemoveGroupViewGrants(v ...*GroupViewGrant) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupViewGrantIDs(ids...)
 }
 
 // Where appends a list predicates to the GroupUpdate builder.
@@ -3688,6 +3806,51 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupViewGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupViewGrantsIDs(); len(nodes) > 0 && !_u.mutation.GroupViewGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupViewGrantsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.GroupViewGrantsTable,
+			Columns: []string{group.GroupViewGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(groupviewgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Group{config: _u.config}

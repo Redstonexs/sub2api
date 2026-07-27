@@ -487,7 +487,17 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 		return nil, fmt.Errorf("passive usage only supported for Anthropic OAuth/SetupToken accounts")
 	}
 
-	// 复用 estimateSetupTokenUsage 构建 5h 窗口（OAuth 和 SetupToken 逻辑一致）
+	info := s.buildPassiveUsageInfo(account)
+
+	// 添加窗口统计
+	s.addWindowStats(ctx, account, info)
+
+	return info, nil
+}
+
+// buildPassiveUsageInfo 从 Account.Extra 中的被动采样数据构建 UsageInfo 核心字段（不含窗口统计）。
+// OAuth 和 SetupToken 账号共用此逻辑：5h 由 estimateSetupTokenUsage 推算，7d/7dFable 从被动采样构建。
+func (s *AccountUsageService) buildPassiveUsageInfo(account *Account) *UsageInfo {
 	info := s.estimateSetupTokenUsage(account)
 	info.Source = "passive"
 
@@ -506,10 +516,41 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 	// 构建 7d Fable 窗口（从被动采样的 7d_oi 响应头数据）
 	info.SevenDayFable = buildPassiveUsageWindow(account.Extra, "passive_usage_7d_oi_utilization", "passive_usage_7d_oi_reset")
 
-	// 添加窗口统计
-	s.addWindowStats(ctx, account, info)
+	return info
+}
 
-	return info, nil
+// GetPassiveUsageBatch 批量获取账号的被动使用数据，不调用外部 API。
+// Anthropic OAuth/SetupToken → buildPassiveUsageInfo (不调用 addWindowStats)。
+// OpenAI OAuth → applyExtraToUsage (codex Extra key 路径)。
+// 其他平台/类型 → 结果 map 中无条目。
+func (s *AccountUsageService) GetPassiveUsageBatch(ctx context.Context, accountIDs []int64) (map[int64]*UsageInfo, error) {
+	if len(accountIDs) == 0 {
+		return map[int64]*UsageInfo{}, nil
+	}
+
+	accounts, err := s.accountRepo.GetByIDs(ctx, accountIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get accounts failed: %w", err)
+	}
+
+	now := time.Now()
+	result := make(map[int64]*UsageInfo, len(accounts))
+	for _, account := range accounts {
+		var info *UsageInfo
+		switch {
+		case account.IsAnthropicOAuthOrSetupToken():
+			info = s.buildPassiveUsageInfo(account)
+		case account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth:
+			info = &UsageInfo{}
+			applyExtraToUsage(info, account.Extra, now)
+			info.Source = "passive"
+		default:
+			continue
+		}
+		result[account.ID] = info
+	}
+
+	return result, nil
 }
 
 // buildPassiveUsageWindow 从 Extra 中的被动采样数据（utilization 为 0-1 小数、reset 为 Unix 秒）

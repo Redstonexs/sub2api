@@ -515,6 +515,12 @@ func ProvideOpsScheduledReportService(
 	return svc
 }
 
+// ProvideGroupQuotaService wires GroupQuotaService: AccountRepository satisfies
+// AccountListReader and *AccountUsageService satisfies PassiveUsageBatchReader.
+func ProvideGroupQuotaService(accountRepo AccountRepository, usageService *AccountUsageService) *GroupQuotaService {
+	return NewGroupQuotaService(accountRepo, usageService)
+}
+
 // ProvideAPIKeyAuthCacheInvalidator 提供 API Key 认证缓存失效能力
 func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthCacheInvalidator {
 	// Start Pub/Sub subscriber for L1 cache invalidation across instances
@@ -824,6 +830,8 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorRequestTemplateService,
 	ProvideUserPlatformQuotaUsageFlusher,
+	ProvideGroupQuotaService,
+	NewGroupViewGrantService,
 )
 
 // ProvideUserPlatformQuotaUsageFlusher 创建并启动 UserPlatformQuotaUsageFlusher。

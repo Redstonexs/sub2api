@@ -89,6 +89,8 @@ const (
 	EdgePendingAuthSessions = "pending_auth_sessions"
 	// EdgePlatformQuotas holds the string denoting the platform_quotas edge name in mutations.
 	EdgePlatformQuotas = "platform_quotas"
+	// EdgeGroupViewGrants holds the string denoting the group_view_grants edge name in mutations.
+	EdgeGroupViewGrants = "group_view_grants"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// Table holds the table name of the user in the database.
@@ -182,6 +184,13 @@ const (
 	PlatformQuotasInverseTable = "user_platform_quotas"
 	// PlatformQuotasColumn is the table column denoting the platform_quotas relation/edge.
 	PlatformQuotasColumn = "user_id"
+	// GroupViewGrantsTable is the table that holds the group_view_grants relation/edge.
+	GroupViewGrantsTable = "group_view_grants"
+	// GroupViewGrantsInverseTable is the table name for the GroupViewGrant entity.
+	// It exists in this package in order to avoid circular dependency with the "groupviewgrant" package.
+	GroupViewGrantsInverseTable = "group_view_grants"
+	// GroupViewGrantsColumn is the table column denoting the group_view_grants relation/edge.
+	GroupViewGrantsColumn = "user_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -602,6 +611,20 @@ func ByPlatformQuotas(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByGroupViewGrantsCount orders the results by group_view_grants count.
+func ByGroupViewGrantsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupViewGrantsStep(), opts...)
+	}
+}
+
+// ByGroupViewGrants orders the results by group_view_grants terms.
+func ByGroupViewGrants(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupViewGrantsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByUserAllowedGroupsCount orders the results by user_allowed_groups count.
 func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -704,6 +727,13 @@ func newPlatformQuotasStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PlatformQuotasInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PlatformQuotasTable, PlatformQuotasColumn),
+	)
+}
+func newGroupViewGrantsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupViewGrantsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GroupViewGrantsTable, GroupViewGrantsColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {

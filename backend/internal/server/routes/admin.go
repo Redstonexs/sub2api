@@ -337,6 +337,11 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.PUT("/:id/rpm-overrides", h.Admin.Group.BatchSetGroupRPMOverrides)
 		groups.DELETE("/:id/rpm-overrides", h.Admin.Group.ClearGroupRPMOverrides)
 		groups.GET("/:id/api-keys", h.Admin.Group.GetGroupAPIKeys)
+		// 分组额度卡片 + 查看授权管理
+		groups.GET("/:id/quota-card", h.Admin.GroupQuota.GetQuotaCard)
+		groups.GET("/:id/view-grants", h.Admin.GroupQuota.ListViewGrants)
+		groups.POST("/:id/view-grants", h.Admin.GroupQuota.GrantViewAccess)
+		groups.DELETE("/:id/view-grants/:userId", h.Admin.GroupQuota.RevokeViewAccess)
 	}
 }
 

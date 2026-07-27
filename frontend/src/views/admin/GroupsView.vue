@@ -415,6 +415,16 @@
                 }}</span>
               </button>
               <button
+                v-if="row.platform === 'anthropic' || row.platform === 'openai'"
+                @click="handleViewGrants(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-cyan-600 dark:hover:bg-dark-700 dark:hover:text-cyan-400"
+              >
+                <Icon name="shield" size="sm" />
+                <span class="text-xs">{{
+                  t("dashboard.groupQuotaCard.grantManagement")
+                }}</span>
+              </button>
+              <button
                 @click="handleDelete(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
@@ -4028,6 +4038,21 @@
       @close="showRPMOverridesModal = false"
       @success="loadGroups"
     />
+
+    <!-- Group View Grant Management Modal -->
+    <BaseDialog
+      :show="showViewGrantsModal"
+      :title="t('dashboard.groupQuotaCard.grantManagement')"
+      width="normal"
+      @close="showViewGrantsModal = false"
+    >
+      <GroupViewGrantManager
+        v-if="viewGrantsGroup"
+        :group-id="viewGrantsGroup.id"
+        :platform="viewGrantsGroup.platform"
+        @change="loadGroups"
+      />
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -4060,6 +4085,7 @@ import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
+import GroupViewGrantManager from "@/components/group/GroupViewGrantManager.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
 import ReasoningEffortPolicyFields from "@/components/admin/group/ReasoningEffortPolicyFields.vue";
 import { VueDraggable } from "vue-draggable-plus";
@@ -4521,6 +4547,8 @@ const showRateMultipliersModal = ref(false);
 const rateMultipliersGroup = ref<AdminGroup | null>(null);
 const showRPMOverridesModal = ref(false);
 const rpmOverridesGroup = ref<AdminGroup | null>(null);
+const showViewGrantsModal = ref(false);
+const viewGrantsGroup = ref<AdminGroup | null>(null);
 const sortableGroups = ref<AdminGroup[]>([]);
 type ConcreteGroupPlatform = Exclude<GroupPlatform, "composite">;
 type CompositeRouteFormState = {
@@ -5793,6 +5821,11 @@ const handleRateMultipliers = (group: AdminGroup) => {
 const handleRPMOverrides = (group: AdminGroup) => {
   rpmOverridesGroup.value = group;
   showRPMOverridesModal.value = true;
+};
+
+const handleViewGrants = (group: AdminGroup) => {
+  viewGrantsGroup.value = group;
+  showViewGrantsModal.value = true;
 };
 
 const handleDuplicate = async (group: AdminGroup) => {

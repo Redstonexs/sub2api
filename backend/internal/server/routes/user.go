@@ -37,6 +37,10 @@ func RegisterUserRoutes(
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
 
+			// 分组额度卡片（管理员授权后可见，账号匿名化）
+			user.GET("/my-viewable-groups", h.GroupQuota.ListMyViewableGroups)
+			user.GET("/groups/:id/quota-card", h.GroupQuota.GetMyGroupQuotaCard)
+
 			// 通知邮箱管理
 			notifyEmail := user.Group("/notify-email")
 			{

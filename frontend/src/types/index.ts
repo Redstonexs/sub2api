@@ -1857,6 +1857,42 @@ export interface ApiKeyUsageTrendPoint {
   tokens: number
 }
 
+// ==================== Group Quota Dashboard ====================
+
+export interface GroupQuotaWindowUsage {
+  utilization: number
+  resets_at: string | null
+}
+
+export interface GroupQuotaAccount {
+  account_id: number | null
+  display_name: string
+  five_hour: GroupQuotaWindowUsage | null
+  seven_day: GroupQuotaWindowUsage | null
+}
+
+export interface GroupQuotaCard {
+  group_id: number
+  group_name: string
+  platform: string
+  total_remaining_5h: number | null
+  total_remaining_7d: number | null
+  accounts: GroupQuotaAccount[]
+}
+
+export interface ViewableGroup {
+  group_id: number
+  group_name: string
+  platform: string
+}
+
+export interface GroupViewGrantItem {
+  user_id: number
+  username: string
+  granted_by: string
+  granted_at: string
+}
+
 // ==================== Admin User Management ====================
 
 export interface UpdateUserRequest {

@@ -2328,6 +2328,29 @@ func HasAllowedUsersWith(preds ...predicate.User) predicate.Group {
 	})
 }
 
+// HasGroupViewGrants applies the HasEdge predicate on the "group_view_grants" edge.
+func HasGroupViewGrants() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, GroupViewGrantsTable, GroupViewGrantsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGroupViewGrantsWith applies the HasEdge predicate on the "group_view_grants" edge with a given conditions (other predicates).
+func HasGroupViewGrantsWith(preds ...predicate.GroupViewGrant) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newGroupViewGrantsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasAccountGroups applies the HasEdge predicate on the "account_groups" edge.
 func HasAccountGroups() predicate.Group {
 	return predicate.Group(func(s *sql.Selector) {

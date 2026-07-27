@@ -862,3 +862,71 @@ func PromoCodeUsageFromService(u *service.PromoCodeUsage) *PromoCodeUsage {
 		User:        UserFromServiceShallow(u.User),
 	}
 }
+
+// GroupQuotaCardFromService converts the quota card aggregation result into the API DTO.
+// The owning group supplies group_name/platform; AccountID 0 (anonymized) maps to nil → JSON null.
+func GroupQuotaCardFromService(r *service.GroupQuotaCardResult, g *service.Group) *GroupQuotaCard {
+	if r == nil || g == nil {
+		return nil
+	}
+	out := &GroupQuotaCard{
+		GroupID:          r.GroupID,
+		GroupName:        g.Name,
+		Platform:         g.Platform,
+		TotalRemaining5h: r.TotalRemaining5h,
+		TotalRemaining7d: r.TotalRemaining7d,
+		Accounts:         make([]GroupQuotaCardAccount, 0, len(r.Accounts)),
+	}
+	for _, a := range r.Accounts {
+		out.Accounts = append(out.Accounts, groupQuotaCardAccountFromService(a))
+	}
+	return out
+}
+
+func groupQuotaCardAccountFromService(a service.GroupQuotaAccount) GroupQuotaCardAccount {
+	out := GroupQuotaCardAccount{
+		DisplayName: a.DisplayName,
+		FiveHour:    groupQuotaCardWindowFromService(a.FiveHour),
+		SevenDay:    groupQuotaCardWindowFromService(a.SevenDay),
+	}
+	if a.AccountID > 0 {
+		id := a.AccountID
+		out.AccountID = &id
+	}
+	return out
+}
+
+func groupQuotaCardWindowFromService(w *service.WindowUsage) *GroupQuotaCardWindow {
+	if w == nil {
+		return nil
+	}
+	return &GroupQuotaCardWindow{
+		Utilization: w.Utilization,
+		ResetsAt:    w.ResetsAt,
+	}
+}
+
+// GroupViewGrantFromService converts a grant record (with usernames) into the API DTO.
+func GroupViewGrantFromService(g *service.GroupViewGrantWithUser) *GroupViewGrantEntry {
+	if g == nil {
+		return nil
+	}
+	return &GroupViewGrantEntry{
+		UserID:    g.UserID,
+		Username:  g.Username,
+		GrantedBy: g.GrantedByUsername,
+		GrantedAt: g.GrantedAt,
+	}
+}
+
+// ViewableGroupFromService converts a user-viewable group into the API DTO.
+func ViewableGroupFromService(g *service.ViewableGroup) *ViewableGroupEntry {
+	if g == nil {
+		return nil
+	}
+	return &ViewableGroupEntry{
+		GroupID:   g.GroupID,
+		GroupName: g.GroupName,
+		Platform:  g.Platform,
+	}
+}

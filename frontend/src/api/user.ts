@@ -17,6 +17,8 @@ import type {
   UserAffiliateDetail,
   AffiliateTransferResponse,
   PlatformQuotasResponse,
+  GroupQuotaCard,
+  ViewableGroup,
 } from '@/types'
 
 /**
@@ -194,6 +196,29 @@ export async function getMyPlatformQuotas(): Promise<PlatformQuotasResponse> {
   return data
 }
 
+/**
+ * 获取当前用户有权查看的分组列表。
+ */
+export async function getMyViewableGroups(): Promise<ViewableGroup[]> {
+  const { data } = await apiClient.get<ViewableGroup[]>('/user/my-viewable-groups')
+  return data
+}
+
+/**
+ * 获取指定分组的配额卡片（用户视图，display_name 已匿名化）。
+ */
+export async function getGroupQuotaCard(
+  groupId: number,
+  sortBy?: '5h' | '7d'
+): Promise<GroupQuotaCard> {
+  const params = sortBy ? { sort: sortBy } : {}
+  const { data } = await apiClient.get<GroupQuotaCard>(
+    `/user/groups/${groupId}/quota-card`,
+    { params }
+  )
+  return data
+}
+
 export const userAPI = {
   getProfile,
   updateProfile,
@@ -210,6 +235,8 @@ export const userAPI = {
   getAffiliateDetail,
   transferAffiliateQuota,
   getMyPlatformQuotas,
+  getMyViewableGroups,
+  getGroupQuotaCard,
 }
 
 export default userAPI

@@ -29,6 +29,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/groupviewgrant"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -81,6 +82,7 @@ const (
 	TypeCompositeModelRoute           = "CompositeModelRoute"
 	TypeErrorPassthroughRule          = "ErrorPassthroughRule"
 	TypeGroup                         = "Group"
+	TypeGroupViewGrant                = "GroupViewGrant"
 	TypeIdempotencyRecord             = "IdempotencyRecord"
 	TypeIdentityAdoptionDecision      = "IdentityAdoptionDecision"
 	TypePaymentAuditLog               = "PaymentAuditLog"
@@ -21941,6 +21943,9 @@ type GroupMutation struct {
 	allowed_users                           map[int64]struct{}
 	removedallowed_users                    map[int64]struct{}
 	clearedallowed_users                    bool
+	group_view_grants                       map[int64]struct{}
+	removedgroup_view_grants                map[int64]struct{}
+	clearedgroup_view_grants                bool
 	done                                    bool
 	oldValue                                func(context.Context) (*Group, error)
 	predicates                              []predicate.Group
@@ -24910,6 +24915,60 @@ func (m *GroupMutation) ResetAllowedUsers() {
 	m.removedallowed_users = nil
 }
 
+// AddGroupViewGrantIDs adds the "group_view_grants" edge to the GroupViewGrant entity by ids.
+func (m *GroupMutation) AddGroupViewGrantIDs(ids ...int64) {
+	if m.group_view_grants == nil {
+		m.group_view_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.group_view_grants[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupViewGrants clears the "group_view_grants" edge to the GroupViewGrant entity.
+func (m *GroupMutation) ClearGroupViewGrants() {
+	m.clearedgroup_view_grants = true
+}
+
+// GroupViewGrantsCleared reports if the "group_view_grants" edge to the GroupViewGrant entity was cleared.
+func (m *GroupMutation) GroupViewGrantsCleared() bool {
+	return m.clearedgroup_view_grants
+}
+
+// RemoveGroupViewGrantIDs removes the "group_view_grants" edge to the GroupViewGrant entity by IDs.
+func (m *GroupMutation) RemoveGroupViewGrantIDs(ids ...int64) {
+	if m.removedgroup_view_grants == nil {
+		m.removedgroup_view_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.group_view_grants, ids[i])
+		m.removedgroup_view_grants[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupViewGrants returns the removed IDs of the "group_view_grants" edge to the GroupViewGrant entity.
+func (m *GroupMutation) RemovedGroupViewGrantsIDs() (ids []int64) {
+	for id := range m.removedgroup_view_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupViewGrantsIDs returns the "group_view_grants" edge IDs in the mutation.
+func (m *GroupMutation) GroupViewGrantsIDs() (ids []int64) {
+	for id := range m.group_view_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupViewGrants resets all changes to the "group_view_grants" edge.
+func (m *GroupMutation) ResetGroupViewGrants() {
+	m.group_view_grants = nil
+	m.clearedgroup_view_grants = false
+	m.removedgroup_view_grants = nil
+}
+
 // Where appends a list predicates to the GroupMutation builder.
 func (m *GroupMutation) Where(ps ...predicate.Group) {
 	m.predicates = append(m.predicates, ps...)
@@ -26264,7 +26323,7 @@ func (m *GroupMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *GroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.api_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -26282,6 +26341,9 @@ func (m *GroupMutation) AddedEdges() []string {
 	}
 	if m.allowed_users != nil {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.group_view_grants != nil {
+		edges = append(edges, group.EdgeGroupViewGrants)
 	}
 	return edges
 }
@@ -26326,13 +26388,19 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeGroupViewGrants:
+		ids := make([]ent.Value, 0, len(m.group_view_grants))
+		for id := range m.group_view_grants {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *GroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.removedapi_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -26350,6 +26418,9 @@ func (m *GroupMutation) RemovedEdges() []string {
 	}
 	if m.removedallowed_users != nil {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.removedgroup_view_grants != nil {
+		edges = append(edges, group.EdgeGroupViewGrants)
 	}
 	return edges
 }
@@ -26394,13 +26465,19 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeGroupViewGrants:
+		ids := make([]ent.Value, 0, len(m.removedgroup_view_grants))
+		for id := range m.removedgroup_view_grants {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *GroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.clearedapi_keys {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -26418,6 +26495,9 @@ func (m *GroupMutation) ClearedEdges() []string {
 	}
 	if m.clearedallowed_users {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.clearedgroup_view_grants {
+		edges = append(edges, group.EdgeGroupViewGrants)
 	}
 	return edges
 }
@@ -26438,6 +26518,8 @@ func (m *GroupMutation) EdgeCleared(name string) bool {
 		return m.clearedaccounts
 	case group.EdgeAllowedUsers:
 		return m.clearedallowed_users
+	case group.EdgeGroupViewGrants:
+		return m.clearedgroup_view_grants
 	}
 	return false
 }
@@ -26472,8 +26554,819 @@ func (m *GroupMutation) ResetEdge(name string) error {
 	case group.EdgeAllowedUsers:
 		m.ResetAllowedUsers()
 		return nil
+	case group.EdgeGroupViewGrants:
+		m.ResetGroupViewGrants()
+		return nil
 	}
 	return fmt.Errorf("unknown Group edge %s", name)
+}
+
+// GroupViewGrantMutation represents an operation that mutates the GroupViewGrant nodes in the graph.
+type GroupViewGrantMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	created_at            *time.Time
+	updated_at            *time.Time
+	deleted_at            *time.Time
+	granted_by_user_id    *int64
+	addgranted_by_user_id *int64
+	granted_at            *time.Time
+	clearedFields         map[string]struct{}
+	user                  *int64
+	cleareduser           bool
+	group                 *int64
+	clearedgroup          bool
+	done                  bool
+	oldValue              func(context.Context) (*GroupViewGrant, error)
+	predicates            []predicate.GroupViewGrant
+}
+
+var _ ent.Mutation = (*GroupViewGrantMutation)(nil)
+
+// groupviewgrantOption allows management of the mutation configuration using functional options.
+type groupviewgrantOption func(*GroupViewGrantMutation)
+
+// newGroupViewGrantMutation creates new mutation for the GroupViewGrant entity.
+func newGroupViewGrantMutation(c config, op Op, opts ...groupviewgrantOption) *GroupViewGrantMutation {
+	m := &GroupViewGrantMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGroupViewGrant,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGroupViewGrantID sets the ID field of the mutation.
+func withGroupViewGrantID(id int64) groupviewgrantOption {
+	return func(m *GroupViewGrantMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GroupViewGrant
+		)
+		m.oldValue = func(ctx context.Context) (*GroupViewGrant, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GroupViewGrant.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGroupViewGrant sets the old GroupViewGrant of the mutation.
+func withGroupViewGrant(node *GroupViewGrant) groupviewgrantOption {
+	return func(m *GroupViewGrantMutation) {
+		m.oldValue = func(context.Context) (*GroupViewGrant, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GroupViewGrantMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GroupViewGrantMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GroupViewGrantMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GroupViewGrantMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GroupViewGrant.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GroupViewGrantMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GroupViewGrantMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GroupViewGrantMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GroupViewGrantMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GroupViewGrantMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GroupViewGrantMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *GroupViewGrantMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *GroupViewGrantMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *GroupViewGrantMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[groupviewgrant.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *GroupViewGrantMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[groupviewgrant.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *GroupViewGrantMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, groupviewgrant.FieldDeletedAt)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *GroupViewGrantMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *GroupViewGrantMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *GroupViewGrantMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *GroupViewGrantMutation) SetGroupID(i int64) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *GroupViewGrantMutation) GroupID() (r int64, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *GroupViewGrantMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// SetGrantedByUserID sets the "granted_by_user_id" field.
+func (m *GroupViewGrantMutation) SetGrantedByUserID(i int64) {
+	m.granted_by_user_id = &i
+	m.addgranted_by_user_id = nil
+}
+
+// GrantedByUserID returns the value of the "granted_by_user_id" field in the mutation.
+func (m *GroupViewGrantMutation) GrantedByUserID() (r int64, exists bool) {
+	v := m.granted_by_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantedByUserID returns the old "granted_by_user_id" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldGrantedByUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantedByUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantedByUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantedByUserID: %w", err)
+	}
+	return oldValue.GrantedByUserID, nil
+}
+
+// AddGrantedByUserID adds i to the "granted_by_user_id" field.
+func (m *GroupViewGrantMutation) AddGrantedByUserID(i int64) {
+	if m.addgranted_by_user_id != nil {
+		*m.addgranted_by_user_id += i
+	} else {
+		m.addgranted_by_user_id = &i
+	}
+}
+
+// AddedGrantedByUserID returns the value that was added to the "granted_by_user_id" field in this mutation.
+func (m *GroupViewGrantMutation) AddedGrantedByUserID() (r int64, exists bool) {
+	v := m.addgranted_by_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGrantedByUserID resets all changes to the "granted_by_user_id" field.
+func (m *GroupViewGrantMutation) ResetGrantedByUserID() {
+	m.granted_by_user_id = nil
+	m.addgranted_by_user_id = nil
+}
+
+// SetGrantedAt sets the "granted_at" field.
+func (m *GroupViewGrantMutation) SetGrantedAt(t time.Time) {
+	m.granted_at = &t
+}
+
+// GrantedAt returns the value of the "granted_at" field in the mutation.
+func (m *GroupViewGrantMutation) GrantedAt() (r time.Time, exists bool) {
+	v := m.granted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantedAt returns the old "granted_at" field's value of the GroupViewGrant entity.
+// If the GroupViewGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupViewGrantMutation) OldGrantedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantedAt: %w", err)
+	}
+	return oldValue.GrantedAt, nil
+}
+
+// ResetGrantedAt resets all changes to the "granted_at" field.
+func (m *GroupViewGrantMutation) ResetGrantedAt() {
+	m.granted_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *GroupViewGrantMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[groupviewgrant.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *GroupViewGrantMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *GroupViewGrantMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *GroupViewGrantMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *GroupViewGrantMutation) ClearGroup() {
+	m.clearedgroup = true
+	m.clearedFields[groupviewgrant.FieldGroupID] = struct{}{}
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *GroupViewGrantMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *GroupViewGrantMutation) GroupIDs() (ids []int64) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *GroupViewGrantMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the GroupViewGrantMutation builder.
+func (m *GroupViewGrantMutation) Where(ps ...predicate.GroupViewGrant) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GroupViewGrantMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupViewGrantMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GroupViewGrant, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GroupViewGrantMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupViewGrantMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GroupViewGrant).
+func (m *GroupViewGrantMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GroupViewGrantMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.created_at != nil {
+		fields = append(fields, groupviewgrant.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, groupviewgrant.FieldUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, groupviewgrant.FieldDeletedAt)
+	}
+	if m.user != nil {
+		fields = append(fields, groupviewgrant.FieldUserID)
+	}
+	if m.group != nil {
+		fields = append(fields, groupviewgrant.FieldGroupID)
+	}
+	if m.granted_by_user_id != nil {
+		fields = append(fields, groupviewgrant.FieldGrantedByUserID)
+	}
+	if m.granted_at != nil {
+		fields = append(fields, groupviewgrant.FieldGrantedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GroupViewGrantMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case groupviewgrant.FieldCreatedAt:
+		return m.CreatedAt()
+	case groupviewgrant.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case groupviewgrant.FieldDeletedAt:
+		return m.DeletedAt()
+	case groupviewgrant.FieldUserID:
+		return m.UserID()
+	case groupviewgrant.FieldGroupID:
+		return m.GroupID()
+	case groupviewgrant.FieldGrantedByUserID:
+		return m.GrantedByUserID()
+	case groupviewgrant.FieldGrantedAt:
+		return m.GrantedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GroupViewGrantMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case groupviewgrant.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case groupviewgrant.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case groupviewgrant.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	case groupviewgrant.FieldUserID:
+		return m.OldUserID(ctx)
+	case groupviewgrant.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case groupviewgrant.FieldGrantedByUserID:
+		return m.OldGrantedByUserID(ctx)
+	case groupviewgrant.FieldGrantedAt:
+		return m.OldGrantedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown GroupViewGrant field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupViewGrantMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case groupviewgrant.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case groupviewgrant.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case groupviewgrant.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	case groupviewgrant.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case groupviewgrant.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case groupviewgrant.FieldGrantedByUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantedByUserID(v)
+		return nil
+	case groupviewgrant.FieldGrantedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GroupViewGrantMutation) AddedFields() []string {
+	var fields []string
+	if m.addgranted_by_user_id != nil {
+		fields = append(fields, groupviewgrant.FieldGrantedByUserID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GroupViewGrantMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case groupviewgrant.FieldGrantedByUserID:
+		return m.AddedGrantedByUserID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupViewGrantMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case groupviewgrant.FieldGrantedByUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGrantedByUserID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GroupViewGrantMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(groupviewgrant.FieldDeletedAt) {
+		fields = append(fields, groupviewgrant.FieldDeletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GroupViewGrantMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GroupViewGrantMutation) ClearField(name string) error {
+	switch name {
+	case groupviewgrant.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GroupViewGrantMutation) ResetField(name string) error {
+	switch name {
+	case groupviewgrant.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case groupviewgrant.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case groupviewgrant.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	case groupviewgrant.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case groupviewgrant.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case groupviewgrant.FieldGrantedByUserID:
+		m.ResetGrantedByUserID()
+		return nil
+	case groupviewgrant.FieldGrantedAt:
+		m.ResetGrantedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GroupViewGrantMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, groupviewgrant.EdgeUser)
+	}
+	if m.group != nil {
+		edges = append(edges, groupviewgrant.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GroupViewGrantMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case groupviewgrant.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case groupviewgrant.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GroupViewGrantMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GroupViewGrantMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GroupViewGrantMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, groupviewgrant.EdgeUser)
+	}
+	if m.clearedgroup {
+		edges = append(edges, groupviewgrant.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GroupViewGrantMutation) EdgeCleared(name string) bool {
+	switch name {
+	case groupviewgrant.EdgeUser:
+		return m.cleareduser
+	case groupviewgrant.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GroupViewGrantMutation) ClearEdge(name string) error {
+	switch name {
+	case groupviewgrant.EdgeUser:
+		m.ClearUser()
+		return nil
+	case groupviewgrant.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GroupViewGrantMutation) ResetEdge(name string) error {
+	switch name {
+	case groupviewgrant.EdgeUser:
+		m.ResetUser()
+		return nil
+	case groupviewgrant.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupViewGrant edge %s", name)
 }
 
 // IdempotencyRecordMutation represents an operation that mutates the IdempotencyRecord nodes in the graph.
@@ -47218,6 +48111,9 @@ type UserMutation struct {
 	platform_quotas               map[int64]struct{}
 	removedplatform_quotas        map[int64]struct{}
 	clearedplatform_quotas        bool
+	group_view_grants             map[int64]struct{}
+	removedgroup_view_grants      map[int64]struct{}
+	clearedgroup_view_grants      bool
 	done                          bool
 	oldValue                      func(context.Context) (*User, error)
 	predicates                    []predicate.User
@@ -49086,6 +49982,60 @@ func (m *UserMutation) ResetPlatformQuotas() {
 	m.removedplatform_quotas = nil
 }
 
+// AddGroupViewGrantIDs adds the "group_view_grants" edge to the GroupViewGrant entity by ids.
+func (m *UserMutation) AddGroupViewGrantIDs(ids ...int64) {
+	if m.group_view_grants == nil {
+		m.group_view_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.group_view_grants[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupViewGrants clears the "group_view_grants" edge to the GroupViewGrant entity.
+func (m *UserMutation) ClearGroupViewGrants() {
+	m.clearedgroup_view_grants = true
+}
+
+// GroupViewGrantsCleared reports if the "group_view_grants" edge to the GroupViewGrant entity was cleared.
+func (m *UserMutation) GroupViewGrantsCleared() bool {
+	return m.clearedgroup_view_grants
+}
+
+// RemoveGroupViewGrantIDs removes the "group_view_grants" edge to the GroupViewGrant entity by IDs.
+func (m *UserMutation) RemoveGroupViewGrantIDs(ids ...int64) {
+	if m.removedgroup_view_grants == nil {
+		m.removedgroup_view_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.group_view_grants, ids[i])
+		m.removedgroup_view_grants[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupViewGrants returns the removed IDs of the "group_view_grants" edge to the GroupViewGrant entity.
+func (m *UserMutation) RemovedGroupViewGrantsIDs() (ids []int64) {
+	for id := range m.removedgroup_view_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupViewGrantsIDs returns the "group_view_grants" edge IDs in the mutation.
+func (m *UserMutation) GroupViewGrantsIDs() (ids []int64) {
+	for id := range m.group_view_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupViewGrants resets all changes to the "group_view_grants" edge.
+func (m *UserMutation) ResetGroupViewGrants() {
+	m.group_view_grants = nil
+	m.clearedgroup_view_grants = false
+	m.removedgroup_view_grants = nil
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -49724,7 +50674,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.api_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49763,6 +50713,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.platform_quotas != nil {
 		edges = append(edges, user.EdgePlatformQuotas)
+	}
+	if m.group_view_grants != nil {
+		edges = append(edges, user.EdgeGroupViewGrants)
 	}
 	return edges
 }
@@ -49849,13 +50802,19 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGroupViewGrants:
+		ids := make([]ent.Value, 0, len(m.group_view_grants))
+		for id := range m.group_view_grants {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.removedapi_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49894,6 +50853,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedplatform_quotas != nil {
 		edges = append(edges, user.EdgePlatformQuotas)
+	}
+	if m.removedgroup_view_grants != nil {
+		edges = append(edges, user.EdgeGroupViewGrants)
 	}
 	return edges
 }
@@ -49980,13 +50942,19 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGroupViewGrants:
+		ids := make([]ent.Value, 0, len(m.removedgroup_view_grants))
+		for id := range m.removedgroup_view_grants {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.clearedapi_keys {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -50026,6 +50994,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedplatform_quotas {
 		edges = append(edges, user.EdgePlatformQuotas)
 	}
+	if m.clearedgroup_view_grants {
+		edges = append(edges, user.EdgeGroupViewGrants)
+	}
 	return edges
 }
 
@@ -50059,6 +51030,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedpending_auth_sessions
 	case user.EdgePlatformQuotas:
 		return m.clearedplatform_quotas
+	case user.EdgeGroupViewGrants:
+		return m.clearedgroup_view_grants
 	}
 	return false
 }
@@ -50113,6 +51086,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgePlatformQuotas:
 		m.ResetPlatformQuotas()
+		return nil
+	case user.EdgeGroupViewGrants:
+		m.ResetGroupViewGrants()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)

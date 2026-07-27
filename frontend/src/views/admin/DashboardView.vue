@@ -7,6 +7,8 @@
       </div>
 
       <template v-else-if="stats">
+        <GroupQuotaCard :is-admin="true" />
+
         <!-- Row 1: Core Stats -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Total API Keys -->
@@ -363,6 +365,7 @@ import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { chartChrome, seriesColor, withAlpha } from '@/utils/chartTheme'
+import GroupQuotaCard from '@/components/group/GroupQuotaCard.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
