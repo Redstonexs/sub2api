@@ -29,9 +29,10 @@ the application's responsibility.
 
 ## Trusted client IPs
 
-`security.trust_forwarded_ip_for_api_key_acl` is enabled by default for upgrade
-compatibility. While enabled, raw forwarding headers take over client-IP
-resolution for logs and security-sensitive paths. Custom headers from
+`security.trust_forwarded_ip_for_api_key_acl` is disabled by default. While
+enabled, raw forwarding headers take over client-IP resolution for logs and
+security-sensitive paths, and any caller holding a valid API key can forge its
+client IP to defeat that key's IP allowlist/denylist. Custom headers from
 `security.forwarded_client_ip_headers` are checked in configured order before
 the built-in `CF-Connecting-IP`, `X-Real-IP`, and `X-Forwarded-For` fallback.
 Header names are case-insensitive, normalized when loaded, de-duplicated, and
@@ -49,10 +50,29 @@ headers are ignored completely when the switch is disabled. In that mode Gin's
 CIDR/IP addresses that connect directly to Sub2API. An explicit empty list
 trusts no forwarded client IPs.
 
+### Precedence
+
+The switch is both a configuration key and an admin-editable setting stored in
+the database, so the order matters:
+
+1. **`config.yaml` or `SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL`** — setting
+   either one *pins* the value. It overrides the stored database row on every
+   startup, rewrites that row so the admin UI shows the effective state, and is
+   never touched by the legacy compatibility migration below. Use this to enforce
+   the setting from a deployment manifest.
+2. **The admin UI toggle** — authoritative whenever the key is *not* pinned.
+   Applies immediately without a restart.
+3. **The startup default (`false`)** — used only to seed a fresh installation.
+
+Pinning logs a warning at startup whenever it overrides a differing stored value.
+Because the pin re-asserts on every restart, a UI change made against a pinned
+deployment survives only until the process restarts.
+
 On the first upgrade to this mode, a legacy `false` value is changed to `true`
-only when `server.trusted_proxies` was not explicitly configured; explicit
-proxy policies remain in secure mode. New installations persist the configured
-custom header list during database initialization. Existing installations
+only when `server.trusted_proxies` was not explicitly configured and the key is
+not pinned; explicit proxy policies remain in secure mode. New installations seed
+the stored value from configuration and persist the configured custom header list
+during database initialization. Existing installations
 backfill a missing database value from the YAML configuration. A hidden
 migration marker prevents later administrator changes from being overwritten.
 If settings cannot be read or the persisted custom-header list is malformed,

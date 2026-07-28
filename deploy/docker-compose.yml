@@ -135,6 +135,30 @@ services:
       - ANTIGRAVITY_USER_AGENT_VERSION=${ANTIGRAVITY_USER_AGENT_VERSION:-}
 
       # =======================================================================
+      # Security Configuration (Client IP Trust)
+      # =======================================================================
+      # Controls which client IP the API Key IP allowlist/denylist, admin audit
+      # logs, and session IP/UA binding use.
+      #
+      # false (default) = trust only SERVER_TRUSTED_PROXIES below. Recommended.
+      # true            = trust raw CF-Connecting-IP / X-Real-IP / X-Forwarded-For
+      #                   headers verbatim. Anyone holding a valid API key can then
+      #                   forge their client IP and bypass that key's IP rules, so
+      #                   only enable this when the origin is firewalled to your
+      #                   proxy AND that proxy overwrites those headers.
+      #
+      # Setting this variable PINS the value: it overrides the admin UI toggle on
+      # every startup. Comment it out to let the UI own the setting instead.
+      - SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=${SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL:-false}
+      # Comma-separated CIDRs/IPs allowed to supply forwarded client IPs. Set this
+      # to your reverse proxy (or the Docker bridge subnet when a proxy container
+      # sits in front). Empty = trust nobody, use the direct peer address.
+      - SERVER_TRUSTED_PROXIES=${SERVER_TRUSTED_PROXIES:-}
+      # Extra CDN client-IP headers checked before the built-ins (comma-separated).
+      # Only consulted while the takeover switch above is true.
+      - SECURITY_FORWARDED_CLIENT_IP_HEADERS=${SECURITY_FORWARDED_CLIENT_IP_HEADERS:-}
+
+      # =======================================================================
       # Security Configuration (URL Allowlist)
       # =======================================================================
       # Enable URL allowlist validation (false to skip allowlist checks)

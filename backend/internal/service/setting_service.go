@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -240,7 +242,12 @@ func (s *SettingService) LoadForwardedClientIPSettings(ctx context.Context) erro
 	enabled := s.cfg.Security.TrustForwardedIPForAPIKeyACL
 	headers := s.cfg.ForwardedClientIPSettings().Headers
 	storedValue, hasStoredValue := values[SettingKeyAPIKeyACLTrustForwardedIP]
-	if hasStoredValue {
+	// An operator who pinned this in config.yaml or the environment is expressing
+	// deployment policy, which must outrank the admin-editable database row —
+	// otherwise a hardened compose file has no way to enforce the setting on an
+	// existing install. Absent that pin, the stored row stays authoritative.
+	pinnedByConfig := s.cfg.Security.TrustForwardedIPForAPIKeyACLConfigured
+	if hasStoredValue && !pinnedByConfig {
 		enabled = storedValue == "true"
 	}
 
@@ -268,10 +275,18 @@ func (s *SettingService) LoadForwardedClientIPSettings(ctx context.Context) erro
 		updates[settingKeyForwardedClientIPModeV2] = "true"
 		// Before this migration, new installations persisted false by default.
 		// Restore compatibility only when no trusted-proxy policy was configured.
-		if headersErr == nil && hasStoredValue && !enabled && !s.cfg.Server.TrustedProxiesConfigured {
+		// A config/env pin is an explicit policy, so it is never force-enabled.
+		if headersErr == nil && hasStoredValue && !enabled && !pinnedByConfig && !s.cfg.Server.TrustedProxiesConfigured {
 			enabled = true
 			updates[SettingKeyAPIKeyACLTrustForwardedIP] = "true"
 		}
+	}
+	// Persist the pinned value so the admin UI shows the effective state instead of
+	// a stale row it can no longer change.
+	if pinnedByConfig && headersErr == nil && (!hasStoredValue || (storedValue == "true") != enabled) {
+		updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(enabled)
+		slog.Warn("security.trust_forwarded_ip_for_api_key_acl is pinned by configuration; overriding the stored admin setting",
+			"effective", enabled)
 	}
 	if len(updates) > 0 {
 		if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {

@@ -725,6 +725,86 @@ func TestSettingService_LoadForwardedClientIPSettingsMigration(t *testing.T) {
 	}
 }
 
+// A config.yaml/env pin is deployment policy and must outrank the admin-editable
+// database row, otherwise a hardened compose file cannot enforce the setting on an
+// install whose row already says otherwise.
+func TestSettingService_LoadForwardedClientIPSettingsConfigPinOverridesStoredValue(t *testing.T) {
+	tests := []struct {
+		name          string
+		values        map[string]string
+		configValue   bool
+		wantEnabled   bool
+		wantPersisted string
+	}{
+		{
+			name: "pinned false overrides stored true and rewrites the row",
+			values: map[string]string{
+				SettingKeyAPIKeyACLTrustForwardedIP: "true",
+				settingKeyForwardedClientIPModeV2:   "true",
+			},
+			configValue:   false,
+			wantEnabled:   false,
+			wantPersisted: "false",
+		},
+		{
+			name: "pinned true overrides stored false and rewrites the row",
+			values: map[string]string{
+				SettingKeyAPIKeyACLTrustForwardedIP: "false",
+				settingKeyForwardedClientIPModeV2:   "true",
+			},
+			configValue:   true,
+			wantEnabled:   true,
+			wantPersisted: "true",
+		},
+		{
+			name: "pinned value matching the row leaves it untouched",
+			values: map[string]string{
+				SettingKeyAPIKeyACLTrustForwardedIP: "false",
+				settingKeyForwardedClientIPModeV2:   "true",
+			},
+			configValue: false,
+			wantEnabled: false,
+		},
+		{
+			name:          "pinned false survives the legacy compatibility migration",
+			values:        map[string]string{SettingKeyAPIKeyACLTrustForwardedIP: "false"},
+			configValue:   false,
+			wantEnabled:   false,
+			wantPersisted: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &forwardedIPMigrationRepoStub{values: test.values}
+			cfg := &config.Config{}
+			cfg.Security.TrustForwardedIPForAPIKeyACL = test.configValue
+			cfg.Security.TrustForwardedIPForAPIKeyACLConfigured = true
+			svc := NewSettingService(repo, cfg)
+
+			require.NoError(t, svc.LoadForwardedClientIPSettings(context.Background()))
+			require.Equal(t, test.wantEnabled, cfg.TrustForwardedIPForAPIKeyACL())
+			require.Equal(t, test.wantPersisted, repo.updates[SettingKeyAPIKeyACLTrustForwardedIP])
+		})
+	}
+}
+
+// Without a pin the stored row stays authoritative, so the admin UI toggle keeps
+// working on deployments that do not manage the setting through config.
+func TestSettingService_LoadForwardedClientIPSettingsUnpinnedKeepsStoredValue(t *testing.T) {
+	repo := &forwardedIPMigrationRepoStub{values: map[string]string{
+		SettingKeyAPIKeyACLTrustForwardedIP: "true",
+		settingKeyForwardedClientIPModeV2:   "true",
+	}}
+	cfg := &config.Config{}
+	cfg.Security.TrustForwardedIPForAPIKeyACL = false // config default, not pinned
+	svc := NewSettingService(repo, cfg)
+
+	require.NoError(t, svc.LoadForwardedClientIPSettings(context.Background()))
+	require.True(t, cfg.TrustForwardedIPForAPIKeyACL())
+	require.NotContains(t, repo.updates, SettingKeyAPIKeyACLTrustForwardedIP)
+}
+
 func TestSettingService_LoadForwardedClientIPSettingsLoadsHeaders(t *testing.T) {
 	repo := &forwardedIPMigrationRepoStub{values: map[string]string{
 		SettingKeyAPIKeyACLTrustForwardedIP: "true",

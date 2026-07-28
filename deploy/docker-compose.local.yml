@@ -138,6 +138,18 @@ services:
       - ANTIGRAVITY_USER_AGENT_VERSION=${ANTIGRAVITY_USER_AGENT_VERSION:-}
 
       # =======================================================================
+      # Security Configuration (Client IP Trust)
+      # =======================================================================
+      # false (default) = trust only SERVER_TRUSTED_PROXIES. true = trust raw
+      # CF-Connecting-IP / X-Real-IP / X-Forwarded-For headers verbatim, which
+      # lets any holder of a valid API key forge their IP past that key's IP
+      # allowlist/denylist. Setting this variable pins it over the admin UI toggle.
+      - SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=${SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL:-false}
+      # Comma-separated CIDRs/IPs allowed to supply forwarded client IPs.
+      - SERVER_TRUSTED_PROXIES=${SERVER_TRUSTED_PROXIES:-}
+      - SECURITY_FORWARDED_CLIENT_IP_HEADERS=${SECURITY_FORWARDED_CLIENT_IP_HEADERS:-}
+
+      # =======================================================================
       # Security Configuration (URL Allowlist)
       # =======================================================================
       # Enable URL allowlist validation (false to skip allowlist checks)

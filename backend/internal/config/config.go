@@ -702,9 +702,13 @@ type SecurityConfig struct {
 	ProxyProbe      ProxyProbeConfig     `mapstructure:"proxy_probe"`
 	// TrustForwardedIPForAPIKeyACL enables legacy raw forwarded-header takeover.
 	// When disabled, server.trusted_proxies is authoritative for all client-IP consumers.
-	TrustForwardedIPForAPIKeyACL  bool                                       `mapstructure:"trust_forwarded_ip_for_api_key_acl"`
-	ForwardedClientIPHeaders      []string                                   `mapstructure:"forwarded_client_ip_headers" json:"forwarded_client_ip_headers" yaml:"forwarded_client_ip_headers"`
-	forwardedClientIPSettingsLive *atomic.Pointer[ForwardedClientIPSettings] `mapstructure:"-" json:"-" yaml:"-"`
+	TrustForwardedIPForAPIKeyACL bool `mapstructure:"trust_forwarded_ip_for_api_key_acl"`
+	// TrustForwardedIPForAPIKeyACLConfigured records whether an operator pinned the
+	// switch above in config.yaml or the environment. When set, it overrides the
+	// admin-editable database setting on every startup (deployment policy wins).
+	TrustForwardedIPForAPIKeyACLConfigured bool                                       `mapstructure:"-" json:"-" yaml:"-"`
+	ForwardedClientIPHeaders               []string                                   `mapstructure:"forwarded_client_ip_headers" json:"forwarded_client_ip_headers" yaml:"forwarded_client_ip_headers"`
+	forwardedClientIPSettingsLive          *atomic.Pointer[ForwardedClientIPSettings] `mapstructure:"-" json:"-" yaml:"-"`
 }
 
 func NormalizeForwardedClientIPHeaders(headers []string) ([]string, error) {
@@ -1681,6 +1685,14 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	forwardedClientIPHeadersEnv, forwardedClientIPHeadersEnvConfigured := os.LookupEnv("SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 	trustedProxiesConfigured := viper.InConfig("server.trusted_proxies") ||
 		viper.IsSet("server.trusted_proxies") || trustedProxiesEnvConfigured
+	// This key is also an admin-editable setting persisted in the database, and the
+	// stored row normally wins. Track explicit operator intent so a deployment that
+	// pins it in config.yaml or the environment stays authoritative across restarts.
+	// viper.IsSet is useless here (SetDefault makes it always true), so look only at
+	// the config file and the environment.
+	_, trustForwardedIPEnvConfigured := os.LookupEnv("SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL")
+	trustForwardedIPConfigured := viper.InConfig("security.trust_forwarded_ip_for_api_key_acl") ||
+		trustForwardedIPEnvConfigured
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -1693,6 +1705,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Security.ForwardedClientIPHeaders = normalizeStringSlice(strings.Split(forwardedClientIPHeadersEnv, ","))
 	}
 	cfg.Server.TrustedProxiesConfigured = trustedProxiesConfigured
+	cfg.Security.TrustForwardedIPForAPIKeyACLConfigured = trustForwardedIPConfigured
 	if cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs == 0 {
 		cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs = 15000
 	}
