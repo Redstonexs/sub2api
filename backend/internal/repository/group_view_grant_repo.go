@@ -81,14 +81,16 @@ func (r *groupViewGrantRepository) ListByGroup(ctx context.Context, groupID int6
 	}
 	users, err := client.User.Query().
 		Where(user.IDIn(userIDs...)).
-		Select(user.FieldID, user.FieldUsername).
+		Select(user.FieldID, user.FieldUsername, user.FieldEmail).
 		All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	usernames := make(map[int64]string, len(users))
+	emails := make(map[int64]string, len(users))
 	for _, u := range users {
 		usernames[u.ID] = u.Username
+		emails[u.ID] = u.Email
 	}
 
 	out := make([]service.GroupViewGrantWithUser, 0, len(grants))
@@ -102,6 +104,7 @@ func (r *groupViewGrantRepository) ListByGroup(ctx context.Context, groupID int6
 				GrantedAt:       g.GrantedAt,
 			},
 			Username:          usernames[g.UserID],
+			Email:             emails[g.UserID],
 			GrantedByUsername: usernames[g.GrantedByUserID],
 		})
 	}

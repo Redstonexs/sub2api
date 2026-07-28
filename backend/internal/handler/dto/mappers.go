@@ -914,8 +914,25 @@ func GroupViewGrantFromService(g *service.GroupViewGrantWithUser) *GroupViewGran
 	return &GroupViewGrantEntry{
 		UserID:    g.UserID,
 		Username:  g.Username,
+		Email:     g.Email,
 		GrantedBy: g.GrantedByUsername,
 		GrantedAt: g.GrantedAt,
+	}
+}
+
+// GroupViewGrantCandidateFromService converts a user into a grant-candidate DTO,
+// annotated with whether that user already holds a grant on the group being edited.
+func GroupViewGrantCandidateFromService(u *service.User, granted bool) *GroupViewGrantCandidate {
+	if u == nil {
+		return nil
+	}
+	return &GroupViewGrantCandidate{
+		UserID:   u.ID,
+		Username: u.Username,
+		Email:    u.Email,
+		Role:     u.Role,
+		Status:   u.Status,
+		Granted:  granted,
 	}
 }
 

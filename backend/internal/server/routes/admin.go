@@ -343,6 +343,7 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		// 分组额度卡片 + 查看授权管理
 		groups.GET("/:id/quota-card", h.Admin.GroupQuota.GetQuotaCard)
 		groups.GET("/:id/view-grants", h.Admin.GroupQuota.ListViewGrants)
+		groups.GET("/:id/view-grant-candidates", h.Admin.GroupQuota.SearchViewGrantCandidates)
 		groups.POST("/:id/view-grants", h.Admin.GroupQuota.GrantViewAccess)
 		groups.DELETE("/:id/view-grants/:userId", h.Admin.GroupQuota.RevokeViewAccess)
 	}

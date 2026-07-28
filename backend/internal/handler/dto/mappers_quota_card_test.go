@@ -142,6 +142,7 @@ func TestGroupViewGrantFromService_mapsUsernamesAndTimestamp(t *testing.T) {
 	grant := &service.GroupViewGrantWithUser{
 		GroupViewGrant:    service.GroupViewGrant{UserID: 11, GrantedAt: grantedAt},
 		Username:          "alice",
+		Email:             "alice@test.com",
 		GrantedByUsername: "admin-bob",
 	}
 	// When: mapping and serializing
@@ -150,12 +151,36 @@ func TestGroupViewGrantFromService_mapsUsernamesAndTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	// Then: user_id, username, granted_by and RFC3339 granted_at are present
-	if out.UserID != 11 || out.Username != "alice" || out.GrantedBy != "admin-bob" {
+	// Then: user_id, username, email, granted_by and RFC3339 granted_at are present
+	if out.UserID != 11 || out.Username != "alice" || out.Email != "alice@test.com" || out.GrantedBy != "admin-bob" {
 		t.Fatalf("unexpected entry: %+v", out)
 	}
 	if !strings.Contains(string(raw), `"granted_at":"2026-07-26T08:30:00Z"`) {
 		t.Fatalf("expected RFC3339 granted_at in %s", raw)
+	}
+}
+
+func TestGroupViewGrantCandidateFromService_mapsUserAndGrantedFlag(t *testing.T) {
+	// Given: a candidate user that already holds a grant on the group being edited
+	u := &service.User{
+		ID:       7,
+		Username: "carol",
+		Email:    "carol@test.com",
+		Role:     service.RoleUser,
+		Status:   service.StatusActive,
+	}
+	// When: mapping with granted=true
+	out := GroupViewGrantCandidateFromService(u, true)
+	// Then: identity fields carry over and the granted flag is preserved
+	if out.UserID != 7 || out.Username != "carol" || out.Email != "carol@test.com" {
+		t.Fatalf("unexpected candidate: %+v", out)
+	}
+	if out.Role != service.RoleUser || out.Status != service.StatusActive || !out.Granted {
+		t.Fatalf("unexpected candidate: %+v", out)
+	}
+	// And: a nil user maps to nil rather than a zero-value entry
+	if GroupViewGrantCandidateFromService(nil, false) != nil {
+		t.Fatal("expected nil for nil user")
 	}
 }
 

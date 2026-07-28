@@ -712,8 +712,20 @@ type GroupQuotaCardWindow struct {
 type GroupViewGrantEntry struct {
 	UserID    int64     `json:"user_id"`
 	Username  string    `json:"username"`
+	Email     string    `json:"email"`
 	GrantedBy string    `json:"granted_by"`
 	GrantedAt time.Time `json:"granted_at"`
+}
+
+// GroupViewGrantCandidate 授权候选用户（管理端搜索用户以授予查看权限）。
+// Granted 标记该用户在当前分组是否已有授权，供前端提示"已授权"而不是重复提交。
+type GroupViewGrantCandidate struct {
+	UserID   int64  `json:"user_id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	Status   string `json:"status"`
+	Granted  bool   `json:"granted"`
 }
 
 // ViewableGroupEntry 普通用户可查看额度卡片的分组。

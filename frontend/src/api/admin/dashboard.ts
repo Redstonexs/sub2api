@@ -16,6 +16,7 @@ import type {
   UsageRequestType,
   GroupQuotaCard,
   GroupViewGrantItem,
+  GroupViewGrantCandidate,
 } from '@/types'
 
 /**
@@ -354,6 +355,24 @@ export async function getGroupViewGrants(
 }
 
 /**
+ * Search users that can be granted view access to a group's quota card.
+ * An empty keyword returns the most recently registered users so the picker
+ * has something to show on focus. Already-granted users come back flagged
+ * (`granted: true`) rather than filtered out.
+ */
+export async function searchGroupViewGrantCandidates(
+  groupId: number,
+  keyword: string,
+  limit = 20
+): Promise<GroupViewGrantCandidate[]> {
+  const { data } = await apiClient.get<GroupViewGrantCandidate[]>(
+    `/admin/groups/${groupId}/view-grant-candidates`,
+    { params: { q: keyword, limit } }
+  )
+  return data
+}
+
+/**
  * Grant a user permission to view a group's quota card.
  */
 export async function addGroupViewGrant(
@@ -389,6 +408,7 @@ export const dashboardAPI = {
   getBatchApiKeysUsage,
   getGroupQuotaCard,
   getGroupViewGrants,
+  searchGroupViewGrantCandidates,
   addGroupViewGrant,
   removeGroupViewGrant,
 }

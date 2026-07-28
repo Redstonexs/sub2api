@@ -1889,8 +1889,19 @@ export interface ViewableGroup {
 export interface GroupViewGrantItem {
   user_id: number
   username: string
+  email: string
   granted_by: string
   granted_at: string
+}
+
+/** A user surfaced by the view-grant search picker. `granted` marks users who already have access. */
+export interface GroupViewGrantCandidate {
+  user_id: number
+  username: string
+  email: string
+  role: string
+  status: string
+  granted: boolean
 }
 
 // ==================== Admin User Management ====================

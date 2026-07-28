@@ -19,6 +19,7 @@ type GroupViewGrant struct {
 type GroupViewGrantWithUser struct {
 	GroupViewGrant
 	Username          string // 被授权用户
+	Email             string // 被授权用户邮箱（用户名可能重复，邮箱用于消歧）
 	GrantedByUsername string // 执行授权的管理员
 }
 
