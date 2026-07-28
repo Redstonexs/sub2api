@@ -1821,6 +1821,12 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		slog.Warn("security.response_headers.enabled=false; configurable header filtering disabled (default allowlist only).")
 	}
 
+	if cfg.Security.TrustForwardedIPForAPIKeyACL {
+		slog.Warn("security.trust_forwarded_ip_for_api_key_acl=true; raw forwarded IP headers are trusted verbatim. " +
+			"Any caller holding a valid API key can forge its client IP and bypass that key's IP whitelist/blacklist. " +
+			"Prefer configuring server.trusted_proxies and leaving this switch off.")
+	}
+
 	if cfg.JWT.Secret != "" && isWeakJWTSecret(cfg.JWT.Secret) {
 		slog.Warn("JWT secret appears weak; use a 32+ character random secret in production.")
 	}
@@ -1918,7 +1924,13 @@ func setDefaults() {
 	viper.SetDefault("security.csp.enabled", true)
 	viper.SetDefault("security.csp.policy", DefaultCSPPolicy)
 	viper.SetDefault("security.proxy_probe.insecure_skip_verify", false)
-	viper.SetDefault("security.trust_forwarded_ip_for_api_key_acl", true)
+	// Defaults to false so server.trusted_proxies is authoritative for client-IP
+	// resolution. When true, raw CF-Connecting-IP / X-Real-IP / X-Forwarded-For
+	// values are trusted verbatim, which lets any caller holding a valid API key
+	// forge its client IP and defeat that key's IP whitelist/blacklist.
+	// Deployments behind a reverse proxy should configure server.trusted_proxies
+	// rather than re-enabling this legacy switch.
+	viper.SetDefault("security.trust_forwarded_ip_for_api_key_acl", false)
 
 	// Security - disable direct fallback on proxy error
 	viper.SetDefault("security.proxy_fallback.allow_direct_on_error", false)
@@ -3479,9 +3491,19 @@ func normalizeStringSlice(values []string) []string {
 	return normalized
 }
 
+// minStrongJWTSecretLen is the shortest secret that is not reported as weak.
+// generateJWTSecret produces 32 random bytes rendered as 64 hex characters, so
+// every auto-generated secret clears this floor comfortably.
+const minStrongJWTSecretLen = 32
+
 func isWeakJWTSecret(secret string) bool {
 	lower := strings.ToLower(strings.TrimSpace(secret))
 	if lower == "" {
+		return true
+	}
+	// A short secret is brute-forceable offline from any issued token regardless
+	// of whether it appears in the known-bad list below.
+	if len(lower) < minStrongJWTSecretLen {
 		return true
 	}
 	weak := map[string]struct{}{

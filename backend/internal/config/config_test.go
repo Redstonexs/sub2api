@@ -58,7 +58,10 @@ func TestLoadHTTPIngressSafetyDefaults(t *testing.T) {
 	require.Equal(t, 64*1024, cfg.Server.MaxHeaderBytes)
 	require.Empty(t, cfg.Server.TrustedProxies)
 	require.False(t, cfg.Server.TrustedProxiesConfigured)
-	require.True(t, cfg.TrustForwardedIPForAPIKeyACL())
+	// Defaults off: raw forwarded IP headers must not be trusted verbatim, or a
+	// caller holding a valid API key could forge its client IP past that key's
+	// IP whitelist/blacklist. server.trusted_proxies is authoritative instead.
+	require.False(t, cfg.TrustForwardedIPForAPIKeyACL())
 	require.Equal(t, int64(32*1024*1024), cfg.Gateway.TextMaxBodySize)
 	require.True(t, cfg.APIKeyAuth.InvalidAbuse.Enabled)
 	require.Equal(t, 120, cfg.APIKeyAuth.InvalidAbuse.Threshold)
@@ -1457,8 +1460,17 @@ func TestValidateJWTSecretStrength(t *testing.T) {
 	if !isWeakJWTSecret("change-me-in-production") {
 		t.Fatalf("isWeakJWTSecret should detect weak secret")
 	}
-	if isWeakJWTSecret("StrongSecretValue") {
-		t.Fatalf("isWeakJWTSecret should accept strong secret")
+	// Short secrets are brute-forceable offline even when they are not on the
+	// known-bad list.
+	if !isWeakJWTSecret("StrongSecretValue") {
+		t.Fatalf("isWeakJWTSecret should reject a secret shorter than %d characters", minStrongJWTSecretLen)
+	}
+	strong, err := generateJWTSecret(32)
+	if err != nil {
+		t.Fatalf("generateJWTSecret() unexpected error: %v", err)
+	}
+	if isWeakJWTSecret(strong) {
+		t.Fatalf("isWeakJWTSecret should accept a 32-byte random secret")
 	}
 }
 

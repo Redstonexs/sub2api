@@ -131,6 +131,17 @@ func runSetupServer() {
 	}
 }
 
+// simpleModeConfirmed reports whether the operator explicitly acknowledged that
+// simple mode disables billing and quota enforcement.
+func simpleModeConfirmed() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SIMPLE_MODE_CONFIRM"))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
 func runMainServer() {
 	cfg, err := config.LoadForBootstrap()
 	if err != nil {
@@ -140,6 +151,14 @@ func runMainServer() {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 	if cfg.RunMode == config.RunModeSimple {
+		// Simple mode turns off billing and quota enforcement for every request.
+		// In release mode that must be a deliberate act, so require the explicit
+		// acknowledgement the README documents rather than starting on a warning
+		// an operator may never read.
+		if cfg.Server.Mode == "release" && !simpleModeConfirmed() {
+			log.Fatal("RUN_MODE=simple disables billing and quota checks. " +
+				"Set SIMPLE_MODE_CONFIRM=true to acknowledge this and allow startup in release mode.")
+		}
 		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")
 	}
 
