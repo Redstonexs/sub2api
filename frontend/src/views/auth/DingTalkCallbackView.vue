@@ -586,7 +586,8 @@ async function finalizeCompletion(completion: PendingOAuthExchangeResponse, redi
   await authStore.setToken(completion.access_token)
   clearAllAffiliateReferralCodes()
   appStore.showSuccess(t('auth.loginSuccess'))
-  await router.replace(redirect)
+  const defaultPath = authStore.isAdmin ? '/admin/dashboard' : '/dashboard'
+  await router.replace(redirect && redirect !== '/dashboard' ? redirect : defaultPath)
 }
 
 async function finalizePendingAccountResponse(completion: DingTalkPendingActionResponse) {
@@ -734,7 +735,8 @@ async function handleSubmitTotpChallenge() {
     await authStore.setToken(completion.access_token)
     clearAllAffiliateReferralCodes()
     appStore.showSuccess(t('auth.loginSuccess'))
-    await router.replace(redirectTo.value)
+    const defaultPath = authStore.isAdmin ? '/admin/dashboard' : '/dashboard'
+    await router.replace(redirectTo.value && redirectTo.value !== '/dashboard' ? redirectTo.value : defaultPath)
   } catch (e: unknown) {
     totpError.value = getRequestErrorMessage(e, t('auth.loginFailed'))
   } finally {
@@ -758,7 +760,8 @@ onMounted(async () => {
       await authStore.setToken(legacyLogin.access_token)
       clearAllAffiliateReferralCodes()
       appStore.showSuccess(t('auth.loginSuccess'))
-      await router.replace(redirect)
+      const defaultPath = authStore.isAdmin ? '/admin/dashboard' : '/dashboard'
+      await router.replace(redirect && redirect !== '/dashboard' ? redirect : defaultPath)
       return
     }
 

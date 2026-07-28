@@ -271,7 +271,7 @@ function redirectProviderCallbackToBackend(provider: 'github' | 'google'): void 
   window.location.href = buildApiUrl(`/auth/oauth/${provider}/callback${suffix}`)
 }
 
-async function finalizeTokenResponse(tokenResponse: OAuthTokenResponse, redirect: string) {
+async function finalizeTokenResponse(tokenResponse: OAuthTokenResponse, redirect?: string | null) {
   persistOAuthTokenContext(tokenResponse)
   await authStore.setToken(tokenResponse.access_token)
   if (typeof window !== 'undefined') {
@@ -279,7 +279,8 @@ async function finalizeTokenResponse(tokenResponse: OAuthTokenResponse, redirect
   }
   clearAllAffiliateReferralCodes()
   appStore.showSuccess(t('auth.loginSuccess'))
-  await router.replace(sanitizeRedirectPath(redirect))
+  const defaultPath = authStore.isAdmin ? '/admin/dashboard' : '/dashboard'
+  await router.replace(redirect ? sanitizeRedirectPath(redirect) : defaultPath)
 }
 
 function hasOAuthTokenResponse(value: Partial<OAuthTokenResponse>): value is OAuthTokenResponse {
@@ -388,7 +389,7 @@ onMounted(async () => {
 
   isProcessing.value = true
   try {
-    await finalizeTokenResponse(tokenResponse, params.get('redirect') || '/dashboard')
+    await finalizeTokenResponse(tokenResponse, params.get('redirect'))
   } catch (error: unknown) {
     const message = (error as { message?: string })?.message || t('auth.loginFailed')
     appStore.showError(message)
