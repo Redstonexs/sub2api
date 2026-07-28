@@ -35,8 +35,8 @@
 ### 开发工具
 
 ```bash
-# golangci-lint v2.7
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7
+# golangci-lint v2.9（与 CI 保持一致）
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9
 
 # pnpm (前端包管理)
 npm install -g pnpm
@@ -48,13 +48,13 @@ npm install -g pnpm
 
 | Workflow | 触发条件 | 检查内容 |
 |----------|----------|----------|
-| **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.7 |
+| **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.9 + 前端 gate + deploy 脚本检查 |
 | **security-scan.yml** | push, pull_request, 每周一 | govulncheck + gosec + pnpm audit |
 | **release.yml** | tag `v*` | 构建发布（PR 不触发） |
 
 ### CI 要求
 
-- Go 版本必须是 **1.25.7**
+- Go 版本必须与 `backend/go.mod` 一致，当前为 **1.26.5**（CI 用 `go version | grep -q 'go1.26.5'` 硬断言，升级 go.mod 时必须同步改 `backend-ci.yml` 里的两处断言）
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地测试命令
@@ -335,8 +335,9 @@ sub2api/
 │   │   └── i18n/            # 国际化
 │   ├── package.json         # 依赖配置
 │   └── pnpm-lock.yaml       # pnpm 锁文件（必须提交）
-└── .claude/
-    └── CLAUDE.md            # 本文档
+├── CLAUDE.md                # Claude Code 项目指引（架构、命令、坑点）
+├── AGENTS.md                # 仓库总览 + 上游同步流程（各子目录另有 AGENTS.md）
+└── DEV_GUIDE.md             # 本文档（本地环境 + 运维坑点）
 ```
 
 ## 七、参考资源
