@@ -89,6 +89,25 @@ func FullClaudeCodeMimicryBetas() []string {
 	}
 }
 
+// ClientCapabilityBetas 是 OAuth mimic 路径允许从客户端 anthropic-beta 继承的 token。
+//
+// mimic 路径默认整份丢弃客户端 beta（未知 token 会让上游判第三方），但纯能力型 beta 被
+// 丢弃属于静默降级：客户端显式要 1M 上下文或细粒度工具流式却拿不到，且管理端 Beta 策略
+// 里 context-1m 的 pass 规则（见 DefaultBetaPolicySettings）在 mimic 路径上永远不会生效，
+// 因为该 token 根本没进入最终 header。
+//
+// 这里只放行真实 Claude Code CLI 自身也会发送、且不参与客户端身份判定的 token；
+// 是否真正下发仍由 Beta 策略的 drop set 决定，因此放行不等于绕过管理端策略。
+func ClientCapabilityBetas() []string {
+	return []string{
+		BetaContext1M,
+		BetaFineGrainedToolStreaming,
+		BetaTokenCounting,
+		BetaRedactThinking,
+		BetaFastMode,
+	}
+}
+
 // DefaultHeaders 是 Claude Code 客户端默认请求头。
 var DefaultHeaders = map[string]string{
 	// Keep these in sync with recent Claude CLI traffic to reduce the chance

@@ -59,6 +59,11 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
 	// level; thinking.type is ignored. Default follows Codex CLI / airgate's
 	// Anthropic bridge shape, which uses medium when unset.
 	// Anthropic levels map 1:1 to OpenAI: low→low, medium→medium, high→high, max→xhigh.
+	//
+	// 注意：thinking.budget_tokens 目前不参与 effort 推导（见
+	// TestAnthropicToResponses_NoOutputConfig / _ThinkingDisabled）。反向映射
+	// defaultThinkingBudget 已存在，若要开启正向推导可用 anthropicThinkingToEffort，
+	// 但那会改变既有计费档位，属于产品决策而非缺陷修复。
 	effort := "medium"
 	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {
 		effort = req.OutputConfig.Effort
@@ -460,6 +465,35 @@ func extractAnthropicTextFromBlocks(blocks []AnthropicContentBlock) string {
 		}
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// AnthropicThinkingToEffort derives an Anthropic effort level from a thinking
+// block. It is NOT wired into AnthropicToResponses: that bridge deliberately
+// keys off output_config.effort only. Exposed so the effort-derivation policy
+// lives next to its inverse and can be enabled deliberately.
+//
+// Thresholds are the inverse of defaultThinkingBudget (responses_to_anthropic_request.go),
+// so an Anthropic→Responses→Anthropic round trip lands on the level it started from.
+func AnthropicThinkingToEffort(thinking *AnthropicThinking) string {
+	if thinking == nil {
+		return "medium"
+	}
+	if strings.EqualFold(strings.TrimSpace(thinking.Type), "disabled") {
+		return "none"
+	}
+	switch budget := thinking.BudgetTokens; {
+	case budget <= 0:
+		// adaptive / enabled without an explicit budget: keep the bridge default.
+		return "medium"
+	case budget <= 1024:
+		return "low"
+	case budget <= 4096:
+		return "medium"
+	case budget <= 10240:
+		return "high"
+	default:
+		return "max"
+	}
 }
 
 func mapAnthropicEffortToResponses(effort string) string {

@@ -305,7 +305,10 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 
 	normalized := []byte(`{}`)
 	// Keep the current Codex /compact schema while still dropping request-scoped
-	// fields such as prompt_cache_key, store, and stream.
+	// fields such as store and stream. prompt_cache_key is deliberately kept:
+	// compact 请求携带的是接近上限的最长上下文，剥掉 cache key 会让这次调用整体
+	// cache-cold，是全会话里最贵的一次 cache miss；ChatGPT /compact 端点接受该字段
+	//（CLIProxyAPI 的 codex cacheHelper 对 compact 路径始终回填 prompt_cache_key）。
 	for _, field := range []string{
 		"model",
 		"input",
@@ -315,6 +318,7 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 		"reasoning",
 		"text",
 		"previous_response_id",
+		"prompt_cache_key",
 	} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {

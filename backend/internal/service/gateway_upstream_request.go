@@ -419,6 +419,35 @@ func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 	}
 }
 
+// inheritedClientCapabilityBetas 从客户端 anthropic-beta 中挑出 mimic 路径允许继承的
+// 能力型 token，顺序按客户端原始顺序保留，未知 token 一律忽略。
+func inheritedClientCapabilityBetas(clientBeta string) []string {
+	if strings.TrimSpace(clientBeta) == "" {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(claude.ClientCapabilityBetas()))
+	for _, token := range claude.ClientCapabilityBetas() {
+		allowed[token] = struct{}{}
+	}
+	out := make([]string, 0, len(allowed))
+	seen := make(map[string]struct{}, len(allowed))
+	for _, part := range strings.Split(clientBeta, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := allowed[part]; !ok {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		out = append(out, part)
+	}
+	return out
+}
+
 func mergeAnthropicBeta(required []string, incoming string) string {
 	seen := make(map[string]struct{}, len(required)+8)
 	out := make([]string, 0, len(required)+8)
@@ -498,7 +527,12 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 		if mimicClaudeCode {
 			// mimic 路径跳过白名单透传，incomingBeta 始终为空；所有模型都必须
 			// 携带完整 Claude Code beta 集合，避免 Haiku 被识别为第三方客户端。
-			return mergeAnthropicBetaDropping(claude.FullClaudeCodeMimicryBetas(), "", effectiveDropSet), true
+			//
+			// 例外：客户端显式请求的纯能力 beta（1M 上下文、细粒度工具流式等）需要继承，
+			// 否则是静默降级，且 Beta 策略里针对这些 token 的 pass 规则永远不生效。
+			// 继承后仍会过 effectiveDropSet，管理端策略依旧是最终决定方。
+			required := append(claude.FullClaudeCodeMimicryBetas(), inheritedClientCapabilityBetas(clientBeta)...)
+			return mergeAnthropicBetaDropping(required, "", effectiveDropSet), true
 		}
 		// 真 Claude Code 客户端透传路径
 		return stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBeta), effectiveDropSet), true

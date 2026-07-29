@@ -2072,6 +2072,10 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	openBlockIndex := -1
 	openBlockType := ""
 	seenText := ""
+	// thought 文本与可见文本是两条独立的累积流，共用一个 seen 累积器会让
+	// computeGeminiTextDelta 的“累积 vs 增量”判定互相污染。
+	seenThought := ""
+	sentThoughtSignatures := make(map[string]struct{}, 2)
 	openToolIndex := -1
 	openToolID := ""
 	openToolName := ""
@@ -2114,6 +2118,75 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 		parts := extractGeminiParts(geminiResp)
 		for _, part := range parts {
+			// thought part 先于普通 text 处理：作为 Anthropic thinking 块下发，
+			// 否则模型的内部推理会混进可见答案，并被客户端当作对话文本回传。
+			if text, ok := part["text"].(string); ok && text != "" && geminiPartIsThought(part) {
+				if openToolIndex >= 0 {
+					writeSSE(c.Writer, "content_block_stop", map[string]any{
+						"type":  "content_block_stop",
+						"index": openToolIndex,
+					})
+					openToolIndex = -1
+					openToolName = ""
+					seenToolJSON = ""
+				}
+
+				delta, newSeen := computeGeminiTextDelta(seenThought, text)
+				seenThought = newSeen
+
+				if openBlockType != "thinking" {
+					if openBlockIndex >= 0 {
+						writeSSE(c.Writer, "content_block_stop", map[string]any{
+							"type":  "content_block_stop",
+							"index": openBlockIndex,
+						})
+					}
+					openBlockType = "thinking"
+					openBlockIndex = nextBlockIndex
+					nextBlockIndex++
+					writeSSE(c.Writer, "content_block_start", map[string]any{
+						"type":  "content_block_start",
+						"index": openBlockIndex,
+						"content_block": map[string]any{
+							"type":     "thinking",
+							"thinking": "",
+						},
+					})
+				}
+
+				if delta != "" {
+					if firstTokenMs == nil {
+						ms := int(time.Since(startTime).Milliseconds())
+						firstTokenMs = &ms
+					}
+					writeSSE(c.Writer, "content_block_delta", map[string]any{
+						"type":  "content_block_delta",
+						"index": openBlockIndex,
+						"delta": map[string]any{
+							"type":     "thinking_delta",
+							"thinking": delta,
+						},
+					})
+				}
+
+				// 签名随 thought part 到达，可能重复出现；每个签名只下发一次。
+				if sig := asString(part["thoughtSignature"]); sig != "" {
+					if _, sent := sentThoughtSignatures[sig]; !sent {
+						sentThoughtSignatures[sig] = struct{}{}
+						writeSSE(c.Writer, "content_block_delta", map[string]any{
+							"type":  "content_block_delta",
+							"index": openBlockIndex,
+							"delta": map[string]any{
+								"type":      "signature_delta",
+								"signature": sig,
+							},
+						})
+					}
+				}
+				flusher.Flush()
+				continue
+			}
+
 			if text, ok := part["text"].(string); ok && text != "" {
 				// Close an open tool_use block before starting text, mirroring
 				// the functionCall branch (which closes open text blocks) and
@@ -2793,10 +2866,23 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
 							continue
 						}
 						if text, ok := pm["text"].(string); ok && text != "" {
-							contentBlocks = append(contentBlocks, map[string]any{
-								"type": "text",
-								"text": text,
-							})
+							// thought part 必须映射成 Anthropic thinking 块：当作普通 text 返回
+							// 会把模型的内部推理混进可见答案，客户端下一轮再把它当对话文本回传。
+							if geminiPartIsThought(pm) {
+								thinkingBlock := map[string]any{
+									"type":     "thinking",
+									"thinking": text,
+								}
+								if sig := asString(pm["thoughtSignature"]); sig != "" {
+									thinkingBlock["signature"] = sig
+								}
+								contentBlocks = append(contentBlocks, thinkingBlock)
+							} else {
+								contentBlocks = append(contentBlocks, map[string]any{
+									"type": "text",
+									"text": text,
+								})
+							}
 						}
 						if inlineData, ok := pm["inlineData"].(map[string]any); includeInlineData && ok {
 							mimeType, _ := inlineData["mimeType"].(string)
@@ -2815,12 +2901,18 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
 							}
 							args := fc["args"]
 							sawToolUse = true
-							contentBlocks = append(contentBlocks, map[string]any{
+							toolBlock := map[string]any{
 								"type":  "tool_use",
 								"id":    "toolu_" + randomHex(8),
 								"name":  name,
 								"input": args,
-							})
+							}
+							// functionCall 的 thoughtSignature 是 Gemini 校验工具链的凭据；
+							// 不回传给客户端就无法在下一轮回放，只能退化成 bypass sentinel。
+							if sig := asString(pm["thoughtSignature"]); sig != "" {
+								toolBlock["signature"] = sig
+							}
+							contentBlocks = append(contentBlocks, toolBlock)
 						}
 					}
 				}
@@ -3083,6 +3175,19 @@ func ensureGeminiFunctionCallThoughtSignatures(body []byte) []byte {
 	return b
 }
 
+// geminiPartIsThought 判断一个 Gemini part 是否是 thought（推理）内容。
+// 上游在不同版本里用过 bool 与字符串两种写法。
+func geminiPartIsThought(part map[string]any) bool {
+	switch v := part["thought"].(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
 func extractGeminiFinishReason(geminiResp map[string]any) string {
 	if candidates, ok := geminiResp["candidates"].([]any); ok && len(candidates) > 0 {
 		if cand, ok := candidates[0].(map[string]any); ok {
@@ -3276,14 +3381,33 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 							parts = append(parts, map[string]any{"text": text})
 						}
 					}
+				case "thinking":
+					// Claude 的 thinking 块必须映射成 Gemini 的 thought part，而不是落到 default
+					// 分支被 json.Marshal 成普通文本：后者会把整段推理（含 base64 签名）当作可见
+					// 文本重新发给模型并按输入 token 计费，且模型会把自己的推理当成对话内容。
+					// 与 pkg/antigravity/request_transformer.go 的 "thinking" 分支保持一致。
+					thinkingText, _ := bm["thinking"].(string)
+					if strings.TrimSpace(thinkingText) == "" {
+						continue
+					}
+					thoughtPart := map[string]any{
+						"text":    thinkingText,
+						"thought": true,
+					}
+					if sig := geminiReplayableThoughtSignature(bm["signature"]); sig != "" {
+						thoughtPart["thoughtSignature"] = sig
+					}
+					parts = append(parts, thoughtPart)
+				case "redacted_thinking":
+					// 上游加密的不透明块，Gemini 无法解读；透传只会浪费 token。
+					continue
 				case "tool_use":
 					id, _ := bm["id"].(string)
 					name, _ := bm["name"].(string)
 					if strings.TrimSpace(id) != "" && strings.TrimSpace(name) != "" {
 						toolUseIDToName[id] = name
 					}
-					signature, _ := bm["signature"].(string)
-					signature = strings.TrimSpace(signature)
+					signature := geminiReplayableThoughtSignature(bm["signature"])
 					if signature == "" {
 						signature = geminiDummyThoughtSignature
 					}
@@ -3308,6 +3432,10 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 							},
 						},
 					})
+					// tool_result 里的图片（截图类工具的主要产物）在 functionResponse
+					// 里无处安放，extractClaudeContentText 只取 text 块。作为同一轮的
+					// inlineData part 补发，否则多模态工具结果被静默丢弃。
+					parts = append(parts, extractClaudeContentImageParts(bm["content"])...)
 				case "image":
 					if src, ok := bm["source"].(map[string]any); ok {
 						if srcType, _ := src["type"].(string); srcType == "base64" {
@@ -3364,6 +3492,39 @@ func extractClaudeContentText(v any) string {
 		b, _ := json.Marshal(t)
 		return string(b)
 	}
+}
+
+// extractClaudeContentImageParts 从 Anthropic content 块数组里取出 base64 图片，
+// 转成 Gemini inlineData part。仅支持 base64 source：url source 需要网关代取，
+// 不在本转换层的职责内。
+func extractClaudeContentImageParts(v any) []any {
+	blocks, ok := v.([]any)
+	if !ok || len(blocks) == 0 {
+		return nil
+	}
+	var out []any
+	for _, block := range blocks {
+		bm, ok := block.(map[string]any)
+		if !ok || asString(bm["type"]) != "image" {
+			continue
+		}
+		src, ok := bm["source"].(map[string]any)
+		if !ok || asString(src["type"]) != "base64" {
+			continue
+		}
+		mediaType := asString(src["media_type"])
+		data := asString(src["data"])
+		if mediaType == "" || data == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"inlineData": map[string]any{
+				"mimeType": mediaType,
+				"data":     data,
+			},
+		})
+	}
+	return out
 }
 
 func convertClaudeToolsToGeminiTools(tools any) []any {
@@ -3554,10 +3715,108 @@ func convertClaudeGenerationConfig(req map[string]any) map[string]any {
 	if stopSeq, ok := req["stop_sequences"].([]any); ok && len(stopSeq) > 0 {
 		out["stopSequences"] = stopSeq
 	}
+	if topK, ok := asInt(req["top_k"]); ok && topK > 0 {
+		out["topK"] = topK
+	}
+	if tc := convertClaudeThinkingToGeminiThinkingConfig(req["thinking"], asString(req["model"])); tc != nil {
+		out["thinkingConfig"] = tc
+	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// convertClaudeThinkingToGeminiThinkingConfig 把 Anthropic 的 thinking 配置映射为 Gemini
+// 的 thinkingConfig。不做映射时客户端请求的 extended thinking 会被静默丢弃：客户端既拿不到
+// thought summary（thinking 面板为空），也无法控制 thinking 预算，与直连 Gemini 的体验不一致。
+//
+// thinking.type=disabled 时返回 nil：includeThoughts 默认即为 false，而部分 Gemini 3 模型
+// 不接受 thinkingBudget=0，显式下发反而会 400。
+func convertClaudeThinkingToGeminiThinkingConfig(v any, model string) map[string]any {
+	m, ok := v.(map[string]any)
+	if !ok || m == nil {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(asString(m["type"]))) {
+	case "enabled", "adaptive":
+	default:
+		return nil
+	}
+	if !geminiModelSupportsThinkingConfig(model) {
+		return nil
+	}
+	out := map[string]any{"includeThoughts": true}
+	if budget, ok := asInt(m["budget_tokens"]); ok && budget > 0 {
+		out["thinkingBudget"] = clampGeminiThinkingBudget(budget, model)
+	}
+	return out
+}
+
+// clampGeminiThinkingBudget 把 Anthropic 的 budget_tokens 收敛到目标 Gemini 模型接受的
+// thinkingBudget 区间。Anthropic 侧允许的预算（可到 64k 以上）超出 Gemini 上限时上游直接
+// 400，代价是一次全量上下文重传——恰好发生在用户要求深度思考的请求上。
+//
+// 区间取自各模型族公开的 thinkingBudget 范围；未知模型族只做一个保守上限，
+// 避免白名单缺失时新模型反而被卡住。
+func clampGeminiThinkingBudget(budget int, model string) int {
+	minBudget, maxBudget := 0, 32768
+	switch lower := strings.ToLower(strings.TrimSpace(model)); {
+	case strings.Contains(lower, "flash-lite"):
+		minBudget, maxBudget = 512, 24576
+	case strings.Contains(lower, "flash"):
+		minBudget, maxBudget = 0, 24576
+	case strings.Contains(lower, "pro"):
+		minBudget, maxBudget = 128, 32768
+	}
+	if budget < minBudget {
+		return minBudget
+	}
+	if budget > maxBudget {
+		return maxBudget
+	}
+	return budget
+}
+
+// geminiModelSupportsThinkingConfig 只排除已知不支持 thinkingConfig 的旧模型族，未知模型
+// 一律放行，避免新模型上线当天因白名单缺失而失去 thinking 能力。
+func geminiModelSupportsThinkingConfig(model string) bool {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	if lower == "" {
+		return true
+	}
+	for _, legacy := range []string{"gemini-1.0", "gemini-1.5", "gemini-2.0"} {
+		if strings.Contains(lower, legacy) {
+			return false
+		}
+	}
+	return true
+}
+
+// geminiReplayableThoughtSignature 返回可以安全回放给 Gemini 上游的 thoughtSignature。
+//
+// 历史里的签名不一定由 Gemini 签发：composite 分组会在同一会话内按模型切换上游，客户端
+// transcript 中可能混入 Anthropic 签发的 thinking signature。把 Anthropic 签名当作
+// thoughtSignature 发给 Gemini 会触发 INVALID_ARGUMENT 400，随后走 signature 重试链路
+// 把整段推理降级成文本——既慢又白烧 token。
+//
+// 这里只做零成本的信封判别，不解码 payload：base64 首字符等于首字节右移两位，因此
+// 'C'（0x08，Claude CAIS 信封）与 'R'（0x45，Claude 双层 base64 信封）是 Anthropic 独有的
+// 起始字符；Gemini 已知信封为 protobuf field-2（0x12 -> 'E'）或 ascii uuid（'M'/'N'/'O'/'Y'/'Z'）。
+// 判定不出来的一律按可回放处理，保持既有行为。
+func geminiReplayableThoughtSignature(v any) string {
+	sig := strings.TrimSpace(asString(v))
+	if sig == "" {
+		return ""
+	}
+	if sig == geminiDummyThoughtSignature {
+		return sig
+	}
+	switch sig[0] {
+	case 'C', 'R':
+		return ""
+	}
+	return sig
 }
 
 func (s *GeminiMessagesCompatService) extractImageInputSize(body []byte) string {

@@ -71,8 +71,10 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 	case "generateContent", "streamGenerateContent":
 		// ok
 	case "countTokens":
-		// 直接返回空值，不透传上游
-		c.JSON(http.StatusOK, map[string]any{"totalTokens": 0})
+		// Antigravity 上游没有 countTokens 端点，只能本地估算。
+		// 这里必须给出真实量级：客户端用 countTokens 判断何时触发压缩，
+		// 恒定返回 0 会让它认为上下文永远是空的，压缩永不触发，直到上游硬报错。
+		c.JSON(http.StatusOK, map[string]any{"totalTokens": estimateGeminiCountTokens(body)})
 		return &ForwardResult{
 			RequestID:    "",
 			Usage:        ClaudeUsage{},

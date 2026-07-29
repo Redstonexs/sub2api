@@ -595,6 +595,125 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 	}
 }
 
+// Claude 的 thinking 块以前会掉进 default 分支被 json.Marshal 成普通文本，
+// 把整段推理和 base64 签名当作可见文本重新计费，并让模型把自己的推理当成对话内容。
+func TestConvertClaudeMessagesToGeminiGenerateContent_MapsThinkingToThoughtPart(t *testing.T) {
+	claudeReq := map[string]any{
+		"model":      "gemini-3-pro-preview",
+		"max_tokens": 64,
+		"messages": []any{
+			map[string]any{"role": "user", "content": "hi"},
+			map[string]any{
+				"role": "assistant",
+				"content": []any{
+					map[string]any{
+						"type":      "thinking",
+						"thinking":  "step one then step two",
+						"signature": "EqQBdGhpcw",
+					},
+					map[string]any{"type": "redacted_thinking", "data": "AAAAopaque"},
+					map[string]any{"type": "text", "text": "done"},
+				},
+			},
+		},
+	}
+	b, _ := json.Marshal(claudeReq)
+
+	out, err := convertClaudeMessagesToGeminiGenerateContent(b)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(out, &got))
+	contents, _ := got["contents"].([]any)
+	require.Len(t, contents, 2)
+	modelTurn, _ := contents[1].(map[string]any)
+	parts, _ := modelTurn["parts"].([]any)
+	require.Len(t, parts, 2, "thinking -> thought part, redacted_thinking dropped, text kept")
+
+	thoughtPart, _ := parts[0].(map[string]any)
+	require.Equal(t, "step one then step two", thoughtPart["text"])
+	require.Equal(t, true, thoughtPart["thought"])
+	require.Equal(t, "EqQBdGhpcw", thoughtPart["thoughtSignature"])
+
+	textPart, _ := parts[1].(map[string]any)
+	require.Equal(t, "done", textPart["text"])
+	require.Nil(t, textPart["thought"])
+
+	require.NotContains(t, string(out), "redacted_thinking",
+		"不透明加密块必须丢弃，而不是当作文本回传")
+	require.NotContains(t, string(out), `\"type\":\"thinking\"`,
+		"thinking 块不得被序列化成 JSON 文本")
+}
+
+func TestConvertClaudeMessagesToGeminiGenerateContent_DropsAnthropicMintedSignature(t *testing.T) {
+	// composite 分组会在同一会话内切换上游：Anthropic 签发的签名不能当作
+	// thoughtSignature 发给 Gemini，否则触发 INVALID_ARGUMENT 400 + 全量重试。
+	claudeReq := map[string]any{
+		"model": "gemini-3-pro-preview",
+		"messages": []any{
+			map[string]any{
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "thinking", "thinking": "reasoned", "signature": "CkoIBRgCIkDd"},
+					map[string]any{"type": "tool_use", "id": "toolu_1", "name": "read", "input": map[string]any{}, "signature": "RXFRQkNrWUlC"},
+				},
+			},
+		},
+	}
+	b, _ := json.Marshal(claudeReq)
+
+	out, err := convertClaudeMessagesToGeminiGenerateContent(b)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(out, &got))
+	parts, _ := got["contents"].([]any)[0].(map[string]any)["parts"].([]any)
+	require.Len(t, parts, 2)
+
+	thoughtPart, _ := parts[0].(map[string]any)
+	require.Nil(t, thoughtPart["thoughtSignature"], "Claude CAIS 信封签名不得回放给 Gemini")
+
+	toolPart, _ := parts[1].(map[string]any)
+	require.Equal(t, geminiDummyThoughtSignature, toolPart["thoughtSignature"],
+		"functionCall 缺少可回放签名时回落到 bypass sentinel")
+}
+
+func TestGeminiReplayableThoughtSignature(t *testing.T) {
+	require.Equal(t, "", geminiReplayableThoughtSignature(nil))
+	require.Equal(t, "", geminiReplayableThoughtSignature("   "))
+	require.Equal(t, geminiDummyThoughtSignature, geminiReplayableThoughtSignature(geminiDummyThoughtSignature))
+	// Gemini protobuf field-2 信封（0x12 -> 'E'）与 ascii uuid 信封均可回放。
+	require.Equal(t, "EqQBZ2VtaW5p", geminiReplayableThoughtSignature("EqQBZ2VtaW5p"))
+	require.Equal(t, "NGE1YjZjN2Q", geminiReplayableThoughtSignature("NGE1YjZjN2Q"))
+	// Claude CAIS（0x08 -> 'C'）与 Claude 双层 base64（0x45 -> 'R'）必须拒绝。
+	require.Equal(t, "", geminiReplayableThoughtSignature("CkoIBRgCIkDd"))
+	require.Equal(t, "", geminiReplayableThoughtSignature("RXFRQkNrWUlC"))
+}
+
+func TestConvertClaudeThinkingToGeminiThinkingConfig(t *testing.T) {
+	require.Nil(t, convertClaudeThinkingToGeminiThinkingConfig(nil, "gemini-3-pro-preview"))
+	require.Nil(t, convertClaudeThinkingToGeminiThinkingConfig(
+		map[string]any{"type": "disabled"}, "gemini-3-pro-preview"))
+
+	got := convertClaudeThinkingToGeminiThinkingConfig(
+		map[string]any{"type": "enabled", "budget_tokens": float64(12000)}, "gemini-3-pro-preview")
+	require.Equal(t, map[string]any{"includeThoughts": true, "thinkingBudget": 12000}, got)
+
+	// 超出目标模型上限的预算必须收敛，否则上游 400 并触发一次全量上下文重传。
+	got = convertClaudeThinkingToGeminiThinkingConfig(
+		map[string]any{"type": "enabled", "budget_tokens": float64(64000)}, "gemini-3-pro-preview")
+	require.Equal(t, map[string]any{"includeThoughts": true, "thinkingBudget": 32768}, got)
+
+	// 预算缺省时只请求 thought summary，不强加预算。
+	got = convertClaudeThinkingToGeminiThinkingConfig(
+		map[string]any{"type": "adaptive"}, "gemini-3-flash")
+	require.Equal(t, map[string]any{"includeThoughts": true}, got)
+
+	// 已知不支持 thinkingConfig 的旧模型族不下发该字段。
+	require.Nil(t, convertClaudeThinkingToGeminiThinkingConfig(
+		map[string]any{"type": "enabled", "budget_tokens": float64(1024)}, "gemini-2.0-flash"))
+}
+
 func TestEnsureGeminiFunctionCallThoughtSignatures_InsertsWhenMissing(t *testing.T) {
 	geminiReq := map[string]any{
 		"contents": []any{
@@ -1042,4 +1161,135 @@ func parseAnthropicContentBlockEvents(t *testing.T, raw string) []anthropicConte
 		})
 	}
 	return events
+}
+
+func TestConvertGeminiToClaudeMessage_MapsThoughtPartToThinkingBlock(t *testing.T) {
+	// thought part 以前被当作普通 text 返回：模型的内部推理会混进可见答案，
+	// 且 functionCall 的 thoughtSignature 完全丢失，客户端下一轮无法回放。
+	geminiResp := map[string]any{
+		"candidates": []any{
+			map[string]any{
+				"content": map[string]any{
+					"parts": []any{
+						map[string]any{"text": "let me think", "thought": true, "thoughtSignature": "EqQBc2ln"},
+						map[string]any{"text": "the answer"},
+						map[string]any{
+							"functionCall":     map[string]any{"name": "read_file", "args": map[string]any{"p": "a"}},
+							"thoughtSignature": "EqQBdG9vbA",
+						},
+					},
+				},
+				"finishReason": "STOP",
+			},
+		},
+	}
+	raw, _ := json.Marshal(geminiResp)
+
+	msg, _ := convertGeminiToClaudeMessage(geminiResp, "gemini-3-pro-preview", raw, false)
+
+	blocks, _ := msg["content"].([]any)
+	require.Len(t, blocks, 3)
+
+	thinking, _ := blocks[0].(map[string]any)
+	require.Equal(t, "thinking", thinking["type"])
+	require.Equal(t, "let me think", thinking["thinking"])
+	require.Equal(t, "EqQBc2ln", thinking["signature"])
+
+	text, _ := blocks[1].(map[string]any)
+	require.Equal(t, "text", text["type"])
+	require.Equal(t, "the answer", text["text"])
+
+	tool, _ := blocks[2].(map[string]any)
+	require.Equal(t, "tool_use", tool["type"])
+	require.Equal(t, "EqQBdG9vbA", tool["signature"],
+		"functionCall 的 thoughtSignature 必须回传，否则下一轮只能用 bypass sentinel")
+	require.Equal(t, "tool_use", msg["stop_reason"])
+}
+
+func TestGeminiPartIsThought(t *testing.T) {
+	require.True(t, geminiPartIsThought(map[string]any{"thought": true}))
+	require.True(t, geminiPartIsThought(map[string]any{"thought": "true"}))
+	require.False(t, geminiPartIsThought(map[string]any{"thought": false}))
+	require.False(t, geminiPartIsThought(map[string]any{}))
+	require.False(t, geminiPartIsThought(map[string]any{"thought": 1}))
+}
+
+func TestConvertClaudeMessagesToGeminiGenerateContent_PreservesToolResultImages(t *testing.T) {
+	// 截图类工具的主要产物是图片；extractClaudeContentText 只取 text 块，
+	// 不补发 inlineData 就等于把多模态工具结果静默丢掉。
+	claudeReq := map[string]any{
+		"model": "gemini-3-pro-preview",
+		"messages": []any{
+			map[string]any{
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "tool_use", "id": "toolu_1", "name": "screenshot", "input": map[string]any{}},
+				},
+			},
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{
+						"type":        "tool_result",
+						"tool_use_id": "toolu_1",
+						"content": []any{
+							map[string]any{"type": "text", "text": "captured"},
+							map[string]any{
+								"type":   "image",
+								"source": map[string]any{"type": "base64", "media_type": "image/png", "data": "aGVsbG8="},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	b, _ := json.Marshal(claudeReq)
+
+	out, err := convertClaudeMessagesToGeminiGenerateContent(b)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(out, &got))
+	contents, _ := got["contents"].([]any)
+	require.Len(t, contents, 2)
+	userTurn, _ := contents[1].(map[string]any)
+	parts, _ := userTurn["parts"].([]any)
+	require.Len(t, parts, 2, "functionResponse + inlineData")
+
+	fnPart, _ := parts[0].(map[string]any)
+	require.Contains(t, fnPart, "functionResponse")
+
+	imgPart, _ := parts[1].(map[string]any)
+	inline, _ := imgPart["inlineData"].(map[string]any)
+	require.Equal(t, "image/png", inline["mimeType"])
+	require.Equal(t, "aGVsbG8=", inline["data"])
+}
+
+func TestExtractClaudeContentImageParts(t *testing.T) {
+	require.Nil(t, extractClaudeContentImageParts("plain string"))
+	require.Nil(t, extractClaudeContentImageParts([]any{
+		map[string]any{"type": "text", "text": "no images"},
+	}))
+	// url source 需要网关代取，不在转换层职责内。
+	require.Nil(t, extractClaudeContentImageParts([]any{
+		map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": "https://x/y.png"}},
+	}))
+	require.Len(t, extractClaudeContentImageParts([]any{
+		map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/jpeg", "data": "Zm9v"}},
+	}), 1)
+}
+
+func TestClampGeminiThinkingBudget(t *testing.T) {
+	// pro: 128..32768
+	require.Equal(t, 128, clampGeminiThinkingBudget(1, "gemini-3-pro-preview"))
+	require.Equal(t, 20000, clampGeminiThinkingBudget(20000, "gemini-3-pro-preview"))
+	require.Equal(t, 32768, clampGeminiThinkingBudget(64000, "gemini-3-pro-preview"))
+	// flash: 0..24576
+	require.Equal(t, 24576, clampGeminiThinkingBudget(64000, "gemini-2.5-flash"))
+	// flash-lite 有下限
+	require.Equal(t, 512, clampGeminiThinkingBudget(100, "gemini-2.5-flash-lite"))
+	// 未知模型族只做保守上限，不设下限，避免白名单缺失卡住新模型
+	require.Equal(t, 1, clampGeminiThinkingBudget(1, "gemini-9-experimental"))
+	require.Equal(t, 32768, clampGeminiThinkingBudget(99999, "gemini-9-experimental"))
 }

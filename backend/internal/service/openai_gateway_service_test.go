@@ -2636,7 +2636,8 @@ func TestNormalizeOpenAICompactRequestBodyPreservesCurrentCodexPayloadFields(t *
 	require.Equal(t, "resp_123", gjson.GetBytes(normalized, "previous_response_id").String())
 	require.False(t, gjson.GetBytes(normalized, "store").Exists())
 	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
-	require.False(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
+	// prompt_cache_key 保留：compact 是全会话最长上下文的一次调用，剥掉会整体 cache-cold。
+	require.Equal(t, "cache_123", gjson.GetBytes(normalized, "prompt_cache_key").String())
 }
 
 func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *testing.T) {

@@ -1848,3 +1848,16 @@ func TestMessageStartSSE_StopReasonIsJSONNull(t *testing.T) {
 	require.Contains(t, sse, `"stop_reason":null`)
 	require.NotContains(t, sse, `"stop_reason":""`)
 }
+
+func TestAnthropicThinkingToEffort_InvertsDefaultThinkingBudget(t *testing.T) {
+	// 反向映射 defaultThinkingBudget 的档位，保证 Anthropic→Responses→Anthropic
+	// 往返回到出发档位。该函数当前未接入 AnthropicToResponses（见其注释）。
+	for _, effort := range []string{"low", "medium", "high", "max"} {
+		budget := defaultThinkingBudget(effort)
+		got := AnthropicThinkingToEffort(&AnthropicThinking{Type: "enabled", BudgetTokens: budget})
+		assert.Equalf(t, effort, got, "round trip for effort %s (budget %d)", effort, budget)
+	}
+	assert.Equal(t, "none", AnthropicThinkingToEffort(&AnthropicThinking{Type: "disabled"}))
+	assert.Equal(t, "medium", AnthropicThinkingToEffort(&AnthropicThinking{Type: "adaptive"}))
+	assert.Equal(t, "medium", AnthropicThinkingToEffort(nil))
+}

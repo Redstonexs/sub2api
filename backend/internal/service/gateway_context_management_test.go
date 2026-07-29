@@ -168,6 +168,42 @@ func TestComputeFinalAnthropicBeta_OAuthMimic_IgnoresClientBeta(t *testing.T) {
 		"mimic 路径必须忽略客户端 anthropic-beta header")
 }
 
+func TestComputeFinalAnthropicBeta_OAuthMimic_InheritsClientCapabilityBetas(t *testing.T) {
+	// mimic 路径必须继承客户端显式请求的能力型 beta，否则 1M 上下文 / 细粒度工具流式
+	// 被静默丢弃，且管理端 Beta 策略里针对这些 token 的 pass 规则永远不生效。
+	s := newTestGatewayServiceForBeta(false)
+	hdr := http.Header{}
+	hdr.Set("anthropic-beta", "context-1m-2025-08-07,fine-grained-tool-streaming-2025-05-14,custom-experimental-beta")
+
+	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-sonnet-5", hdr, []byte(`{}`), nil)
+
+	require.True(t, ok)
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaContext1M),
+		"客户端显式请求 1M 上下文时，mimic 路径必须继承该 beta")
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaFineGrainedToolStreaming))
+	require.False(t, anthropicBetaTokensContains(final, "custom-experimental-beta"),
+		"未知 beta 仍必须被丢弃，避免上游判第三方客户端")
+	for _, beta := range claude.FullClaudeCodeMimicryBetas() {
+		require.Truef(t, anthropicBetaTokensContains(final, beta),
+			"继承能力 beta 不能挤掉完整 Claude Code mimicry 集合，缺少 %s", beta)
+	}
+}
+
+func TestComputeFinalAnthropicBeta_OAuthMimic_CapabilityBetaStillHonorsDropSet(t *testing.T) {
+	// 继承 != 绕过管理端策略：drop set 命中的 token 仍然要被过滤掉。
+	s := newTestGatewayServiceForBeta(false)
+	hdr := http.Header{}
+	hdr.Set("anthropic-beta", claude.BetaContext1M)
+	dropSet := map[string]struct{}{claude.BetaContext1M: {}}
+
+	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-opus-4-6", hdr, []byte(`{}`), dropSet)
+
+	require.True(t, ok)
+	require.False(t, anthropicBetaTokensContains(final, claude.BetaContext1M),
+		"Beta 策略过滤 context-1m 时，mimic 路径继承的同名 token 也必须被丢弃")
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaClaudeCode))
+}
+
 func TestComputeFinalAnthropicBeta_OAuthTransparent_NonHaiku_PreservesClientContextManagement(t *testing.T) {
 	// 真 CC 客户端透传：客户端 header 中的 context-management beta 必须保留
 	s := newTestGatewayServiceForBeta(false)

@@ -49,6 +49,29 @@ func canonicalizeOpenAIModelAliasSpelling(model string) string {
 	return normalized
 }
 
+// knownOpenAICodexModelVersions 是兜底重写分支允许处理的 gpt 版本号。
+// 新增一个上游已支持的版本时在这里登记；未登记的版本走透传而不是被折叠成旧模型。
+var knownOpenAICodexModelVersions = map[string]struct{}{
+	"5": {}, "5.0": {}, "5.1": {}, "5.2": {},
+	"5.3": {}, "5.4": {}, "5.5": {}, "5.6": {},
+}
+
+// openAICodexModelVersionToken 从归一化后的模型名里取出 "gpt-" 之后的版本号
+// （如 "gpt-5.6-sol" -> "5.6"）。不含 "gpt-" 前缀（如裸 "codex"）时返回 ""，
+// 由调用方保持原有的别名行为。
+func openAICodexModelVersionToken(normalized string) string {
+	idx := strings.Index(normalized, "gpt-")
+	if idx < 0 {
+		return ""
+	}
+	rest := normalized[idx+len("gpt-"):]
+	end := 0
+	for end < len(rest) && (rest[end] == '.' || (rest[end] >= '0' && rest[end] <= '9')) {
+		end++
+	}
+	return strings.TrimSuffix(rest[:end], ".")
+}
+
 func normalizeKnownOpenAICodexModel(model string) string {
 	normalized := canonicalizeOpenAIModelAliasSpelling(model)
 	if normalized == "" {
@@ -61,6 +84,15 @@ func normalizeKnownOpenAICodexModel(model string) string {
 	if strings.HasSuffix(normalized, "-openai-compact") {
 		if mapped := getNormalizedCodexModel(strings.TrimSuffix(normalized, "-openai-compact")); mapped != "" {
 			return mapped
+		}
+	}
+
+	// 未知版本号（新发布的 gpt-5.7 / gpt-6 等）必须原样透传给上游判定。
+	// 否则下面的 Contains("gpt-5") / Contains("codex") 兜底分支会在新模型发布当天
+	// 把它静默重写成旧模型：用户拿到的是旧模型的回答，没有任何报错提示。
+	if version := openAICodexModelVersionToken(normalized); version != "" {
+		if _, known := knownOpenAICodexModelVersions[version]; !known {
+			return ""
 		}
 	}
 
