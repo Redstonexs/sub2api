@@ -333,7 +333,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.Contains(t, w2.Body.String(), `nonce="nonce2"`)
 	})
 
-	t.Run("sets_etag_header", func(t *testing.T) {
+	t.Run("sets_etag_header_when_csp_disabled", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
 		}
@@ -344,7 +344,6 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set(middleware.CSPNonceKey, "nonce123")
 
 		server.serveIndexHTML(c)
 
@@ -354,7 +353,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.True(t, strings.HasSuffix(etag, `"`))
 	})
 
-	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
+	t.Run("returns_304_for_matching_etag_when_csp_disabled", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
 		}
@@ -364,10 +363,6 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		// Use a real router for proper 304 handling
 		router := gin.New()
-		router.Use(func(c *gin.Context) {
-			c.Set(middleware.CSPNonceKey, "test-nonce")
-			c.Next()
-		})
 		router.Use(server.Middleware())
 
 		// First request to populate cache and get ETag
@@ -398,11 +393,51 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set(middleware.CSPNonceKey, "nonce123")
 
 		server.serveIndexHTML(c)
 
-		assert.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
+		assert.Equal(t, indexHTMLCacheControl, w.Header().Get("Cache-Control"))
+	})
+
+	// 带 CSP nonce 的首页正文与响应头一一绑定，任何缓存重放都会让正文里的 nonce 过期，
+	// 页面上全部内联脚本（含注入 window.CAP_SCRIPT_NONCE 的那段）被浏览器拦掉，
+	// 进而让 Cap 验证码的 instrumentation srcdoc iframe 报 script-src 违规。
+	t.Run("nonced_html_is_never_stored_or_revalidated", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		nonce := "nonce-request-1"
+		router.Use(func(c *gin.Context) {
+			c.Set(middleware.CSPNonceKey, nonce)
+			c.Next()
+		})
+		router.Use(server.Middleware())
+
+		w1 := httptest.NewRecorder()
+		router.ServeHTTP(w1, httptest.NewRequest(http.MethodGet, "/", nil))
+
+		require.Equal(t, http.StatusOK, w1.Code)
+		assert.Equal(t, noncedIndexHTMLCacheControl, w1.Header().Get("Cache-Control"))
+		// No ETag means no conditional request can ever be built for this body.
+		assert.Empty(t, w1.Header().Get("ETag"))
+		assert.Contains(t, w1.Body.String(), `nonce="nonce-request-1"`)
+
+		// Even a client that kept an ETag from an earlier (CSP-disabled) response must get
+		// a full body carrying the current request's nonce — never a 304.
+		nonce = "nonce-request-2"
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+		req2.Header.Set("If-None-Match", `"stale-etag"`)
+		router.ServeHTTP(w2, req2)
+
+		assert.Equal(t, http.StatusOK, w2.Code)
+		assert.Contains(t, w2.Body.String(), `nonce="nonce-request-2"`)
+		assert.NotContains(t, w2.Body.String(), "nonce-request-1")
 	})
 
 	t.Run("fallback_on_settings_error", func(t *testing.T) {
