@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -135,7 +134,14 @@ func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep
 	}
 
 	itemType, _ := inputItem["type"].(string)
-	if strings.TrimSpace(itemType) != "reasoning" {
+	switch strings.TrimSpace(itemType) {
+	case "compaction", "compaction_summary":
+		if _, encrypted := inputItem["encrypted_content"]; encrypted {
+			return nil, true, false
+		}
+		return item, false, true
+	case "reasoning":
+	default:
 		return item, false, true
 	}
 
@@ -380,59 +386,70 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 	return uuid.NewString()
 }
 
+// openAIResponsesRequestPathSuffix 返回可拼接到上游 /responses URL 后面的子路径。
+// 不合规的子路径返回 errInvalidOpenAIResponsesRequestPathSuffix，由调用方直接拒绝
+// 请求，而不是静默降级成裸 /responses——否则 /responses/compact 之类的请求语义会被
+// 悄悄改写。片段校验复用 upstream_path_guard.go 的闭集允许清单（默认拒绝）。
+//
+// 这里刻意不做 TrimSpace：URL.Path 已是百分号解码后的结果，`/responses/compact%20`
+// 解码出的尾随空白本身就是不合规输入，必须拒绝而不是修剪掉。
 func openAIResponsesRequestPathSuffix(c *gin.Context) (string, error) {
-	if c == nil || c.Request == nil || c.Request.URL == nil {
+	suffix := rawOpenAIResponsesRequestPathSuffix(c)
+	if suffix == "" {
 		return "", nil
 	}
-	normalizedPath := strings.TrimRight(c.Request.URL.Path, "/")
-	if normalizedPath == "" {
-		return "", nil
+	segments := strings.Split(strings.TrimPrefix(suffix, "/"), "/")
+	if len(segments) > maxUpstreamPathSegments {
+		return "", errInvalidOpenAIResponsesRequestPathSuffix
 	}
-	idx := strings.Index(normalizedPath, "/responses")
-	if idx < 0 {
-		return "", nil
-	}
-	suffix := normalizedPath[idx+len("/responses"):]
-	if suffix == "" || suffix == "/" {
-		return "", nil
-	}
-	if !strings.HasPrefix(suffix, "/") {
-		return "", nil
-	}
-	for _, segment := range strings.Split(strings.TrimPrefix(suffix, "/"), "/") {
-		if !isSafeOpenAIResponsesRequestPathSegment(segment) {
+	for _, segment := range segments {
+		if !isSafeUpstreamPathSegment(segment) {
 			return "", errInvalidOpenAIResponsesRequestPathSuffix
 		}
 	}
 	return suffix, nil
 }
 
-func isSafeOpenAIResponsesRequestPathSegment(segment string) bool {
-	for range 4 {
-		if segment == "" || segment == "." || segment == ".." || strings.ContainsAny(segment, "\\/?#;") {
-			return false
-		}
-		for _, r := range segment {
-			if r < 0x21 || r > 0x7e {
-				return false
-			}
-		}
-		decoded, err := url.PathUnescape(segment)
-		if err != nil {
-			return false
-		}
-		if decoded == segment {
-			return true
-		}
-		segment = decoded
+// IsForwardableOpenAIResponsesRequestPath 判断入站请求携带的 /responses 子路径
+// 是否可以安全转发。路由层用它在鉴权后、调度前直接拒绝畸形子路径，与调用方各自的
+// 校验构成双重防线：即便将来新增路由漏挂守卫，构造上游 URL 时也仍会拒绝。
+func IsForwardableOpenAIResponsesRequestPath(c *gin.Context) bool {
+	_, err := openAIResponsesRequestPathSuffix(c)
+	return err == nil
+}
+
+// rawOpenAIResponsesRequestPathSuffix 仅做提取，不做任何安全判断。
+//
+// 定位 /responses 用 Index 而非 LastIndex：路径里若在首个 /responses 之后还残留
+// 另一个 /responses 标记，说明中间夹着遍历片段，必须连同整个后缀一起拒绝，而不是
+// 取最后一段把遍历片段悄悄丢掉。
+func rawOpenAIResponsesRequestPathSuffix(c *gin.Context) string {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return ""
 	}
-	return false
+	normalizedPath := strings.TrimRight(c.Request.URL.Path, "/")
+	if normalizedPath == "" {
+		return ""
+	}
+	idx := strings.Index(normalizedPath, "/responses")
+	if idx < 0 {
+		return ""
+	}
+	suffix := normalizedPath[idx+len("/responses"):]
+	if suffix == "" || suffix == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(suffix, "/") {
+		return ""
+	}
+	return suffix
 }
 
 func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {
 	trimmedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	trimmedSuffix := strings.TrimSpace(suffix)
-	if trimmedBase == "" || trimmedSuffix == "" {
+	// 兜底：调用方漏了校验时，这里也不会把不合规的片段拼进上游 URL。
+	trimmedSuffix, ok := sanitizedUpstreamPathSuffix(suffix)
+	if !ok || trimmedBase == "" || trimmedSuffix == "" {
 		return trimmedBase
 	}
 	return trimmedBase + trimmedSuffix
@@ -799,14 +816,13 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 }
 
 func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte) string {
-	model := strings.ToLower(strings.TrimSpace(reqModel))
-	if !strings.Contains(model, "codex") {
+	if !isOpenAICodexModel(reqModel) {
 		return ""
 	}
 
 	instructions := gjson.GetBytes(body, "instructions")
 	if !instructions.Exists() {
-		return "instructions_missing"
+		return ""
 	}
 	if instructions.Type != gjson.String {
 		return "instructions_not_string"
@@ -815,6 +831,10 @@ func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byt
 		return "instructions_empty"
 	}
 	return ""
+}
+
+func isOpenAICodexModel(model string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "codex")
 }
 
 // extractOpenAIReasoningEffortFromBody 按优先级传入模型候选（如 upstreamModel,

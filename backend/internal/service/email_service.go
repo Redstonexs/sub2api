@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -297,19 +298,12 @@ const smtpIOTimeout = 20 * time.Second
 
 // SendEmailWithConfig 使用指定配置发送邮件
 func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body string) error {
-	// Sanitize all SMTP header fields to prevent header injection (CR/LF removal).
-	to = sanitizeEmailHeader(to)
-	subject = sanitizeEmailHeader(subject)
-
-	from := sanitizeEmailHeader(config.From)
-	if config.FromName != "" {
-		from = fmt.Sprintf("%s <%s>", sanitizeEmailHeader(config.FromName), sanitizeEmailHeader(config.From))
+	// 报文构造交给 buildSMTPMessage：它负责地址校验、RFC 2047 主题编码、
+	// Date/Message-ID 头与 quoted-printable 正文，并统一做 CR/LF 头注入清洗。
+	message, err := buildSMTPMessage(config, to, subject, body)
+	if err != nil {
+		return err
 	}
-
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		from, to, subject, body)
-
-	auth := smtpAuth(config)
 
 	client, err := dialSMTPClient(config)
 	if err != nil {
@@ -317,7 +311,7 @@ func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body
 	}
 	defer func() { _ = client.Close() }()
 
-	return smtpDeliver(client, auth, config.From, to, []byte(msg))
+	return smtpDeliver(client, smtpAuth(config), message.envelopeFrom, message.envelopeTo, message.data)
 }
 
 // smtpSecurity describes how the SMTP transport is encrypted.
@@ -378,6 +372,10 @@ func smtpAuth(config *SMTPConfig) smtp.Auth {
 // dialSMTPClient establishes an SMTP session with dial + I/O timeouts and, on
 // the STARTTLS transport, upgrades the connection before returning. The caller
 // owns the returned client and must Close it.
+//
+// 隐式 TLS 握手若因对端以明文问候应答而失败（tls.RecordHeaderError），说明该端口
+// 其实是提交端口语义，此时自动改走"明文连接 + 强制 STARTTLS"；两条路都拿不到加密
+// 连接就报错，绝不明文继续。
 func dialSMTPClient(config *SMTPConfig) (*smtp.Client, error) {
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	security := resolveSMTPSecurity(config)
@@ -387,50 +385,49 @@ func dialSMTPClient(config *SMTPConfig) (*smtp.Client, error) {
 	}
 
 	dialer := &net.Dialer{Timeout: smtpDialTimeout}
+	tlsConfig := smtpTLSConfig(config.Host)
 
-	var conn net.Conn
-	var err error
 	if security == smtpSecurityImplicitTLS {
-		conn, err = tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
-			ServerName: config.Host,
-			MinVersion: tls.VersionTLS12, // 强制 TLS 1.2+，避免协议降级。
-		})
-	} else {
-		conn, err = dialer.Dial("tcp", addr)
-	}
-	if err != nil {
-		return nil, smtpDialError(addr, security, err)
-	}
-	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
-
-	client, err := smtp.NewClient(conn, config.Host)
-	if err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("new smtp client for %s: %w", addr, err)
-	}
-
-	if security == smtpSecuritySTARTTLS {
-		if err := startTLS(client, config.Host); err != nil {
-			_ = client.Close()
-			return nil, err
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+		if err == nil {
+			return newSMTPClient(conn, config.Host)
 		}
+		var recordErr tls.RecordHeaderError
+		if !errors.As(err, &recordErr) {
+			return nil, smtpDialError(addr, security, err)
+		}
+		// SMTP 服务器先发问候语：明文问候会让 TLS 握手立刻返回
+		// RecordHeaderError，据此可靠判定对端期望 STARTTLS。
+		return dialSMTPStartTLS(dialer, addr, config.Host, tlsConfig, true)
 	}
-	return client, nil
+
+	return dialSMTPStartTLS(dialer, addr, config.Host, tlsConfig, false)
 }
 
-// startTLS upgrades a cleartext SMTP connection when the server advertises the
-// STARTTLS extension (the EHLO required to populate the capability list is sent
-// implicitly by Extension). If STARTTLS is offered, the handshake must succeed —
-// we fail loudly rather than silently continuing in cleartext.
-func startTLS(client *smtp.Client, host string) error {
-	ok, _ := client.Extension("STARTTLS")
-	if !ok {
-		return nil
+// dialSMTPStartTLS 建立明文连接并按需升级 STARTTLS（EHLO 由 Extension 隐式发出）。
+// mandatory 为 true 时服务器必须支持 STARTTLS，否则报错；服务器一旦声明支持，
+// 握手就必须成功——宁可显式失败，也不静默退回明文。
+func dialSMTPStartTLS(dialer *net.Dialer, addr, host string, tlsConfig *tls.Config, mandatory bool) (*smtp.Client, error) {
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil, smtpDialError(addr, smtpSecuritySTARTTLS, err)
 	}
-	if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-		return fmt.Errorf("starttls upgrade with %s failed: %w", host, err)
+	client, err := newSMTPClient(conn, host)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if ok, _ := client.Extension("STARTTLS"); !ok {
+		if mandatory {
+			_ = client.Close()
+			return nil, fmt.Errorf("smtp server %s does not support STARTTLS", host)
+		}
+		return client, nil
+	}
+	if err := client.StartTLS(tlsConfig); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("starttls upgrade with %s failed: %w", host, err)
+	}
+	return client, nil
 }
 
 // smtpDeliver runs the AUTH/MAIL/RCPT/DATA exchange over an established client.
@@ -546,6 +543,28 @@ func (s *EmailService) postEmailAPI(ctx context.Context, provider, endpoint, api
 		return fmt.Errorf("%s: send failed (HTTP %d): %s", provider, resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return nil
+}
+
+// smtpTestRootCAs 仅供单元测试注入自签 CA，生产环境始终为 nil（走系统信任链）。
+var smtpTestRootCAs *x509.CertPool
+
+func smtpTLSConfig(host string) *tls.Config {
+	return &tls.Config{
+		ServerName: host,
+		// 强制 TLS 1.2+，避免协议降级导致的弱加密风险。
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    smtpTestRootCAs,
+	}
+}
+
+func newSMTPClient(conn net.Conn, host string) (*smtp.Client, error) {
+	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("new smtp client: %w", err)
+	}
+	return client, nil
 }
 
 // GenerateVerifyCode 生成6位数字验证码
@@ -714,7 +733,9 @@ func (s *EmailService) TestSMTPConnectionWithConfig(config *SMTPConfig) error {
 		}
 	}
 
-	return client.Quit()
+	// 认证成功即视为连接可用；与发送路径一致，忽略 QUIT 的非标准响应。
+	_ = client.Quit()
+	return nil
 }
 
 // GeneratePasswordResetToken generates a secure 32-byte random token (64 hex characters)

@@ -68,7 +68,9 @@ func (s *announcementUserRepoStub) GetByEmail(context.Context, string) (*User, e
 func (s *announcementUserRepoStub) GetFirstAdmin(context.Context) (*User, error) {
 	return nil, ErrUserNotFound
 }
-func (s *announcementUserRepoStub) Update(context.Context, *User) error { return nil }
+func (s *announcementUserRepoStub) Update(context.Context, *User, UserUpdateFields) error {
+	return nil
+}
 func (s *announcementUserRepoStub) Delete(context.Context, int64) error { return nil }
 func (s *announcementUserRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
 	return nil, nil
@@ -103,6 +105,12 @@ func (s *announcementUserRepoStub) UpdateUserLastActiveAt(context.Context, int64
 }
 func (s *announcementUserRepoStub) UpdateBalance(context.Context, int64, float64) error { return nil }
 func (s *announcementUserRepoStub) DeductBalance(context.Context, int64, float64) error { return nil }
+func (s *announcementUserRepoStub) AdjustBalance(context.Context, int64, float64) (BalanceChange, error) {
+	panic("unexpected AdjustBalance call")
+}
+func (s *announcementUserRepoStub) SetBalance(context.Context, int64, float64) (BalanceChange, error) {
+	panic("unexpected SetBalance call")
+}
 func (s *announcementUserRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
 func (s *announcementUserRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
 	return 0, nil

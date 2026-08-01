@@ -717,6 +717,7 @@ func ProvideAuthService(
 var ProviderSet = wire.NewSet(
 	// Core services
 	ProvideAuthService,
+	NewPasskeyService,
 	NewUserService,
 	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,

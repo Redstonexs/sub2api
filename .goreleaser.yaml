@@ -70,6 +70,7 @@ dockers_v2:
     dockerfile: Dockerfile.goreleaser
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_args:
       VERSION: '{{ .Version }}'
     platforms:

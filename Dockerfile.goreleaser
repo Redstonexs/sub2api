@@ -49,6 +49,9 @@ ARG VERSION
 COPY $TARGETPLATFORM/sub2api /app/sub2api
 RUN test -n "$VERSION" && /app/sub2api -version 2>&1 | grep -F "Sub2API ${VERSION} "
 
+# Runtime fallback resources (pricing table); loaded from ./resources/model-pricing/
+COPY --chown=sub2api:sub2api backend/resources /app/resources
+
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
 
