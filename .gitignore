@@ -134,6 +134,7 @@ AGENTS.md
 # Generated local architecture maps
 codemap.md
 .slim/
+.slim/deepwork/
 
 backend/cmd/server/server
 deploy/docker-compose.override.yml

@@ -169,9 +169,17 @@ processing is restricted to explicit trusted proxy CIDRs.
 
 The bundled `deploy/Caddyfile` sets a 64 KiB header limit, a 10-second header
 timeout, a 256 MiB absolute body limit, and overwrites forwarded addresses from
-the TCP peer. It is therefore a direct-to-Caddy baseline. Do not use its
-`{remote_host}` forwarding lines unchanged behind a CDN: all clients would be
-attributed to a CDN egress address, collapsing rejection aggregation and the
+the TCP peer. It uses no response-header mutation directives — no `header`
+outside the canonical `encode` block and no `header_down` anywhere. Its `encode`
+middleware does make the expected encoding representation transformations: it
+manages `Content-Encoding` and a correctly scoped `Vary: Accept-Encoding`, and
+it may remove `Content-Length`/`Accept-Ranges`, adapt strong ETags, or
+synthesize a `Content-Type`. The `header Content-Type` lines inside the
+`encode` block's `match` are response matchers: they select which response
+content types are compressed. They are not request matchers and are not a
+response mutation. The file is therefore a direct-to-Caddy baseline. Do not use
+its `{remote_host}` forwarding lines unchanged behind a CDN: all clients would
+be attributed to a CDN egress address, collapsing rejection aggregation and the
 invalid-auth limiter onto unrelated users.
 
 The bundled Caddy configuration leaves `flush_interval` unset so Caddy can
@@ -219,6 +227,131 @@ At a CDN/WAF, configure connection limits, header/body limits, bot challenges,
 and per-IP/ASN rates before traffic reaches the origin. Allow origin ingress
 only from CDN egress CIDRs or a private load balancer. Keep the application port
 off the public Internet.
+
+### Caching and cache policy
+
+The Go origin is the sole owner of all client-visible response headers
+relevant to delivery and cache policy: it emits `Cache-Control` and validators
+itself. The edge must not use header rewrite rules to add, delete, or override
+any such origin header; Caddy and any CDN must forward those headers verbatim
+and must not add directives of their own. Compression behavior — including the
+correctly scoped `Vary: Accept-Encoding` that Caddy's `encode` attaches to the
+responses it actually encodes (see below) — is the explicit narrow exception.
+For the bundled `deploy/Caddyfile` the constraint is absolute at the directive
+level: it contains no response-header mutation directives — no `header` outside
+the canonical `encode` matcher and no `header_down`. The `encode` middleware's
+representation transformations are the expected exception. The origin's exact
+behavior:
+
+- **Release-owned, content-addressed assets** (`/assets/*-<hash>.*`) are served
+  with `public, max-age=31536000, immutable`. A CDN may cache them long-term.
+  Never create a file under the same path in `data/public`: the origin rejects
+  overrides of immutable Vite-hashed assets because the file name is the
+  content hash, so any "override" would be a lie. Do not purge these entries on
+  a normal deploy — old HTML shells can still reference old hashes, and an
+  immutable name is never served twice with different bytes.
+- **Nonce-bearing dynamic HTML** (`/`, `/index.html`, and the SPA fallback)
+  carries `private, no-store, no-cache, must-revalidate`. The nonce is
+  per-response, so this body must never be stored or reused. Do not configure
+  cache-everything rules, an edge minimum TTL, `s-maxage`, stale-while-
+  revalidate or stale-if-error, or any CDN rule that stores this response.
+- **Mutable root/static files and allowed `data/public` overrides** are served
+  with `no-cache` plus origin validators (a strong `ETag` derived from content
+  for release-owned files, `Last-Modified` for on-disk overrides). A browser or
+  CDN may store them but must revalidate with the origin on every use; never
+  impose a minimum TTL on these paths.
+- **Unknown `/assets/` paths** are never served the SPA HTML shell. The origin
+  returns an explicit `404` with `Cache-Control: no-store`, no static ETag,
+  and a non-HTML body, so a browser, proxy, or CDN cannot store or
+  negative-cache the response under an asset-style key. Do not configure edge
+  rules that cache or synthesize responses for unknown asset paths.
+- **APIs, auth, and user-specific routes** must be CDN cache-bypassed
+  regardless of what each origin response happens to emit: there is no global
+  origin API cache policy to rely on, and per-endpoint `Cache-Control` values
+  vary and may be absent. Bypass caching for every application route outside
+  the static namespace — `/api/`, `/v1/`, `/v1beta/`, `/backend-api/`,
+  `/antigravity/`, `/setup/`, `/health`, `/models`, `/responses`,
+  `/alpha/search`, `/images/`, `/videos/`, and auth/user-specific paths. Never
+  add a generic edge cache rule for them; a blanket rule can store tokens,
+  quota state, or one user's data for another.
+
+Origin headers are authoritative:
+
+- The origin is the sole owner of all client-visible response headers relevant
+  to delivery and cache policy. Do not have Caddy or the CDN inject, strip, or
+  override any of them on responses — `Cache-Control`, `Expires`,
+  `Surrogate-Control`, `CDN-Cache-Control`, and every other delivery-relevant
+  header. For the bundled Caddyfile the constraint is not limited to
+  cache-related fields: it must not add, delete, or rewrite ANY response header
+  via Caddy's response-side `header` directive (both `header <field>` and
+  `header { ... }` forms, including the `+`/`-`/`?`/`>` field operations and
+  trailing-colon spellings such as `-Cache-Control:`) or the reverse_proxy
+  `header_down` subdirective. The strict guard in
+  `deploy/test-caddyfile-cache.sh` rejects every such directive: any `header`
+  outside the canonical `encode` block and every `header_down`, whatever field
+  name or value it carries.
+- The only `header` syntax permitted in the bundled Caddyfile is the
+  `Content-Type` line inside the canonical `encode` block's `match`. It is a
+  response matcher: it selects which response content types are compressed. It
+  is not a response-header rewrite directive and does not violate the
+  response-header policy above. There are no other `header` directives in the
+  file.
+- Caddy `header_up` and `request_header` modify only the upstream request; they
+  are request-side and are deliberately exempt from the guard.
+- The guard also rejects Caddy config dynamic environment substitutions
+  (`{$...}`), `import` directives, and line continuations so static checks
+  cannot be bypassed by deferring or splitting header directives elsewhere in
+  the configuration. Runtime placeholders such as `{remote_host}` remain
+  supported and are unaffected.
+- Altering this policy means updating the guard in
+  `deploy/test-caddyfile-cache.sh` and performing a cache/security review
+  before deployment.
+- Compression must respect `Vary: Accept-Encoding`. Caddy's `encode`
+  subdirective adds `Vary: Accept-Encoding` only to the responses it actually
+  encodes (and to 304 Not Modified responses), not to every response, and it
+  does not remove an origin-supplied `Vary`. A CDN must likewise keep the
+  header when serving compressed variants and must not strip or broaden an
+  origin `Vary`.
+- Never configure high-cardinality `Vary` keys such as `Cookie`,
+  `User-Agent`, or `Referer`: they fragment cache entries, can leak a
+  user-specific copy across tenants, and invite cache-poisoning probes.
+
+Cache-poisoning controls:
+
+- Cache only canonical hostname/path GET/HEAD representations of the static
+  assets above — never key, store, or reflect untrusted forwarding or rewrite
+  headers such as `X-Forwarded-Host`, `X-Original-URL`, or `X-Rewrite-URL`.
+- Firewall the origin to the CDN/load balancer (as above) and canonicalize the
+  host and path at the CDN: normalize scheme and host case, collapse dot
+  segments, and strip query strings the origin does not use before anything is
+  cached or forwarded.
+
+Deployment checklist for avoiding stale content:
+
+- Before a deploy, confirm the CDN has no cache-everything rule, no edge
+  minimum TTL, and no `s-maxage`/stale-serving override that could hold the
+  nonce-bearing HTML or API responses.
+- A warm CDN alone does not make a new release safe. The Go binary embeds
+  exactly one `dist` release, so the new process can serve only the new
+  content-addressed asset set. Before shifting traffic, either retain and
+  serve the complete old AND new `assets/*-<hash>.*` sets from a shared
+  versioned static origin (a bucket or CDN path that both releases keep
+  referencing), or perform an atomic/drained frontend cutover with verified
+  availability of the new assets. Old HTML shells may still reference old
+  hashes, so both sets must stay fetchable until no old shell remains in the
+  wild. Never negative-cache unknown `/assets/` paths (see above): an edge
+  rule that caches a `404` for a not-yet-served hash turns a harmless old
+  reference into a permanently broken asset.
+- After a deploy, purge only mutable paths whose bytes actually changed
+  (`/index.html`-adjacent mutable files, or `data/public` overrides you
+  replaced). Leave `assets/*-<hash>.*` untouched; old shells still reference
+  the old hashes.
+- Distinguish origin-side convergence from edge caching: admin setting changes
+  that alter generated HTML are propagated across replicas by the origin's
+  invalidation bus (CSP refresh, HTML-cache invalidation). That bus does not
+  reach the CDN, so a CDN-stored mutable copy only updates once it revalidates
+  or is purged. If an admin-visible change does not appear, check the CDN's
+  stored copy before assuming the origin failed to converge.
 
 ## DDoS boundary
 

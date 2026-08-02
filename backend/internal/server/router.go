@@ -98,6 +98,10 @@ func SetupRouter(
 	// 注册路由
 	registerRoutes(r, handlers, jwtAuth, optionalJWTAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, redisClient)
 
+	// SetOnUpdateCallback 已就绪，此时才启动跨副本 settings 失效订阅
+	// （未注入 bus 时内部为 no-op）。Stop 由 cmd/server cleanup 在 Redis 关闭前调用。
+	settingService.StartSettingsInvalidationSubscriber(context.Background())
+
 	return r
 }
 

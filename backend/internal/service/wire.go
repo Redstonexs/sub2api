@@ -628,11 +628,14 @@ func ProvideOpsIngressRejectAggregator(opsRepo OpsRepository, opsService *OpsSer
 	return aggregator
 }
 
-// ProvideSettingService wires SettingService with group reader and proxy repo.
-func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
+// ProvideSettingService wires SettingService with group reader, proxy repo, and
+// the cross-replica settings invalidation bus (injected via setter so the
+// two-argument NewSettingService stays stable for direct unit tests).
+func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config, settingsBus SettingsInvalidationBus) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
 	svc.SetDefaultSubscriptionGroupReader(groupRepo)
 	svc.SetProxyRepository(proxyRepo)
+	svc.SetSettingsInvalidationBus(settingsBus)
 	if err := svc.LoadForwardedClientIPSettings(context.Background()); err != nil {
 		logger.LegacyPrintf("service.setting", "Warning: load forwarded client IP settings failed: %v", err)
 	}
@@ -843,9 +846,16 @@ func ProvideUserPlatformQuotaUsageFlusher(cfg *config.Config, cache BillingCache
 }
 
 // ProvidePaymentConfigService wraps NewPaymentConfigService to accept the named
-// payment.EncryptionKey type instead of raw []byte, avoiding Wire ambiguity.
-func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey) *PaymentConfigService {
-	return NewPaymentConfigService(entClient, settingRepo, []byte(key))
+// payment.EncryptionKey type instead of raw []byte, avoiding Wire ambiguity,
+// and wires the optional SettingPaymentEnabled notification callback to the
+// centralized settings-change notification (local callback + cross-replica
+// publish) so a committed payment-enabled toggle converges everywhere.
+func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey, settingService *SettingService) *PaymentConfigService {
+	svc := NewPaymentConfigService(entClient, settingRepo, []byte(key))
+	if settingService != nil {
+		svc.SetOnPaymentEnabledUpdate(settingService.NotifySettingsChanged)
+	}
+	return svc
 }
 
 // ProvideBalanceNotifyService creates BalanceNotifyService

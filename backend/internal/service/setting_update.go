@@ -36,7 +36,10 @@ func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSet
 }
 
 // UpdateSettingsOmitting persists system settings, leaving the keys in omitted
-// at their stored value.
+// at their stored value. A failed post-commit cache re-read is logged and
+// best-effort: it never suppresses the settings-change notification and never
+// fails the already-committed update. The method returns nil once the write
+// committed; only persistence/validation failures surface as errors.
 func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *SystemSettings, omitted OmittedSettingKeys) error {
 	updates, err := s.buildSystemSettingsUpdates(ctx, settings)
 	if err != nil {
@@ -47,7 +50,11 @@ func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *S
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return err
 	}
-	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	// 提交成功即通知：本地 onUpdate 回调 + 跨副本 best-effort publish 恰好执行一次，
+	// 独立于 post-commit 缓存重读是否成功。重读失败（含写入后 context 取消）只记录
+	// 日志，不向上报错——已提交的更新在调用方看来必须成功，不得诱导重试。
+	_ = s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	s.NotifySettingsChanged()
 	return nil
 }
 
@@ -58,7 +65,11 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Contex
 
 // UpdateSettingsWithAuthSourceDefaultsOmitting persists system settings and
 // auth-source defaults in a single write, leaving the keys in omitted at their
-// stored value.
+// stored value. Like UpdateSettingsOmitting, a failed post-commit cache re-read
+// is logged and best-effort: it never suppresses the settings-change
+// notification and never fails the already-committed update. The method returns
+// nil once the write committed; only persistence/validation failures surface as
+// errors.
 func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings, omitted OmittedSettingKeys) error {
 	updates, err := s.buildSystemSettingsUpdates(ctx, settings)
 	if err != nil {
@@ -77,25 +88,33 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx contex
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return err
 	}
-	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	// 提交成功即通知：本地 onUpdate 回调 + 跨副本 best-effort publish 恰好执行一次，
+	// 独立于 post-commit 缓存重读是否成功。重读失败（含写入后 context 取消）只记录
+	// 日志，不向上报错——已提交的更新在调用方看来必须成功，不得诱导重试。
+	_ = s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	s.NotifySettingsChanged()
 	return nil
 }
 
 // refreshCachedSettingsAfterWrite keeps the in-process caches in step with the
 // write that just landed. A partial payload carries zero values for the fields
 // it omitted, so in that case the caches are rebuilt from storage rather than
-// from the request struct.
-func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, settings *SystemSettings, omitted OmittedSettingKeys) {
+// from the request struct. A re-read failure (including a canceled context
+// after the write) is logged and swallowed — it must never gate the
+// notification that follows a committed write, nor fail the committed update.
+// Callers assign the result to the blank identifier.
+func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, settings *SystemSettings, omitted OmittedSettingKeys) error {
 	if len(omitted) == 0 {
 		s.refreshCachedSettings(settings)
-		return
+		return nil
 	}
 	stored, err := s.GetAllSettings(ctx)
 	if err != nil {
 		slog.Warn("refresh cached settings after partial update failed", "error", err)
-		return
+		return err
 	}
 	s.refreshCachedSettings(stored)
+	return nil
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
@@ -679,9 +698,9 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	// codex_cli_only 加固策略缓存：设置更新后强制下次重载（涉及 4 个键 + JSON 解析，直接置过期）。
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
 	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})
-	if s.onUpdate != nil {
-		s.onUpdate() // Invalidate cache after settings update
-	}
+	// 注意：此处不再负责 post-commit 通知。本地 onUpdate 回调 + 跨副本 best-effort
+	// publish 由各 mutation 方法在提交成功后无条件、恰好一次地调用 NotifySettingsChanged，
+	// 与该缓存刷新的成败解耦（见 refreshCachedSettingsAfterWrite 的调用方）。
 }
 
 func (s *SettingService) defaultRewriteMessageCacheControl() bool {

@@ -434,6 +434,8 @@ func (s *SettingService) UpdateAuthSourceDefaultSettings(ctx context.Context, se
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return fmt.Errorf("update auth source default settings: %w", err)
 	}
+	// 与 refreshCachedSettings 相同的 post-commit 通知：本地回调 + 跨副本 publish。
+	s.NotifySettingsChanged()
 	return nil
 }
 

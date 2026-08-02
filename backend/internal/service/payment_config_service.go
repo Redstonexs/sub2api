@@ -204,11 +204,26 @@ type PaymentConfigService struct {
 	entClient     *dbent.Client
 	settingRepo   SettingRepository
 	encryptionKey []byte
+
+	// onPaymentEnabledUpdate is invoked only after a committed
+	// SettingPaymentEnabled write. Wired by ProvidePaymentConfigService to the
+	// centralized settings-change notification so a payment-enabled toggle
+	// invalidates the frontend HTML cache / CSP and reaches sibling replicas.
+	onPaymentEnabledUpdate func()
 }
 
 // NewPaymentConfigService creates a new PaymentConfigService.
 func NewPaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, encryptionKey []byte) *PaymentConfigService {
 	return &PaymentConfigService{entClient: entClient, settingRepo: settingRepo, encryptionKey: encryptionKey}
+}
+
+// SetOnPaymentEnabledUpdate injects an optional callback fired only after a
+// committed SettingPaymentEnabled update. Nil-safe.
+func (s *PaymentConfigService) SetOnPaymentEnabledUpdate(callback func()) {
+	if s == nil {
+		return
+	}
+	s.onPaymentEnabledUpdate = callback
 }
 
 // IsPaymentEnabled returns whether the payment system is enabled.
@@ -440,7 +455,15 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	if req.VisibleMethodWxpayEnabled != nil {
 		m[SettingPaymentVisibleMethodWxpayEnabled] = formatBoolOrEmpty(req.VisibleMethodWxpayEnabled)
 	}
-	return s.settingRepo.SetMultiple(ctx, m)
+	if err := s.settingRepo.SetMultiple(ctx, m); err != nil {
+		return err
+	}
+	// Only a committed SettingPaymentEnabled toggle triggers the notification:
+	// other payment config writes do not affect the cached frontend settings.
+	if req.Enabled != nil && s.onPaymentEnabledUpdate != nil {
+		s.onPaymentEnabledUpdate()
+	}
+	return nil
 }
 
 func formatBoolOrEmpty(v *bool) string {
