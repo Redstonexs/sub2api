@@ -480,7 +480,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			if fs.RecordProfitVeto(account.ID) == FailoverExhausted {
 				reqLog.Warn("gemini.profit_veto_attempts_exhausted", zap.Int("profit_veto_count", fs.ProfitVetoCount()))
 				markOpsRoutingCapacityLimited(c)
-				googleError(c, http.StatusServiceUnavailable, profitVetoExhaustedMessage)
+				googleError(c, http.StatusServiceUnavailable, profitVetoExhaustedText(h.cfg))
 				return
 			}
 			continue

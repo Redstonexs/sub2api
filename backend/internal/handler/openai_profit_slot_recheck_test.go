@@ -10,11 +10,14 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -147,4 +150,63 @@ func TestOpenAIResponsesRequiredCapabilityPinsImageIntentMapping(t *testing.T) {
 	require.Equal(t, service.OpenAIEndpointCapabilityResponses, openAIResponsesRequiredCapability(true, service.PlatformOpenAI))
 	require.Equal(t, service.OpenAIEndpointCapabilityChatCompletions, openAIResponsesRequiredCapability(false, service.PlatformOpenAI))
 	require.Equal(t, service.OpenAIEndpointCapabilityChatCompletions, openAIResponsesRequiredCapability(true, service.PlatformGrok))
+}
+
+// TestHandleOpenAIProfitVetoExhaustedWrites503 钉死利润否决预算耗尽时 OpenAI 侧
+// 错误出口（handleOpenAIProfitVetoExhausted，openai chat/responses/images/
+// embeddings/alpha-search 等路径共用的终态写入点）的响应形状与文案覆盖：
+// 非流式请求写出 503 + OpenAI 兼容 error 结构，message 走 profitVetoExhaustedText
+// 的覆盖语义（error_messages["503"] 优先生效，否则回退默认文案）。
+func TestHandleOpenAIProfitVetoExhaustedWrites503(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gw := &service.OpenAIGatewayService{}
+	groupID := int64(50)
+
+	newHandler := func(cfg *config.Config) *OpenAIGatewayHandler {
+		return &OpenAIGatewayHandler{
+			gatewayService:    gw,
+			cfg:               cfg,
+			concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(&fakeConcurrencyCache{}), SSEPingFormatClaude, 0),
+		}
+	}
+	newRequest := func(h *OpenAIGatewayHandler, override bool) *gin.Context {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		if override {
+			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(profitSlotTestContext(t, gw, groupID, false))
+		} else {
+			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		}
+		c.Set("_test_recorder", w)
+		return c
+	}
+	assertErrorShape := func(t *testing.T, c *gin.Context, wantMessage string) {
+		t.Helper()
+		wVal, _ := c.Get("_test_recorder")
+		w := wVal.(*httptest.ResponseRecorder)
+		require.Equal(t, http.StatusServiceUnavailable, w.Code)
+		var resp struct {
+			Error struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Equal(t, "api_error", resp.Error.Type)
+		require.Equal(t, wantMessage, resp.Error.Message)
+	}
+
+	t.Run("fallback message without 503 override", func(t *testing.T) {
+		h := newHandler(&config.Config{})
+		c := newRequest(h, false)
+		h.handleOpenAIProfitVetoExhausted(c, false, zap.NewNop(), maxProfitVetoAttempts)
+		assertErrorShape(t, c, profitVetoExhaustedMessage)
+	})
+
+	t.Run("custom 503 override wins", func(t *testing.T) {
+		h := newHandler(&config.Config{Gateway: config.GatewayConfig{ErrorMessages: map[string]string{"503": "custom profit control message"}}})
+		c := newRequest(h, false)
+		h.handleOpenAIProfitVetoExhausted(c, false, zap.NewNop(), maxProfitVetoAttempts)
+		assertErrorShape(t, c, "custom profit control message")
+	})
 }

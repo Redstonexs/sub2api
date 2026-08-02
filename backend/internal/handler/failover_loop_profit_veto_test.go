@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,4 +137,55 @@ func TestHandleSelectionExhaustedUnaffectedWithoutProfitVeto(t *testing.T) {
 
 	require.Equal(t, FailoverContinue, fs.HandleSelectionExhausted(context.Background()))
 	require.Empty(t, fs.FailedAccountIDs, "无利润否决时排除列表应被完全清空")
+}
+
+// TestProfitVetoExhaustedTextOverride 钉死 profitVetoExhaustedText 的覆盖语义：
+// 管理员配置的 error_messages["503"] 自定义文案优先生效；未配置 / 空 / 空白 /
+// 仅配置其他状态码时一律回退到 profitVetoExhaustedMessage。所有利润否决耗尽
+// 出口（CC / Responses / OpenAI / Gemini / 通用 streaming-aware）共用此 helper，
+// 保证覆盖行为一致。
+func TestProfitVetoExhaustedTextOverride(t *testing.T) {
+	const override503 = "custom profit control message"
+	tests := []struct {
+		name string
+		cfg  *config.Config
+		want string
+	}{
+		{
+			name: "nil config falls back to default",
+			cfg:  nil,
+			want: profitVetoExhaustedMessage,
+		},
+		{
+			name: "empty config falls back to default",
+			cfg:  &config.Config{},
+			want: profitVetoExhaustedMessage,
+		},
+		{
+			name: "empty error messages map falls back to default",
+			cfg:  &config.Config{Gateway: config.GatewayConfig{ErrorMessages: map[string]string{}}},
+			want: profitVetoExhaustedMessage,
+		},
+		{
+			name: "configured 503 override wins",
+			cfg:  &config.Config{Gateway: config.GatewayConfig{ErrorMessages: map[string]string{"503": override503}}},
+			want: override503,
+		},
+		{
+			name: "blank 503 override falls back to default",
+			cfg:  &config.Config{Gateway: config.GatewayConfig{ErrorMessages: map[string]string{"503": "   "}}},
+			want: profitVetoExhaustedMessage,
+		},
+		{
+			name: "unrelated status code override is ignored",
+			cfg:  &config.Config{Gateway: config.GatewayConfig{ErrorMessages: map[string]string{"502": override503}}},
+			want: profitVetoExhaustedMessage,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, profitVetoExhaustedText(tt.cfg))
+		})
+	}
 }

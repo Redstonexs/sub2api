@@ -694,6 +694,9 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	}
 	if s.cfg != nil {
 		s.cfg.SetForwardedClientIPSettings(settings.APIKeyACLTrustForwardedIP, settings.ForwardedClientIPHeaders)
+		// gateway_error_messages 运行时覆盖随每次刷新同步：nil（DB 无/空覆盖）清除
+		// 先前的覆盖并回退静态配置；非 nil 安装新的 clone-on-write 快照。
+		s.cfg.SetGatewayErrorMessages(settings.GatewayErrorMessages)
 	}
 	// codex_cli_only 加固策略缓存：设置更新后强制下次重载（涉及 4 个键 + JSON 解析，直接置过期）。
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")

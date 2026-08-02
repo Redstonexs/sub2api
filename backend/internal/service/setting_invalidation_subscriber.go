@@ -12,6 +12,11 @@ import (
 // committed.
 const settingsInvalidationPublishTimeout = 2 * time.Second
 
+// settingsInvalidationReReadTimeout bounds the best-effort DB re-read that runs
+// before the local UI/CSP callback on a remote invalidation event, so a slow or
+// unreachable DB can never block the callback indefinitely.
+const settingsInvalidationReReadTimeout = 3 * time.Second
+
 const settingsInvalidationRetryMaxBackoff = 30 * time.Second
 
 // SetSettingsInvalidationBus injects the optional Redis Pub/Sub settings
@@ -79,12 +84,26 @@ func (s *SettingService) StartSettingsInvalidationSubscriber(ctx context.Context
 	})
 }
 
-// handleRemoteSettingsInvalidation re-runs the local onUpdate callback only.
+// handleRemoteSettingsInvalidation re-reads all settings from the DB and
+// refreshes every in-process cache — including the gateway_error_messages
+// runtime snapshot — so sibling replicas converge, then re-runs the local
+// UI/CSP callback. The re-read runs under a bounded context and is best-effort:
+// a failure is logged and the callback still runs with the last known state.
 // A remote event must never be republished — the originating replica already
 // published, and republishing would create an infinite cross-replica loop.
 func (s *SettingService) handleRemoteSettingsInvalidation() {
 	if s == nil {
 		return
+	}
+	if s.settingRepo != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), settingsInvalidationReReadTimeout)
+		stored, err := s.GetAllSettings(ctx)
+		cancel()
+		if err != nil {
+			slog.Warn("failed to reload settings on remote invalidation", "error", err)
+		} else {
+			s.refreshCachedSettings(stored)
+		}
 	}
 	if s.onUpdate != nil {
 		s.onUpdate()

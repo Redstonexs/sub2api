@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"go.uber.org/zap"
@@ -51,6 +52,15 @@ const (
 // profitVetoExhaustedMessage 是利润否决次数耗尽时返回给客户端的文案。
 // 语义上等同于「无可用账号」：候选账号都不满足分组的利润约束。
 const profitVetoExhaustedMessage = "No available accounts: all candidates rejected by group profit control"
+
+// profitVetoExhaustedText 返回利润否决耗尽响应的用户提示文案：优先采用管理员
+// 通过网关错误文案配置（error_messages["503"]）配置的覆盖文案，未配置或值为
+// 空/空白时回退到 profitVetoExhaustedMessage。所有利润否决耗尽出口（CC /
+// Responses / OpenAI / Gemini / 通用 streaming-aware）统一经由本 helper 取
+// 文案，确保自定义覆盖在所有协议上行为一致。cfg 为 nil 时按未配置处理。
+func profitVetoExhaustedText(cfg *config.Config) string {
+	return config.GatewayErrorMessage(cfg, http.StatusServiceUnavailable, profitVetoExhaustedMessage)
+}
 
 // FailoverState 跨循环迭代共享的 failover 状态
 type FailoverState struct {

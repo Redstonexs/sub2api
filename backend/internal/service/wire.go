@@ -639,6 +639,11 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 	if err := svc.LoadForwardedClientIPSettings(context.Background()); err != nil {
 		logger.LegacyPrintf("service.setting", "Warning: load forwarded client IP settings failed: %v", err)
 	}
+	// 加载后台 gateway_error_messages 覆盖到 config 运行时快照。DB 无覆盖时
+	// 保持静态配置不动（LoadGatewayErrorMessages 内部按 nil/空清除处理）。
+	if err := svc.LoadGatewayErrorMessages(context.Background()); err != nil {
+		logger.LegacyPrintf("service.setting", "Warning: load gateway error messages setting failed: %v", err)
+	}
 	if err := svc.MigrateOpenAIAllowClaudeCodeCodexPluginSetting(context.Background()); err != nil {
 		logger.LegacyPrintf("service.setting", "Warning: migrate openai allow Claude Code Codex plugin setting failed: %v", err)
 	}

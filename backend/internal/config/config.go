@@ -1020,15 +1020,80 @@ type GatewayConfig struct {
 	// key 为 HTTP 状态码字符串（如 "429"、"502"），value 为覆盖后的用户提示。
 	// 未配置或值为空/空白时，使用各错误点的默认提示。
 	ErrorMessages map[string]string `mapstructure:"error_messages"`
+
+	// gatewayErrorMessagesLive 保存后台 gateway_error_messages 设置的运行时覆盖
+	// 快照。一旦通过 SetGatewayErrorMessages 发布即视为不可变（clone-on-write）；
+	// nil 表示当前无覆盖，GatewayErrorMessage 回退到上面的静态 ErrorMessages 配置。
+	// 由 SettingService 在启动加载与设置刷新时写入，跨副本通过远程失效事件收敛。
+	gatewayErrorMessagesLive *atomic.Pointer[gatewayErrorMessagesRuntimeSnapshot] `mapstructure:"-" json:"-" yaml:"-"`
+}
+
+// gatewayErrorMessagesRuntimeSnapshot 是网关错误提示映射的运行时覆盖快照。
+// 一旦通过 atomic.Pointer 发布即视为不可变；setter 使用 clone-on-write，
+// 读取方不得修改快照内的 map。
+type gatewayErrorMessagesRuntimeSnapshot struct {
+	messages map[string]string
+}
+
+// SetGatewayErrorMessages 安装网关错误提示的运行时覆盖快照（clone-on-write）。
+// 传入的 map 会被克隆，调用方后续修改不影响已发布的快照。
+// nil 或空 map 清除任何先前的覆盖，使 GatewayErrorMessage 回退到静态
+// cfg.Gateway.ErrorMessages 配置——这是 DB 中删除/清空该设置时的语义。
+func (c *Config) SetGatewayErrorMessages(messages map[string]string) {
+	if c == nil {
+		return
+	}
+	if c.Gateway.gatewayErrorMessagesLive == nil {
+		c.Gateway.gatewayErrorMessagesLive = &atomic.Pointer[gatewayErrorMessagesRuntimeSnapshot]{}
+	}
+	if len(messages) == 0 {
+		c.Gateway.gatewayErrorMessagesLive.Store(nil)
+		return
+	}
+	cloned := make(map[string]string, len(messages))
+	for key, value := range messages {
+		cloned[key] = value
+	}
+	c.Gateway.gatewayErrorMessagesLive.Store(&gatewayErrorMessagesRuntimeSnapshot{messages: cloned})
+}
+
+// GatewayErrorMessagesLive 返回当前运行时覆盖快照的克隆；无覆盖时返回 nil。
+// 返回的 map 是副本，修改它不影响已发布的快照。
+func (c *Config) GatewayErrorMessagesLive() map[string]string {
+	if c == nil {
+		return nil
+	}
+	live := c.Gateway.gatewayErrorMessagesLive
+	if live == nil {
+		return nil
+	}
+	if snapshot := live.Load(); snapshot != nil {
+		cloned := make(map[string]string, len(snapshot.messages))
+		for key, value := range snapshot.messages {
+			cloned[key] = value
+		}
+		return cloned
+	}
+	return nil
 }
 
 // GatewayErrorMessage 返回指定 HTTP 状态码对应的自定义用户提示。
-// 如果未配置、不存在或值为空/空白，则返回 defaultMessage。
+// 优先使用后台设置的运行时覆盖快照（clone-on-write，读取零锁）；
+// 未配置、不存在或值为空/空白时，回退到静态配置 cfg.Gateway.ErrorMessages，
+// 最后返回 defaultMessage。
 func GatewayErrorMessage(cfg *Config, code int, defaultMessage string) string {
 	if cfg == nil {
 		return defaultMessage
 	}
-	msg, ok := cfg.Gateway.ErrorMessages[strconv.Itoa(code)]
+	codeKey := strconv.Itoa(code)
+	if live := cfg.Gateway.gatewayErrorMessagesLive; live != nil {
+		if snapshot := live.Load(); snapshot != nil {
+			if msg, ok := snapshot.messages[codeKey]; ok && strings.TrimSpace(msg) != "" {
+				return msg
+			}
+		}
+	}
+	msg, ok := cfg.Gateway.ErrorMessages[codeKey]
 	if !ok || strings.TrimSpace(msg) == "" {
 		return defaultMessage
 	}
