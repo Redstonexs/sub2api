@@ -5,6 +5,8 @@
 import { apiClient } from '../client'
 import type {
   Announcement,
+  AnnouncementAudienceStats,
+  AnnouncementTargeting,
   AnnouncementUserReadStatus,
   BasePaginationResponse,
   CreateAnnouncementRequest,
@@ -51,6 +53,31 @@ export async function deleteAnnouncement(id: number): Promise<{ message: string 
   return data
 }
 
+/**
+ * Counts how many users would actually be emailed for the given targeting rules.
+ *
+ * POST rather than GET because the create form has unsaved nested targeting to send.
+ */
+export async function previewAudience(
+  targeting: AnnouncementTargeting,
+  options?: { signal?: AbortSignal }
+): Promise<AnnouncementAudienceStats> {
+  const { data } = await apiClient.post<AnnouncementAudienceStats>(
+    '/admin/announcements/audience-preview',
+    { targeting },
+    { signal: options?.signal }
+  )
+  return data
+}
+
+/** Sends the announcement to the acting admin's own address. */
+export async function sendTestEmail(id: number): Promise<{ message: string; recipient: string }> {
+  const { data } = await apiClient.post<{ message: string; recipient: string }>(
+    `/admin/announcements/${id}/test-email`
+  )
+  return data
+}
+
 export async function getReadStatus(
   id: number,
   page: number = 1,
@@ -80,6 +107,8 @@ const announcementsAPI = {
   create,
   update,
   delete: deleteAnnouncement,
+  previewAudience,
+  sendTestEmail,
   getReadStatus
 }
 

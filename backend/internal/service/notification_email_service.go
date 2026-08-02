@@ -485,6 +485,74 @@ func (s *NotificationEmailService) IsUnsubscribed(ctx context.Context, email, ev
 	return false, nil
 }
 
+// normalizeNotificationEmailKey is the canonical map key for a recipient address,
+// matching the normalization applied when building preference keys.
+func normalizeNotificationEmailKey(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// IsUnsubscribedBatch resolves the unsubscribe state of many recipients in one
+// settings round-trip. It is the batched equivalent of IsUnsubscribed and applies
+// the same precedence: the v2 preference key wins, the legacy key is the fallback,
+// and a recipient with neither key stored counts as subscribed.
+//
+// The returned map is keyed by normalizeNotificationEmailKey(email) and only
+// contains entries for non-blank inputs.
+func (s *NotificationEmailService) IsUnsubscribedBatch(ctx context.Context, emails []string, event string) (map[string]bool, error) {
+	info, normalizedEvent, err := s.eventInfo(event)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(emails))
+	if !info.Optional || len(emails) == 0 {
+		// Transactional events can never be unsubscribed from, so skip the lookup.
+		return out, nil
+	}
+
+	type preferenceKeys struct{ v2, legacy string }
+	byEmail := make(map[string]preferenceKeys, len(emails))
+	lookup := make([]string, 0, len(emails)*2)
+	for _, raw := range emails {
+		normalized := normalizeNotificationEmailKey(raw)
+		if normalized == "" {
+			continue
+		}
+		if _, seen := byEmail[normalized]; seen {
+			continue
+		}
+		keys := preferenceKeys{
+			v2:     notificationEmailPreferenceKey(normalizedEvent, normalized),
+			legacy: legacyNotificationEmailPreferenceKey(normalizedEvent, normalized),
+		}
+		byEmail[normalized] = keys
+		if strings.TrimSpace(keys.v2) != "" {
+			lookup = append(lookup, keys.v2)
+		}
+		if strings.TrimSpace(keys.legacy) != "" {
+			lookup = append(lookup, keys.legacy)
+		}
+	}
+	if len(lookup) == 0 {
+		return out, nil
+	}
+
+	// GetMultiple returns only the keys that exist, so a missing key is simply
+	// absent rather than an error.
+	values, err := s.settingRepo.GetMultiple(ctx, lookup)
+	if err != nil {
+		return nil, err
+	}
+
+	for email, keys := range byEmail {
+		value, ok := values[keys.v2]
+		if !ok {
+			value, ok = values[keys.legacy]
+		}
+		out[email] = ok && strings.EqualFold(strings.TrimSpace(value), "unsubscribed")
+	}
+	return out, nil
+}
+
 func (s *NotificationEmailService) Unsubscribe(ctx context.Context, token string) (NotificationEmailUnsubscribeResult, error) {
 	claims, err := s.parseUnsubscribeToken(ctx, token)
 	if err != nil {
@@ -906,101 +974,103 @@ func isSafeNotificationEmailURL(raw string) bool {
 func notificationEmailSampleVariables(locale string) map[string]string {
 	if normalizeNotificationLocale(locale) == notificationEmailLocaleChinese {
 		variables := map[string]string{
-			"site_name":            defaultSiteName,
-			"recipient_name":       "张三",
-			"recipient_email":      "user@example.com",
-			"verification_code":    "123456",
-			"expires_in_minutes":   "15",
-			"reset_url":            "https://example.com/reset-password?token=preview",
-			"subscription_group":   "Claude Pro",
-			"subscription_days":    "30",
-			"expiry_time":          "2026-06-18 12:00",
-			"days_remaining":       "3",
-			"current_balance":      "12.34",
-			"threshold":            "20.00",
-			"recharge_url":         "https://example.com/recharge",
-			"recharge_amount":      "50.00",
-			"order_id":             "1024",
-			"unsubscribe_url":      "https://example.com/unsubscribe",
-			"account_id":           "1001",
-			"account_name":         "openai-main",
-			"platform":             "openai",
-			"quota_dimension":      "每日额度",
-			"quota_used":           "80.00",
-			"quota_limit":          "100.00",
-			"quota_remaining":      "20.00",
-			"quota_threshold":      "20%",
-			"triggered_at":         "2026-05-20 12:00:00",
-			"group_name":           "默认分组",
-			"moderation_category":  "violence",
-			"moderation_score":     "0.982",
-			"violation_count":      "2",
-			"ban_threshold":        "3",
-			"rule_name":            "错误率过高",
-			"severity":             "critical",
-			"alert_status":         "firing",
-			"metric_type":          "error_rate",
-			"operator":             ">=",
-			"metric_value":         "12.50",
-			"threshold_value":      "10.00",
-			"alert_description":    "最近 10 分钟错误率超过阈值",
-			"report_name":          "日报",
-			"report_type":          "daily_summary",
-			"report_start_time":    "2026-07-18T01:00:26Z",
-			"report_end_time":      "2026-07-19T01:00:26Z",
-			"report_html":          "<h2>日报</h2><p>请求量：2,374</p>",
-			"announcement_title":   "系统维护通知",
-			"announcement_content": "本周末我们将进行计划维护，给您带来的不便敬请谅解。",
+			"site_name":                   defaultSiteName,
+			"recipient_name":              "张三",
+			"recipient_email":             "user@example.com",
+			"verification_code":           "123456",
+			"expires_in_minutes":          "15",
+			"reset_url":                   "https://example.com/reset-password?token=preview",
+			"subscription_group":          "Claude Pro",
+			"subscription_days":           "30",
+			"expiry_time":                 "2026-06-18 12:00",
+			"days_remaining":              "3",
+			"current_balance":             "12.34",
+			"threshold":                   "20.00",
+			"recharge_url":                "https://example.com/recharge",
+			"recharge_amount":             "50.00",
+			"order_id":                    "1024",
+			"unsubscribe_url":             "https://example.com/unsubscribe",
+			"account_id":                  "1001",
+			"account_name":                "openai-main",
+			"platform":                    "openai",
+			"quota_dimension":             "每日额度",
+			"quota_used":                  "80.00",
+			"quota_limit":                 "100.00",
+			"quota_remaining":             "20.00",
+			"quota_threshold":             "20%",
+			"triggered_at":                "2026-05-20 12:00:00",
+			"group_name":                  "默认分组",
+			"moderation_category":         "violence",
+			"moderation_score":            "0.982",
+			"violation_count":             "2",
+			"ban_threshold":               "3",
+			"rule_name":                   "错误率过高",
+			"severity":                    "critical",
+			"alert_status":                "firing",
+			"metric_type":                 "error_rate",
+			"operator":                    ">=",
+			"metric_value":                "12.50",
+			"threshold_value":             "10.00",
+			"alert_description":           "最近 10 分钟错误率超过阈值",
+			"report_name":                 "日报",
+			"report_type":                 "daily_summary",
+			"report_start_time":           "2026-07-18T01:00:26Z",
+			"report_end_time":             "2026-07-19T01:00:26Z",
+			"report_html":                 "<h2>日报</h2><p>请求量：2,374</p>",
+			"announcement_title":          "系统维护通知",
+			"announcement_content":        "本周末我们将进行计划维护，给您带来的不便敬请谅解。",
+			"announcement_severity_label": "重要",
 		}
 		addNotificationEmailOpsSummarySampleVariables(variables)
 		return variables
 	}
 	variables := map[string]string{
-		"site_name":            defaultSiteName,
-		"recipient_name":       "Alex",
-		"recipient_email":      "user@example.com",
-		"verification_code":    "123456",
-		"expires_in_minutes":   "15",
-		"reset_url":            "https://example.com/reset-password?token=preview",
-		"subscription_group":   "Claude Pro",
-		"subscription_days":    "30",
-		"expiry_time":          "2026-06-18 12:00",
-		"days_remaining":       "3",
-		"current_balance":      "12.34",
-		"threshold":            "20.00",
-		"recharge_url":         "https://example.com/recharge",
-		"recharge_amount":      "50.00",
-		"order_id":             "1024",
-		"unsubscribe_url":      "https://example.com/unsubscribe",
-		"account_id":           "1001",
-		"account_name":         "openai-main",
-		"platform":             "openai",
-		"quota_dimension":      "Daily quota",
-		"quota_used":           "80.00",
-		"quota_limit":          "100.00",
-		"quota_remaining":      "20.00",
-		"quota_threshold":      "20%",
-		"triggered_at":         "2026-05-20 12:00:00",
-		"group_name":           "Default group",
-		"moderation_category":  "violence",
-		"moderation_score":     "0.982",
-		"violation_count":      "2",
-		"ban_threshold":        "3",
-		"rule_name":            "High error rate",
-		"severity":             "critical",
-		"alert_status":         "firing",
-		"metric_type":          "error_rate",
-		"operator":             ">=",
-		"metric_value":         "12.50",
-		"threshold_value":      "10.00",
-		"alert_description":    "Error rate exceeded threshold in the last 10 minutes.",
-		"report_name":          "Daily summary",
-		"report_type":          "daily_summary",
-		"report_start_time":    "2026-07-18T01:00:26Z",
-		"report_end_time":      "2026-07-19T01:00:26Z",
-		"report_html":          "<h2>Daily summary</h2><p>Requests: 2,374</p>",
-		"announcement_title":   "System maintenance notice",
-		"announcement_content": "We will perform scheduled maintenance this weekend. Sorry for any inconvenience.",
+		"site_name":                   defaultSiteName,
+		"recipient_name":              "Alex",
+		"recipient_email":             "user@example.com",
+		"verification_code":           "123456",
+		"expires_in_minutes":          "15",
+		"reset_url":                   "https://example.com/reset-password?token=preview",
+		"subscription_group":          "Claude Pro",
+		"subscription_days":           "30",
+		"expiry_time":                 "2026-06-18 12:00",
+		"days_remaining":              "3",
+		"current_balance":             "12.34",
+		"threshold":                   "20.00",
+		"recharge_url":                "https://example.com/recharge",
+		"recharge_amount":             "50.00",
+		"order_id":                    "1024",
+		"unsubscribe_url":             "https://example.com/unsubscribe",
+		"account_id":                  "1001",
+		"account_name":                "openai-main",
+		"platform":                    "openai",
+		"quota_dimension":             "Daily quota",
+		"quota_used":                  "80.00",
+		"quota_limit":                 "100.00",
+		"quota_remaining":             "20.00",
+		"quota_threshold":             "20%",
+		"triggered_at":                "2026-05-20 12:00:00",
+		"group_name":                  "Default group",
+		"moderation_category":         "violence",
+		"moderation_score":            "0.982",
+		"violation_count":             "2",
+		"ban_threshold":               "3",
+		"rule_name":                   "High error rate",
+		"severity":                    "critical",
+		"alert_status":                "firing",
+		"metric_type":                 "error_rate",
+		"operator":                    ">=",
+		"metric_value":                "12.50",
+		"threshold_value":             "10.00",
+		"alert_description":           "Error rate exceeded threshold in the last 10 minutes.",
+		"report_name":                 "Daily summary",
+		"report_type":                 "daily_summary",
+		"report_start_time":           "2026-07-18T01:00:26Z",
+		"report_end_time":             "2026-07-19T01:00:26Z",
+		"report_html":                 "<h2>Daily summary</h2><p>Requests: 2,374</p>",
+		"announcement_title":          "System maintenance notice",
+		"announcement_content":        "We will perform scheduled maintenance this weekend. Sorry for any inconvenience.",
+		"announcement_severity_label": "Important",
 	}
 	addNotificationEmailOpsSummarySampleVariables(variables)
 	return variables
@@ -1171,8 +1241,13 @@ var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
 		Description: "Sent to every targeted user when an admin publishes an announcement with the email notify mode.",
 		Category:    "announcement",
 		Optional:    true,
+		// announcement_severity_label is escaped text ("Important"), not a colour: the
+		// header accent is baked into notificationEmailCard at definition time and an
+		// admin-customised stored template freezes it, and injecting a hex value into a
+		// style= attribute is exactly what notificationEmailRawHTMLAllowed denies.
+		// Widening this list only loosens validation, so no stored template breaks.
 		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...),
-			"announcement_title", "announcement_content", "unsubscribe_url"),
+			"announcement_title", "announcement_content", "announcement_severity_label", "unsubscribe_url"),
 	},
 }
 
@@ -1463,6 +1538,7 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 			Subject: "[{{site_name}}] {{announcement_title}}",
 			HTML: notificationEmailCard("#2563eb", "{{announcement_title}}", `
 <p>Hello {{recipient_name}},</p>
+<p class="muted">{{announcement_severity_label}}</p>
 <div>{{announcement_content}}</div>
 <p class="muted"><a href="{{unsubscribe_url}}">Unsubscribe from announcement emails</a></p>`),
 		},
@@ -1470,6 +1546,7 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 			Subject: "[{{site_name}}] {{announcement_title}}",
 			HTML: notificationEmailCard("#2563eb", "{{announcement_title}}", `
 <p>{{recipient_name}}，您好：</p>
+<p class="muted">{{announcement_severity_label}}</p>
 <div>{{announcement_content}}</div>
 <p class="muted"><a href="{{unsubscribe_url}}">退订公告邮件</a></p>`),
 		},

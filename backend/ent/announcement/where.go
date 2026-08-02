@@ -75,6 +75,16 @@ func NotifyMode(v string) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldNotifyMode, v))
 }
 
+// Severity applies equality check predicate on the "severity" field. It's identical to SeverityEQ.
+func Severity(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSeverity, v))
+}
+
+// ShowBanner applies equality check predicate on the "show_banner" field. It's identical to ShowBannerEQ.
+func ShowBanner(v bool) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldShowBanner, v))
+}
+
 // StartsAt applies equality check predicate on the "starts_at" field. It's identical to StartsAtEQ.
 func StartsAt(v time.Time) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldStartsAt, v))
@@ -363,6 +373,81 @@ func NotifyModeEqualFold(v string) predicate.Announcement {
 // NotifyModeContainsFold applies the ContainsFold predicate on the "notify_mode" field.
 func NotifyModeContainsFold(v string) predicate.Announcement {
 	return predicate.Announcement(sql.FieldContainsFold(FieldNotifyMode, v))
+}
+
+// SeverityEQ applies the EQ predicate on the "severity" field.
+func SeverityEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSeverity, v))
+}
+
+// SeverityNEQ applies the NEQ predicate on the "severity" field.
+func SeverityNEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldSeverity, v))
+}
+
+// SeverityIn applies the In predicate on the "severity" field.
+func SeverityIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldSeverity, vs...))
+}
+
+// SeverityNotIn applies the NotIn predicate on the "severity" field.
+func SeverityNotIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldSeverity, vs...))
+}
+
+// SeverityGT applies the GT predicate on the "severity" field.
+func SeverityGT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldSeverity, v))
+}
+
+// SeverityGTE applies the GTE predicate on the "severity" field.
+func SeverityGTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldSeverity, v))
+}
+
+// SeverityLT applies the LT predicate on the "severity" field.
+func SeverityLT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldSeverity, v))
+}
+
+// SeverityLTE applies the LTE predicate on the "severity" field.
+func SeverityLTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldSeverity, v))
+}
+
+// SeverityContains applies the Contains predicate on the "severity" field.
+func SeverityContains(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContains(FieldSeverity, v))
+}
+
+// SeverityHasPrefix applies the HasPrefix predicate on the "severity" field.
+func SeverityHasPrefix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasPrefix(FieldSeverity, v))
+}
+
+// SeverityHasSuffix applies the HasSuffix predicate on the "severity" field.
+func SeverityHasSuffix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasSuffix(FieldSeverity, v))
+}
+
+// SeverityEqualFold applies the EqualFold predicate on the "severity" field.
+func SeverityEqualFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEqualFold(FieldSeverity, v))
+}
+
+// SeverityContainsFold applies the ContainsFold predicate on the "severity" field.
+func SeverityContainsFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContainsFold(FieldSeverity, v))
+}
+
+// ShowBannerEQ applies the EQ predicate on the "show_banner" field.
+func ShowBannerEQ(v bool) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldShowBanner, v))
+}
+
+// ShowBannerNEQ applies the NEQ predicate on the "show_banner" field.
+func ShowBannerNEQ(v bool) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldShowBanner, v))
 }
 
 // TargetingIsNil applies the IsNil predicate on the "targeting" field.

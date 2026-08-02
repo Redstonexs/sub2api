@@ -13,6 +13,12 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 )
 
+// announcementActiveScanLimit bounds ListActive so a runaway number of concurrently
+// active announcements cannot turn every user page-load into an unbounded query.
+// The service layer duplicates this value to warn when the cap is reached (depguard
+// forbids service -> repository imports); keep the two in sync.
+const announcementActiveScanLimit = 500
+
 type announcementRepository struct {
 	client *dbent.Client
 }
@@ -28,6 +34,8 @@ func (r *announcementRepository) Create(ctx context.Context, a *service.Announce
 		SetContent(a.Content).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
+		SetSeverity(a.Severity).
+		SetShowBanner(a.ShowBanner).
 		SetTargeting(a.Targeting)
 
 	if a.StartsAt != nil {
@@ -69,6 +77,8 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 		SetContent(a.Content).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
+		SetSeverity(a.Severity).
+		SetShowBanner(a.ShowBanner).
 		SetTargeting(a.Targeting)
 
 	if a.StartsAt != nil {
@@ -158,6 +168,8 @@ func announcementListOrder(params pagination.PaginationParams) (string, string) 
 		return announcement.FieldStatus, sortOrder
 	case "notify_mode":
 		return announcement.FieldNotifyMode, sortOrder
+	case "severity":
+		return announcement.FieldSeverity, sortOrder
 	case "starts_at":
 		return announcement.FieldStartsAt, sortOrder
 	case "ends_at":
@@ -205,9 +217,29 @@ func (r *announcementRepository) ListActive(ctx context.Context, now time.Time) 
 			announcement.Or(announcement.EndsAtIsNil(), announcement.EndsAtGT(now)),
 		).
 		Order(dbent.Desc(announcement.FieldID)).
-		Limit(200)
+		Limit(announcementActiveScanLimit)
 
 	items, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return announcementEntitiesToService(items), nil
+}
+
+func (r *announcementRepository) ListPublished(ctx context.Context, now time.Time, limit int) ([]service.Announcement, error) {
+	if limit <= 0 {
+		limit = announcementActiveScanLimit
+	}
+	items, err := r.client.Announcement.Query().
+		Where(
+			// Archived rows are included on purpose: an archived notice is still
+			// something a user may want to look back on. Drafts never are.
+			announcement.StatusIn(service.AnnouncementStatusActive, service.AnnouncementStatusArchived),
+			announcement.Or(announcement.StartsAtIsNil(), announcement.StartsAtLTE(now)),
+		).
+		Order(dbent.Desc(announcement.FieldID)).
+		Limit(limit).
+		All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +265,8 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		Content:    m.Content,
 		Status:     m.Status,
 		NotifyMode: m.NotifyMode,
+		Severity:   m.Severity,
+		ShowBanner: m.ShowBanner,
 		Targeting:  m.Targeting,
 		StartsAt:   m.StartsAt,
 		EndsAt:     m.EndsAt,

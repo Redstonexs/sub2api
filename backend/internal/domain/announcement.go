@@ -20,6 +20,14 @@ const (
 	AnnouncementNotifyModeEmail = "email"
 )
 
+// Severity is orthogonal to both status (lifecycle) and notify_mode (channel):
+// it only changes how an announcement is presented.
+const (
+	AnnouncementSeverityInfo     = "info"
+	AnnouncementSeverityWarning  = "warning"
+	AnnouncementSeverityCritical = "critical"
+)
+
 const (
 	AnnouncementConditionTypeSubscription = "subscription"
 	AnnouncementConditionTypeBalance      = "balance"
@@ -207,6 +215,11 @@ type Announcement struct {
 	Content    string
 	Status     string
 	NotifyMode string
+	// Severity drives presentation only: info | warning | critical.
+	Severity string
+	// ShowBanner pins the announcement as a persistent top-of-page banner. It is a
+	// boolean rather than a notify_mode value so "banner and email" stays expressible.
+	ShowBanner bool
 	Targeting  AnnouncementTargeting
 	StartsAt   *time.Time
 	EndsAt     *time.Time

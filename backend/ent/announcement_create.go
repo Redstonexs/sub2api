@@ -64,6 +64,34 @@ func (_c *AnnouncementCreate) SetNillableNotifyMode(v *string) *AnnouncementCrea
 	return _c
 }
 
+// SetSeverity sets the "severity" field.
+func (_c *AnnouncementCreate) SetSeverity(v string) *AnnouncementCreate {
+	_c.mutation.SetSeverity(v)
+	return _c
+}
+
+// SetNillableSeverity sets the "severity" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableSeverity(v *string) *AnnouncementCreate {
+	if v != nil {
+		_c.SetSeverity(*v)
+	}
+	return _c
+}
+
+// SetShowBanner sets the "show_banner" field.
+func (_c *AnnouncementCreate) SetShowBanner(v bool) *AnnouncementCreate {
+	_c.mutation.SetShowBanner(v)
+	return _c
+}
+
+// SetNillableShowBanner sets the "show_banner" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableShowBanner(v *bool) *AnnouncementCreate {
+	if v != nil {
+		_c.SetShowBanner(*v)
+	}
+	return _c
+}
+
 // SetTargeting sets the "targeting" field.
 func (_c *AnnouncementCreate) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementCreate {
 	_c.mutation.SetTargeting(v)
@@ -220,6 +248,14 @@ func (_c *AnnouncementCreate) defaults() {
 		v := announcement.DefaultNotifyMode
 		_c.mutation.SetNotifyMode(v)
 	}
+	if _, ok := _c.mutation.Severity(); !ok {
+		v := announcement.DefaultSeverity
+		_c.mutation.SetSeverity(v)
+	}
+	if _, ok := _c.mutation.ShowBanner(); !ok {
+		v := announcement.DefaultShowBanner
+		_c.mutation.SetShowBanner(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := announcement.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -263,6 +299,17 @@ func (_c *AnnouncementCreate) check() error {
 		if err := announcement.NotifyModeValidator(v); err != nil {
 			return &ValidationError{Name: "notify_mode", err: fmt.Errorf(`ent: validator failed for field "Announcement.notify_mode": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Severity(); !ok {
+		return &ValidationError{Name: "severity", err: errors.New(`ent: missing required field "Announcement.severity"`)}
+	}
+	if v, ok := _c.mutation.Severity(); ok {
+		if err := announcement.SeverityValidator(v); err != nil {
+			return &ValidationError{Name: "severity", err: fmt.Errorf(`ent: validator failed for field "Announcement.severity": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ShowBanner(); !ok {
+		return &ValidationError{Name: "show_banner", err: errors.New(`ent: missing required field "Announcement.show_banner"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Announcement.created_at"`)}
@@ -312,6 +359,14 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.NotifyMode(); ok {
 		_spec.SetField(announcement.FieldNotifyMode, field.TypeString, value)
 		_node.NotifyMode = value
+	}
+	if value, ok := _c.mutation.Severity(); ok {
+		_spec.SetField(announcement.FieldSeverity, field.TypeString, value)
+		_node.Severity = value
+	}
+	if value, ok := _c.mutation.ShowBanner(); ok {
+		_spec.SetField(announcement.FieldShowBanner, field.TypeBool, value)
+		_node.ShowBanner = value
 	}
 	if value, ok := _c.mutation.Targeting(); ok {
 		_spec.SetField(announcement.FieldTargeting, field.TypeJSON, value)
@@ -454,6 +509,30 @@ func (u *AnnouncementUpsert) SetNotifyMode(v string) *AnnouncementUpsert {
 // UpdateNotifyMode sets the "notify_mode" field to the value that was provided on create.
 func (u *AnnouncementUpsert) UpdateNotifyMode() *AnnouncementUpsert {
 	u.SetExcluded(announcement.FieldNotifyMode)
+	return u
+}
+
+// SetSeverity sets the "severity" field.
+func (u *AnnouncementUpsert) SetSeverity(v string) *AnnouncementUpsert {
+	u.Set(announcement.FieldSeverity, v)
+	return u
+}
+
+// UpdateSeverity sets the "severity" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateSeverity() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldSeverity)
+	return u
+}
+
+// SetShowBanner sets the "show_banner" field.
+func (u *AnnouncementUpsert) SetShowBanner(v bool) *AnnouncementUpsert {
+	u.Set(announcement.FieldShowBanner, v)
+	return u
+}
+
+// UpdateShowBanner sets the "show_banner" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateShowBanner() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldShowBanner)
 	return u
 }
 
@@ -669,6 +748,34 @@ func (u *AnnouncementUpsertOne) SetNotifyMode(v string) *AnnouncementUpsertOne {
 func (u *AnnouncementUpsertOne) UpdateNotifyMode() *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.UpdateNotifyMode()
+	})
+}
+
+// SetSeverity sets the "severity" field.
+func (u *AnnouncementUpsertOne) SetSeverity(v string) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSeverity(v)
+	})
+}
+
+// UpdateSeverity sets the "severity" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateSeverity() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSeverity()
+	})
+}
+
+// SetShowBanner sets the "show_banner" field.
+func (u *AnnouncementUpsertOne) SetShowBanner(v bool) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetShowBanner(v)
+	})
+}
+
+// UpdateShowBanner sets the "show_banner" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateShowBanner() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateShowBanner()
 	})
 }
 
@@ -1069,6 +1176,34 @@ func (u *AnnouncementUpsertBulk) SetNotifyMode(v string) *AnnouncementUpsertBulk
 func (u *AnnouncementUpsertBulk) UpdateNotifyMode() *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.UpdateNotifyMode()
+	})
+}
+
+// SetSeverity sets the "severity" field.
+func (u *AnnouncementUpsertBulk) SetSeverity(v string) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSeverity(v)
+	})
+}
+
+// UpdateSeverity sets the "severity" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateSeverity() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSeverity()
+	})
+}
+
+// SetShowBanner sets the "show_banner" field.
+func (u *AnnouncementUpsertBulk) SetShowBanner(v bool) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetShowBanner(v)
+	})
+}
+
+// UpdateShowBanner sets the "show_banner" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateShowBanner() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateShowBanner()
 	})
 }
 

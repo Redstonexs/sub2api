@@ -78,7 +78,7 @@ func TestAnnouncementBroadcastSkipsUnsubscribedRecipients(t *testing.T) {
 		}},
 	}
 
-	svc.resolveAndEnqueue(99, "公告", "<p>内容</p>", targeting)
+	svc.resolveAndEnqueue(99, "公告", "<p>内容</p>", AnnouncementSeverityInfo, targeting)
 
 	enqueued := make(map[int64]announcementBroadcastJob)
 	for {
@@ -94,4 +94,23 @@ drained:
 	require.Len(t, enqueued, 1)
 	require.Contains(t, enqueued, int64(2))
 	require.NotContains(t, enqueued, int64(1))
+}
+
+func TestAnnouncementBroadcastOnlyTargetsActiveUsers(t *testing.T) {
+	userRepo := &announcementUserRepoStub{users: []User{
+		{ID: 1, Email: "user1@example.com", Username: "user1", Balance: 100},
+	}}
+	svc := &AnnouncementBroadcastService{
+		userRepo:                 userRepo,
+		notificationEmailService: NewNotificationEmailService(settingRepoStub{}, nil),
+		jobs:                     make(chan announcementBroadcastJob, announcementBroadcastBuffer),
+		stopCh:                   make(chan struct{}),
+	}
+
+	svc.resolveAndEnqueue(99, "公告", "<p>内容</p>", AnnouncementSeverityInfo, AnnouncementTargeting{})
+
+	require.Zero(t, userRepo.listCalls, "broadcast must not use the filter-less List, which ignores user status")
+	require.Len(t, userRepo.recordedFilters, 1)
+	require.Equal(t, StatusActive, userRepo.recordedFilters[0].Status,
+		"disabled and banned users must be excluded from an announcement broadcast")
 }

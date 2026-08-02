@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -46,6 +47,43 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 		out = append(out, *dto.UserAnnouncementFromService(&items[i]))
 	}
 	response.Success(c, out)
+}
+
+// ListArchive lists every announcement this user was eligible for, including
+// archived and expired ones.
+// GET /api/v1/announcements/archive
+func (h *AnnouncementHandler) ListArchive(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+
+	page, pageSize := response.ParsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+	if len(search) > 200 {
+		search = search[:200]
+	}
+
+	items, paginationResult, err := h.announcementService.ListArchiveForUser(
+		c.Request.Context(),
+		subject.UserID,
+		pagination.PaginationParams{Page: page, PageSize: pageSize},
+		service.AnnouncementArchiveFilters{
+			UnreadOnly: parseBoolQuery(c.Query("unread_only")),
+			Search:     search,
+		},
+	)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	out := make([]dto.UserAnnouncement, 0, len(items))
+	for i := range items {
+		out = append(out, *dto.UserAnnouncementFromService(&items[i]))
+	}
+	response.Paginated(c, out, paginationResult.Total, page, pageSize)
 }
 
 // MarkRead marks an announcement as read for current user

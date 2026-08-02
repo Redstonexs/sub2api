@@ -204,6 +204,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/announcements',
+    name: 'UserAnnouncements',
+    component: () => import('@/views/user/AnnouncementsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Announcements',
+      titleKey: 'announcements.title',
+      descriptionKey: 'announcements.description'
+    }
+  },
+  {
     path: '/keys',
     name: 'Keys',
     component: () => import('@/views/user/KeysView.vue'),

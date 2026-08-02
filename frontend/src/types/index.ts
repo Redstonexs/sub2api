@@ -301,6 +301,8 @@ export interface UpdateSubscriptionRequest {
 
 export type AnnouncementStatus = 'draft' | 'active' | 'archived'
 export type AnnouncementNotifyMode = 'silent' | 'popup' | 'email'
+/** Presentation only — orthogonal to both status (lifecycle) and notify_mode (channel). */
+export type AnnouncementSeverity = 'info' | 'warning' | 'critical'
 
 export type AnnouncementConditionType = 'subscription' | 'balance'
 
@@ -327,11 +329,15 @@ export interface Announcement {
   content: string
   status: AnnouncementStatus
   notify_mode: AnnouncementNotifyMode
+  severity: AnnouncementSeverity
+  show_banner: boolean
   targeting: AnnouncementTargeting
   starts_at?: string
   ends_at?: string
   created_by?: number
   updated_by?: number
+  /** Only returned by the single-announcement endpoint. */
+  read_count?: number
   created_at: string
   updated_at: string
 }
@@ -341,6 +347,8 @@ export interface UserAnnouncement {
   title: string
   content: string
   notify_mode: AnnouncementNotifyMode
+  severity: AnnouncementSeverity
+  show_banner: boolean
   starts_at?: string
   ends_at?: string
   read_at?: string
@@ -353,6 +361,8 @@ export interface CreateAnnouncementRequest {
   content: string
   status?: AnnouncementStatus
   notify_mode?: AnnouncementNotifyMode
+  severity?: AnnouncementSeverity
+  show_banner?: boolean
   targeting: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
@@ -363,9 +373,23 @@ export interface UpdateAnnouncementRequest {
   content?: string
   status?: AnnouncementStatus
   notify_mode?: AnnouncementNotifyMode
+  severity?: AnnouncementSeverity
+  show_banner?: boolean
   targeting?: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
+}
+
+/** Result of an audience scan; mirrors service.AnnouncementAudienceStats. */
+export interface AnnouncementAudienceStats {
+  scanned: number
+  matched: number
+  with_email: number
+  unsubscribed: number
+  /** Users who would actually receive the email. */
+  deliverable: number
+  /** The scan stopped at its ceiling, so every count is a lower bound. */
+  truncated: boolean
 }
 
 export interface AnnouncementUserReadStatus {

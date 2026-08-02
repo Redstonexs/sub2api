@@ -18,6 +18,53 @@ export default {
   version: {
     rollbackInstructions: "View manual rollback instructions",
   },
+  // Shared MarkdownEditor.vue chrome. Kept at the locale root rather than under
+  // admin.announcements because the component is generic, and kept in fork.ts
+  // because this file is on the upstream-sync preservation list.
+  markdownEditor: {
+    preview: "Preview",
+    togglePreview: "Toggle preview",
+    previewAs: "Preview as",
+    previewEmpty: "Nothing to preview yet.",
+    previewModes: {
+      popup: "Popup",
+      bell: "Notification list",
+      email: "Email",
+    },
+    emailPreviewNote: "Email rendering strips raw HTML — only Markdown syntax and images with absolute http(s) URLs are delivered.",
+    fullscreen: "Fullscreen",
+    exitFullscreen: "Exit fullscreen",
+    shortcutHint: "Ctrl/⌘+B bold · Ctrl/⌘+I italic · Ctrl/⌘+K link",
+    characters: "{count} / {max} characters",
+    bytes: "{count} bytes",
+    toolbar: {
+      bold: "Bold",
+      italic: "Italic",
+      strikethrough: "Strikethrough",
+      heading1: "Heading 1",
+      heading2: "Heading 2",
+      heading3: "Heading 3",
+      quote: "Quote",
+      bulletList: "Bulleted list",
+      numberedList: "Numbered list",
+      link: "Link",
+      image: "Image",
+      inlineCode: "Inline code",
+      codeBlock: "Code block",
+      table: "Table",
+      divider: "Divider",
+    },
+    placeholders: {
+      boldText: "bold text",
+      italicText: "italic text",
+      strikeText: "struck text",
+      linkText: "link text",
+      linkUrl: "https://example.com",
+      imageAlt: "image description",
+      imageUrl: "https://example.com/image.png",
+      code: "code",
+    },
+  },
   disclaimer: {
     independentService: "{siteName} is an independent API gateway service and is not affiliated with or endorsed by Anthropic, OpenAI, Google, xAI, or any AI model provider.",
   },
@@ -38,6 +85,10 @@ export default {
       warnDisabledRegister: "Until you agree to the latest terms, you can't register or use quick login.",
       warnAgreeBeforeRegister: "Please read and agree to the latest terms before registering.",
     },
+  },
+  nav: {
+    // Distinct from nav.announcements, which labels the admin management entry.
+    myAnnouncements: "My Announcements",
   },
   admin: {
     users: {
@@ -108,7 +159,60 @@ export default {
       emailUnsubscribedLabel: "Email Subscription",
       form: {
         notifyModeHint: "Popup mode shows a popup to users. Email mode also sends the announcement by email to every targeted user.",
+        contentPlaceholder: "Write the announcement in Markdown. Headings, lists, tables, links and external images are supported.",
+        scheduleHint: "Times use your browser's timezone.",
+        severity: "Severity",
+        severityHint: "Presentation only — it does not change who receives the announcement.",
+        showBanner: "Banner",
+        showBannerLabel: "Pin a banner at the top of every page",
+        showBannerHint: "Independent of the delivery mode, so a banner can also be emailed.",
       },
+      estimateAudience: "Estimate audience",
+      audienceSummary: "{deliverable} recipients ({matched} matched, {unsubscribed} unsubscribed)",
+      audienceSummaryTruncated: "At least {deliverable} recipients ({matched} matched, {unsubscribed} unsubscribed) — the scan stopped early",
+      failedToEstimateAudience: "Could not estimate the audience.",
+      sendTestEmail: "Send test to me",
+      testEmailSent: "Test announcement sent to {email}.",
+      failedToSendTestEmail: "Could not send the test email.",
+      broadcastConfirmTitle: "Send this announcement by email?",
+      broadcastConfirmMessage: "This will email {deliverable} users.{suffix} Emails cannot be recalled.",
+      broadcastConfirmTruncated: " The real number may be higher — the audience scan stopped early.",
+      broadcastConfirmUnknown: "The recipient count could not be determined. Publishing will email every targeted user, and emails cannot be recalled.",
+      broadcastConfirmAction: "Send emails",
+      severityLabels: {
+        info: "Info",
+        warning: "Important",
+        critical: "Critical",
+      },
+      columns: {
+        severity: "Severity",
+      },
+      // Keyed by the backend error `reason` so extractI18nErrorMessage can resolve
+      // admin.announcements.errors.<REASON> directly.
+      errors: {
+        ANNOUNCEMENT_INPUT_REQUIRED: "Announcement data is missing.",
+        ANNOUNCEMENT_TITLE_INVALID: "The title is required and must be at most 200 characters.",
+        ANNOUNCEMENT_CONTENT_REQUIRED: "The content is required.",
+        ANNOUNCEMENT_CONTENT_TOO_LONG: "The content is too long — keep it under 20,000 characters.",
+        ANNOUNCEMENT_TIME_RANGE_INVALID: "The start time must be earlier than the end time.",
+        ANNOUNCEMENT_STATUS_INVALID: "That status is not valid.",
+        ANNOUNCEMENT_NOTIFY_MODE_INVALID: "That delivery mode is not valid.",
+        ANNOUNCEMENT_INVALID_TARGET: "The targeting rules are not valid.",
+        ANNOUNCEMENT_NOT_FOUND: "This announcement no longer exists.",
+        TARGETING_TOO_MANY_GROUPS: "Too many targeting rule groups — 50 at most.",
+        TARGETING_TOO_MANY_CONDITIONS: "Too many conditions in one rule group — 50 at most.",
+      },
+      lifecycle: {
+        scheduled: "Scheduled",
+        live: "Live",
+        expired: "Expired",
+      },
+      duplicate: "Duplicate",
+      duplicateTitleSuffix: "(copy)",
+      unsavedChangesTitle: "Discard changes?",
+      unsavedChangesMessage: "This announcement has unsaved changes. Closing will discard them.",
+      discard: "Discard",
+      readCount: "Read by {count} users",
     },
     ops: {
       systemLog: {

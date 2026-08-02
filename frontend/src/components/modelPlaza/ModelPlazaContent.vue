@@ -95,7 +95,9 @@ const searchActive = computed(() => searchQuery.value.trim() !== '')
 const descriptionHtml = computed(() => {
   const md = props.response?.description?.trim()
   if (!md) return ''
-  return DOMPurify.sanitize(marked.parse(md) as string)
+  // Options are passed explicitly: this used to inherit gfm/breaks from the global
+  // marked.setOptions() call that the announcement components made at module scope.
+  return DOMPurify.sanitize(marked.parse(md, { gfm: true, breaks: true }) as string)
 })
 
 /** 生效倍率 = 用户专属倍率 ?? 分组默认倍率。 */

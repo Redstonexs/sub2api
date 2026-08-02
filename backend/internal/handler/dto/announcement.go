@@ -12,6 +12,8 @@ type Announcement struct {
 	Content    string `json:"content"`
 	Status     string `json:"status"`
 	NotifyMode string `json:"notify_mode"`
+	Severity   string `json:"severity"`
+	ShowBanner bool   `json:"show_banner"`
 
 	Targeting service.AnnouncementTargeting `json:"targeting"`
 
@@ -20,6 +22,10 @@ type Announcement struct {
 
 	CreatedBy *int64 `json:"created_by,omitempty"`
 	UpdatedBy *int64 `json:"updated_by,omitempty"`
+
+	// ReadCount is populated only by the single-announcement endpoint; the list
+	// endpoint leaves it nil so the list query stays a single flat select.
+	ReadCount *int64 `json:"read_count,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -30,6 +36,8 @@ type UserAnnouncement struct {
 	Title      string `json:"title"`
 	Content    string `json:"content"`
 	NotifyMode string `json:"notify_mode"`
+	Severity   string `json:"severity"`
+	ShowBanner bool   `json:"show_banner"`
 
 	StartsAt *time.Time `json:"starts_at,omitempty"`
 	EndsAt   *time.Time `json:"ends_at,omitempty"`
@@ -50,6 +58,8 @@ func AnnouncementFromService(a *service.Announcement) *Announcement {
 		Content:    a.Content,
 		Status:     a.Status,
 		NotifyMode: a.NotifyMode,
+		Severity:   a.Severity,
+		ShowBanner: a.ShowBanner,
 		Targeting:  a.Targeting,
 		StartsAt:   a.StartsAt,
 		EndsAt:     a.EndsAt,
@@ -58,6 +68,18 @@ func AnnouncementFromService(a *service.Announcement) *Announcement {
 		CreatedAt:  a.CreatedAt,
 		UpdatedAt:  a.UpdatedAt,
 	}
+}
+
+// AnnouncementWithStatsFromService maps an announcement together with its read
+// count, for the detail endpoint.
+func AnnouncementWithStatsFromService(a *service.Announcement, readCount int64) *Announcement {
+	out := AnnouncementFromService(a)
+	if out == nil {
+		return nil
+	}
+	count := readCount
+	out.ReadCount = &count
+	return out
 }
 
 func UserAnnouncementFromService(a *service.UserAnnouncement) *UserAnnouncement {
@@ -69,6 +91,8 @@ func UserAnnouncementFromService(a *service.UserAnnouncement) *UserAnnouncement 
 		Title:      a.Announcement.Title,
 		Content:    a.Announcement.Content,
 		NotifyMode: a.Announcement.NotifyMode,
+		Severity:   a.Announcement.Severity,
+		ShowBanner: a.Announcement.ShowBanner,
 		StartsAt:   a.Announcement.StartsAt,
 		EndsAt:     a.Announcement.EndsAt,
 		ReadAt:     a.ReadAt,

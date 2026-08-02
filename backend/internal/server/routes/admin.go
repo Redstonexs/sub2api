@@ -426,7 +426,11 @@ func registerAnnouncementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		announcements.GET("", h.Admin.Announcement.List)
 		announcements.POST("", h.Admin.Announcement.Create)
+		// Must precede the /:id routes: Gin would otherwise capture
+		// "audience-preview" as an announcement id.
+		announcements.POST("/audience-preview", h.Admin.Announcement.PreviewAudience)
 		announcements.GET("/:id", h.Admin.Announcement.GetByID)
+		announcements.POST("/:id/test-email", h.Admin.Announcement.SendTestEmail)
 		announcements.PUT("/:id", h.Admin.Announcement.Update)
 		announcements.DELETE("/:id", h.Admin.Announcement.Delete)
 		announcements.GET("/:id/read-status", h.Admin.Announcement.ListReadStatus)

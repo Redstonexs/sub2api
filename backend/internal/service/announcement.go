@@ -22,6 +22,12 @@ const (
 )
 
 const (
+	AnnouncementSeverityInfo     = domain.AnnouncementSeverityInfo
+	AnnouncementSeverityWarning  = domain.AnnouncementSeverityWarning
+	AnnouncementSeverityCritical = domain.AnnouncementSeverityCritical
+)
+
+const (
 	AnnouncementConditionTypeSubscription = domain.AnnouncementConditionTypeSubscription
 	AnnouncementConditionTypeBalance      = domain.AnnouncementConditionTypeBalance
 )
@@ -44,6 +50,10 @@ var (
 		"ANNOUNCEMENT_CONTENT_REQUIRED",
 		"announcement content is required",
 	)
+	ErrAnnouncementContentTooLong = infraerrors.BadRequest(
+		"ANNOUNCEMENT_CONTENT_TOO_LONG",
+		"announcement content is too long",
+	)
 	ErrAnnouncementInvalidStatus     = infraerrors.BadRequest("ANNOUNCEMENT_STATUS_INVALID", "announcement status is invalid")
 	ErrAnnouncementInvalidNotifyMode = infraerrors.BadRequest(
 		"ANNOUNCEMENT_NOTIFY_MODE_INVALID",
@@ -52,6 +62,18 @@ var (
 	ErrAnnouncementInvalidSchedule = infraerrors.BadRequest(
 		"ANNOUNCEMENT_TIME_RANGE_INVALID",
 		"starts_at must be before ends_at",
+	)
+	ErrAnnouncementInvalidSeverity = infraerrors.BadRequest(
+		"ANNOUNCEMENT_SEVERITY_INVALID",
+		"announcement severity is invalid",
+	)
+	ErrAnnouncementTestEmailUnavailable = infraerrors.BadRequest(
+		"ANNOUNCEMENT_TEST_EMAIL_UNAVAILABLE",
+		"announcement test email cannot be sent",
+	)
+	ErrAnnouncementTestEmailUnsubscribed = infraerrors.BadRequest(
+		"ANNOUNCEMENT_TEST_EMAIL_UNSUBSCRIBED",
+		"you have unsubscribed from announcement emails",
 	)
 )
 
@@ -76,6 +98,14 @@ type AnnouncementRepository interface {
 
 	List(ctx context.Context, params pagination.PaginationParams, filters AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error)
 	ListActive(ctx context.Context, now time.Time) ([]Announcement, error)
+
+	// ListPublished returns announcements a user may look back on: status active or
+	// archived and already started, regardless of whether the display window has
+	// closed. Ordered id DESC and capped at limit.
+	//
+	// Distinct from ListActive, which powers live delivery and therefore excludes
+	// archived and expired rows.
+	ListPublished(ctx context.Context, now time.Time, limit int) ([]Announcement, error)
 }
 
 type AnnouncementReadRepository interface {

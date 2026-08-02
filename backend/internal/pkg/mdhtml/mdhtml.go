@@ -5,17 +5,25 @@ import (
 	"bytes"
 	"html"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	gmhtml "github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
 var (
 	markdownRenderer = goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
+		goldmark.WithParserOptions(parser.WithASTTransformers(
+			util.Prioritized(externalImagesOnly{}, 100),
+		)),
 		goldmark.WithRendererOptions(gmhtml.WithHardWraps()),
 	)
 	safeHTMLPolicy  = newSafeHTMLPolicy()
@@ -55,10 +63,62 @@ func fallbackHTML(content string) string {
 	return "<p>" + escaped + "</p>"
 }
 
+// absoluteHTTPURL matches only absolute http(s) URLs. Announcement images must be
+// externally hosted: this gateway has no image upload endpoint, and a relative or
+// protocol-relative src resolves against the *mail client's* base, not ours.
+var absoluteHTTPURL = regexp.MustCompile(`^https?://`)
+
+// externalImagesOnly drops image nodes whose destination is not an absolute
+// http(s) URL, before rendering.
+//
+// Doing this in the parser rather than leaving it to bluemonday matters: the
+// sanitizer can only strip the offending src attribute, and an element that still
+// carries an allowed attribute (alt) survives as a src-less <img>, which mail
+// clients draw as a broken-image placeholder. Removing the node emits nothing at
+// all. bluemonday's src regex stays as the defense-in-depth backstop.
+type externalImagesOnly struct{}
+
+func (externalImagesOnly) Transform(doc *ast.Document, _ text.Reader, _ parser.Context) {
+	var doomed []ast.Node
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if img, ok := n.(*ast.Image); ok && !absoluteHTTPURL.Match(img.Destination) {
+			doomed = append(doomed, n)
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	// Mutating during the walk would invalidate the sibling links it follows.
+	for _, n := range doomed {
+		if parent := n.Parent(); parent != nil {
+			parent.RemoveChild(parent, n)
+		}
+	}
+}
+
+// newSafeHTMLPolicy builds the sanitizer for announcement HTML.
+//
+// The element and attribute allowlist below is mirrored in the frontend at
+// frontend/src/utils/markdown.ts so the admin preview and the delivered email
+// agree; change both together.
 func newSafeHTMLPolicy() *bluemonday.Policy {
 	policy := bluemonday.NewPolicy()
-	policy.AllowElements("p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "s", "code", "pre", "blockquote", "ul", "ol", "li", "table", "thead", "tbody", "tr", "th", "td", "hr", "a")
+	// "del" matters: goldmark's GFM strikethrough renders ~~text~~ as <del>, not
+	// <s>, so without it strikethrough was silently flattened to plain text in every
+	// broadcast email.
+	policy.AllowElements("p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "s", "del", "code", "pre", "blockquote", "ul", "ol", "li", "table", "thead", "tbody", "tr", "th", "td", "hr", "a", "img")
 	policy.AllowAttrs("href").OnElements("a")
+
+	// Deliberately not bluemonday.AllowImages(): that registers a bare
+	// AllowAttrs("src"), and AllowStandardURLs() below turns on AllowRelativeURLs,
+	// so together they would admit <img src="/anything"> and <img src="//evil">.
+	// The explicit regex keeps images to absolute http(s) only.
+	policy.AllowAttrs("src").Matching(absoluteHTTPURL).OnElements("img")
+	policy.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
+	policy.AllowAttrs("width", "height").Matching(bluemonday.NumberOrPercent).OnElements("img")
+
 	policy.AllowStandardURLs()
 	return policy
 }

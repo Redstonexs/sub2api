@@ -242,7 +242,9 @@ async function fetchAndRenderMarkdown(slug: string) {
       (match, alt, src) => isRelativeMarkdownAsset(src) ? `![${alt}](${buildPageImageUrl(slug, src)})` : match
     )
 
-    const html = marked.parse(raw) as string
+    // Options are passed explicitly: this used to inherit gfm/breaks from the global
+    // marked.setOptions() call that the announcement components made at module scope.
+    const html = marked.parse(raw, { gfm: true, breaks: true }) as string
     const sanitized = DOMPurify.sanitize(html, {
       ADD_TAGS: ['iframe'],
       ADD_ATTR: ['allowfullscreen', 'frameborder', 'src'],

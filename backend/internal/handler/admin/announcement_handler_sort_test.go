@@ -138,3 +138,36 @@ func TestAdminAnnouncementReadStatusSortDefaults(t *testing.T) {
 	require.Equal(t, "email", userRepo.listParams.SortBy)
 	require.Equal(t, "asc", userRepo.listParams.SortOrder)
 }
+
+// TestAdminAnnouncementRouteOrdering pins the registration order used by
+// routes/admin.go: Gin matches a static segment only if it is registered before
+// the wildcard, so "/audience-preview" would otherwise be parsed as an id.
+func TestAdminAnnouncementRouteOrdering(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := service.NewAnnouncementService(
+		&announcementRepoCapture{}, &announcementReadRepoCapture{},
+		&announcementUserRepoCapture{}, &announcementUserSubRepoCapture{}, nil, nil,
+	)
+	handler := NewAnnouncementHandler(svc)
+
+	router := gin.New()
+	group := router.Group("/admin/announcements")
+	group.POST("/audience-preview", handler.PreviewAudience)
+	group.GET("/:id", handler.GetByID)
+	group.POST("/:id/test-email", handler.SendTestEmail)
+
+	routed := ""
+	for _, route := range router.Routes() {
+		if route.Method == http.MethodPost && route.Path == "/admin/announcements/audience-preview" {
+			routed = route.Path
+		}
+	}
+	require.Equal(t, "/admin/announcements/audience-preview", routed,
+		"the static audience-preview route must be registered, not shadowed by /:id")
+
+	// A numeric id must still reach the test-email handler.
+	req := httptest.NewRequest(http.MethodPost, "/admin/announcements/12/test-email", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.NotEqual(t, http.StatusNotFound, rec.Code)
+}

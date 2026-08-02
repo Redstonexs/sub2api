@@ -40,6 +40,15 @@ func TestAnnouncementListOrder(t *testing.T) {
 			want:   "desc",
 		},
 		{
+			name: "severity asc",
+			params: pagination.PaginationParams{
+				SortBy:    "severity",
+				SortOrder: "ASC",
+			},
+			wantBy: "severity",
+			want:   "asc",
+		},
+		{
 			name: "invalid falls back",
 			params: pagination.PaginationParams{
 				SortBy:    "sideways",

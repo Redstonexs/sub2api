@@ -120,6 +120,9 @@ func RegisterUserRoutes(
 		announcements := authenticated.Group("/announcements")
 		{
 			announcements.GET("", h.Announcement.List)
+			// Must precede the /:id route: Gin would otherwise capture "archive"
+			// as an announcement id.
+			announcements.GET("/archive", h.Announcement.ListArchive)
 			announcements.POST("/:id/read", h.Announcement.MarkRead)
 		}
 

@@ -5582,6 +5582,8 @@ type AnnouncementMutation struct {
 	content       *string
 	status        *string
 	notify_mode   *string
+	severity      *string
+	show_banner   *bool
 	targeting     *domain.AnnouncementTargeting
 	starts_at     *time.Time
 	ends_at       *time.Time
@@ -5840,6 +5842,78 @@ func (m *AnnouncementMutation) OldNotifyMode(ctx context.Context) (v string, err
 // ResetNotifyMode resets all changes to the "notify_mode" field.
 func (m *AnnouncementMutation) ResetNotifyMode() {
 	m.notify_mode = nil
+}
+
+// SetSeverity sets the "severity" field.
+func (m *AnnouncementMutation) SetSeverity(s string) {
+	m.severity = &s
+}
+
+// Severity returns the value of the "severity" field in the mutation.
+func (m *AnnouncementMutation) Severity() (r string, exists bool) {
+	v := m.severity
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSeverity returns the old "severity" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldSeverity(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSeverity is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSeverity requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSeverity: %w", err)
+	}
+	return oldValue.Severity, nil
+}
+
+// ResetSeverity resets all changes to the "severity" field.
+func (m *AnnouncementMutation) ResetSeverity() {
+	m.severity = nil
+}
+
+// SetShowBanner sets the "show_banner" field.
+func (m *AnnouncementMutation) SetShowBanner(b bool) {
+	m.show_banner = &b
+}
+
+// ShowBanner returns the value of the "show_banner" field in the mutation.
+func (m *AnnouncementMutation) ShowBanner() (r bool, exists bool) {
+	v := m.show_banner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldShowBanner returns the old "show_banner" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldShowBanner(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldShowBanner is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldShowBanner requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldShowBanner: %w", err)
+	}
+	return oldValue.ShowBanner, nil
+}
+
+// ResetShowBanner resets all changes to the "show_banner" field.
+func (m *AnnouncementMutation) ResetShowBanner() {
+	m.show_banner = nil
 }
 
 // SetTargeting sets the "targeting" field.
@@ -6289,7 +6363,7 @@ func (m *AnnouncementMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AnnouncementMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 13)
 	if m.title != nil {
 		fields = append(fields, announcement.FieldTitle)
 	}
@@ -6301,6 +6375,12 @@ func (m *AnnouncementMutation) Fields() []string {
 	}
 	if m.notify_mode != nil {
 		fields = append(fields, announcement.FieldNotifyMode)
+	}
+	if m.severity != nil {
+		fields = append(fields, announcement.FieldSeverity)
+	}
+	if m.show_banner != nil {
+		fields = append(fields, announcement.FieldShowBanner)
 	}
 	if m.targeting != nil {
 		fields = append(fields, announcement.FieldTargeting)
@@ -6339,6 +6419,10 @@ func (m *AnnouncementMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case announcement.FieldNotifyMode:
 		return m.NotifyMode()
+	case announcement.FieldSeverity:
+		return m.Severity()
+	case announcement.FieldShowBanner:
+		return m.ShowBanner()
 	case announcement.FieldTargeting:
 		return m.Targeting()
 	case announcement.FieldStartsAt:
@@ -6370,6 +6454,10 @@ func (m *AnnouncementMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldStatus(ctx)
 	case announcement.FieldNotifyMode:
 		return m.OldNotifyMode(ctx)
+	case announcement.FieldSeverity:
+		return m.OldSeverity(ctx)
+	case announcement.FieldShowBanner:
+		return m.OldShowBanner(ctx)
 	case announcement.FieldTargeting:
 		return m.OldTargeting(ctx)
 	case announcement.FieldStartsAt:
@@ -6420,6 +6508,20 @@ func (m *AnnouncementMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNotifyMode(v)
+		return nil
+	case announcement.FieldSeverity:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSeverity(v)
+		return nil
+	case announcement.FieldShowBanner:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetShowBanner(v)
 		return nil
 	case announcement.FieldTargeting:
 		v, ok := value.(domain.AnnouncementTargeting)
@@ -6590,6 +6692,12 @@ func (m *AnnouncementMutation) ResetField(name string) error {
 		return nil
 	case announcement.FieldNotifyMode:
 		m.ResetNotifyMode()
+		return nil
+	case announcement.FieldSeverity:
+		m.ResetSeverity()
+		return nil
+	case announcement.FieldShowBanner:
+		m.ResetShowBanner()
 		return nil
 	case announcement.FieldTargeting:
 		m.ResetTargeting()

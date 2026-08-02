@@ -42,8 +42,44 @@ func TestToSafeHTMLSanitizesDangerousMarkdownHTML(t *testing.T) {
 	if strings.Contains(got, "onclick") {
 		t.Fatalf("expected event handler attributes to be removed, got %q", got)
 	}
+}
+
+func TestToSafeHTMLAllowsExternalImages(t *testing.T) {
+	got := ToSafeHTML(`![logo](https://cdn.example.com/logo.png "title")`)
+
+	if !strings.Contains(got, `<img src="https://cdn.example.com/logo.png"`) {
+		t.Fatalf("expected an absolute https image to survive sanitization, got %q", got)
+	}
+	if !strings.Contains(got, `alt="logo"`) {
+		t.Fatalf("expected alt text to be preserved, got %q", got)
+	}
+}
+
+func TestToSafeHTMLRejectsNonHTTPImageSources(t *testing.T) {
+	cases := map[string]string{
+		"data URI":          `![x](data:image/png;base64,iVBORw0KGgo=)`,
+		"relative path":     `![x](/uploads/local.png)`,
+		"protocol relative": `![x](//evil.example.com/tracker.gif)`,
+		"javascript":        `![x](javascript:alert(1))`,
+	}
+	for name, in := range cases {
+		got := ToSafeHTML(in)
+		if strings.Contains(got, "<img") {
+			t.Fatalf("%s: expected image to be dropped, got %q", name, got)
+		}
+	}
+}
+
+// TestToSafeHTMLDropsLiteralImageHTML documents a deliberate asymmetry: goldmark is
+// built without WithUnsafe, so raw HTML never reaches bluemonday. Markdown image
+// syntax renders; a hand-written <img> tag does not, even with an allowed src.
+// frontend/src/utils/markdown.ts models this with a no-op raw-HTML renderer so the
+// admin's email preview shows the same thing.
+func TestToSafeHTMLDropsLiteralImageHTML(t *testing.T) {
+	got := ToSafeHTML(`<img src="https://cdn.example.com/logo.png" alt="logo">`)
+
 	if strings.Contains(got, "<img") {
-		t.Fatalf("expected images to be removed, got %q", got)
+		t.Fatalf("expected literal HTML <img> to be dropped by goldmark, got %q", got)
 	}
 }
 
@@ -103,5 +139,15 @@ func TestToSafeHTMLEscapesRawHTMLWhenMarkdownFails(t *testing.T) {
 	}
 	if strings.Contains(got, "<script>") {
 		t.Fatalf("expected escaped raw html fallback, got %q", got)
+	}
+}
+
+func TestToSafeHTMLKeepsStrikethrough(t *testing.T) {
+	// goldmark's GFM strikethrough renders <del>, not <s>; the policy allowlist must
+	// carry both or ~~text~~ silently flattens to plain text in emails.
+	got := ToSafeHTML("~~gone~~")
+
+	if !strings.Contains(got, "<del>gone</del>") {
+		t.Fatalf("expected strikethrough to survive sanitization, got %q", got)
 	}
 }

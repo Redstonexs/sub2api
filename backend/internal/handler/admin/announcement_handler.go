@@ -26,11 +26,18 @@ func NewAnnouncementHandler(announcementService *service.AnnouncementService) *A
 	}
 }
 
+// The `max=40000` on Content is a loose guard that rejects an obviously oversized
+// body at binding time; validator counts runes for strings, so it sits at twice the
+// exact 20 000-rune limit the service layer enforces after trimming. Keeping it
+// slack means the precise, translatable ANNOUNCEMENT_CONTENT_TOO_LONG error is what
+// an admin actually sees for a near-limit body.
 type CreateAnnouncementRequest struct {
 	Title      string                        `json:"title" binding:"required"`
-	Content    string                        `json:"content" binding:"required"`
+	Content    string                        `json:"content" binding:"required,max=40000"`
 	Status     string                        `json:"status" binding:"omitempty,oneof=draft active archived"`
 	NotifyMode string                        `json:"notify_mode" binding:"omitempty,oneof=silent popup email"`
+	Severity   string                        `json:"severity" binding:"omitempty,oneof=info warning critical"`
+	ShowBanner *bool                         `json:"show_banner"`
 	Targeting  service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                        `json:"starts_at"` // Unix seconds, 0/empty = immediate
 	EndsAt     *int64                        `json:"ends_at"`   // Unix seconds, 0/empty = never
@@ -38,9 +45,11 @@ type CreateAnnouncementRequest struct {
 
 type UpdateAnnouncementRequest struct {
 	Title      *string                        `json:"title"`
-	Content    *string                        `json:"content"`
+	Content    *string                        `json:"content" binding:"omitempty,max=40000"`
 	Status     *string                        `json:"status" binding:"omitempty,oneof=draft active archived"`
 	NotifyMode *string                        `json:"notify_mode" binding:"omitempty,oneof=silent popup email"`
+	Severity   *string                        `json:"severity" binding:"omitempty,oneof=info warning critical"`
+	ShowBanner *bool                          `json:"show_banner"`
 	Targeting  *service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                         `json:"starts_at"` // Unix seconds, 0 = clear
 	EndsAt     *int64                         `json:"ends_at"`   // Unix seconds, 0 = clear
@@ -91,13 +100,13 @@ func (h *AnnouncementHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	item, err := h.announcementService.GetByID(c.Request.Context(), announcementID)
+	item, readCount, err := h.announcementService.GetByIDWithStats(c.Request.Context(), announcementID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	response.Success(c, dto.AnnouncementFromService(item))
+	response.Success(c, dto.AnnouncementWithStatsFromService(item, readCount))
 }
 
 // Create handles creating a new announcement
@@ -120,6 +129,8 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		Content:    req.Content,
 		Status:     req.Status,
 		NotifyMode: req.NotifyMode,
+		Severity:   req.Severity,
+		ShowBanner: req.ShowBanner,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
 	}
@@ -168,6 +179,8 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 		Content:    req.Content,
 		Status:     req.Status,
 		NotifyMode: req.NotifyMode,
+		Severity:   req.Severity,
+		ShowBanner: req.ShowBanner,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
 	}
@@ -218,6 +231,58 @@ func (h *AnnouncementHandler) Delete(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "Announcement deleted successfully"})
+}
+
+type AnnouncementAudiencePreviewRequest struct {
+	Targeting service.AnnouncementTargeting `json:"targeting"`
+}
+
+// PreviewAudience reports how many users an announcement would be emailed.
+// POST /api/v1/admin/announcements/audience-preview
+//
+// POST rather than GET because the targeting rules are a nested object that the
+// create form has not saved yet.
+func (h *AnnouncementHandler) PreviewAudience(c *gin.Context) {
+	var req AnnouncementAudiencePreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	stats, err := h.announcementService.PreviewAudience(c.Request.Context(), req.Targeting)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	middleware2.SetAuditExtra(c, map[string]any{"recipient_count": stats.Deliverable})
+	response.Success(c, stats)
+}
+
+// SendTestEmail sends the announcement to the acting admin's own address.
+// POST /api/v1/admin/announcements/:id/test-email
+func (h *AnnouncementHandler) SendTestEmail(c *gin.Context) {
+	announcementID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || announcementID <= 0 {
+		response.BadRequest(c, "Invalid announcement ID")
+		return
+	}
+
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+	// The recipient is resolved from the authenticated admin, never from the request
+	// body: an admin-authenticated endpoint that mails an arbitrary address is an
+	// open relay.
+	recipient, err := h.announcementService.SendTestEmail(c.Request.Context(), announcementID, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"message": "ok", "recipient": recipient})
 }
 
 // ListReadStatus handles listing users read status for an announcement

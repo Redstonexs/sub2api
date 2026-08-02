@@ -173,6 +173,19 @@
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('announcements.emptyDescription') }}</p>
               </div>
             </div>
+
+            <!-- The bell only carries currently-active announcements; the archive is
+                 where an expired or archived notice stays readable. -->
+            <div class="border-t border-gray-100 px-4 py-3 text-center dark:border-dark-700">
+              <RouterLink
+                to="/announcements"
+                data-testid="announcement-bell-view-all"
+                class="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                @click="closeModal"
+              >
+                {{ t('announcements.viewAll') }}
+              </RouterLink>
+            </div>
           </div>
         </div>
       </Transition>
@@ -312,9 +325,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderAnnouncementMarkdown } from '@/utils/markdown'
 import { useAppStore } from '@/stores/app'
 import { useAnnouncementStore } from '@/stores/announcements'
 import { formatRelativeTime, formatRelativeWithDateTime } from '@/utils/format'
@@ -326,12 +339,6 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const announcementStore = useAnnouncementStore()
 
-// Configure marked
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
-
 // Use store state (storeToRefs for reactivity)
 const { announcements, loading } = storeToRefs(announcementStore)
 const unreadCount = computed(() => announcementStore.unreadCount)
@@ -342,11 +349,7 @@ const detailModalOpen = ref(false)
 const selectedAnnouncement = ref<UserAnnouncement | null>(null)
 
 // Methods
-function renderMarkdown(content: string): string {
-  if (!content) return ''
-  const html = marked.parse(content) as string
-  return DOMPurify.sanitize(html)
-}
+const renderMarkdown = renderAnnouncementMarkdown
 
 function openModal() {
   isModalOpen.value = true

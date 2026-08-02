@@ -303,12 +303,22 @@ func init() {
 	announcement.DefaultNotifyMode = announcementDescNotifyMode.Default.(string)
 	// announcement.NotifyModeValidator is a validator for the "notify_mode" field. It is called by the builders before save.
 	announcement.NotifyModeValidator = announcementDescNotifyMode.Validators[0].(func(string) error)
+	// announcementDescSeverity is the schema descriptor for severity field.
+	announcementDescSeverity := announcementFields[4].Descriptor()
+	// announcement.DefaultSeverity holds the default value on creation for the severity field.
+	announcement.DefaultSeverity = announcementDescSeverity.Default.(string)
+	// announcement.SeverityValidator is a validator for the "severity" field. It is called by the builders before save.
+	announcement.SeverityValidator = announcementDescSeverity.Validators[0].(func(string) error)
+	// announcementDescShowBanner is the schema descriptor for show_banner field.
+	announcementDescShowBanner := announcementFields[5].Descriptor()
+	// announcement.DefaultShowBanner holds the default value on creation for the show_banner field.
+	announcement.DefaultShowBanner = announcementDescShowBanner.Default.(bool)
 	// announcementDescCreatedAt is the schema descriptor for created_at field.
-	announcementDescCreatedAt := announcementFields[9].Descriptor()
+	announcementDescCreatedAt := announcementFields[11].Descriptor()
 	// announcement.DefaultCreatedAt holds the default value on creation for the created_at field.
 	announcement.DefaultCreatedAt = announcementDescCreatedAt.Default.(func() time.Time)
 	// announcementDescUpdatedAt is the schema descriptor for updated_at field.
-	announcementDescUpdatedAt := announcementFields[10].Descriptor()
+	announcementDescUpdatedAt := announcementFields[12].Descriptor()
 	// announcement.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	announcement.DefaultUpdatedAt = announcementDescUpdatedAt.Default.(func() time.Time)
 	// announcement.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

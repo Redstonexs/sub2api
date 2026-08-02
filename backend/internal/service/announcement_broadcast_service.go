@@ -9,7 +9,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/mdhtml"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
 
 const (
@@ -17,12 +16,10 @@ const (
 	announcementBroadcastWorkers = 3
 	// announcementBroadcastBuffer is the size of the pending-send channel.
 	announcementBroadcastBuffer = 256
-	// announcementBroadcastUserPage is the user pagination size for recipient resolution.
-	announcementBroadcastUserPage = 500
 	// announcementBroadcastSendTimeout bounds a single recipient send.
+	// Recipient paging and its timeout now live in announcement_audience.go, which
+	// the admin audience preview shares.
 	announcementBroadcastSendTimeout = 30 * time.Second
-	// announcementBroadcastListTimeout bounds a single page of user listing.
-	announcementBroadcastListTimeout = 30 * time.Second
 )
 
 // announcementBroadcastJob is a single rendered email to deliver to one recipient.
@@ -30,6 +27,7 @@ type announcementBroadcastJob struct {
 	announcementID int64
 	title          string
 	contentHTML    string
+	severity       string
 	userID         int64
 	email          string
 	name           string
@@ -90,6 +88,13 @@ func (s *AnnouncementBroadcastService) processJob(workerID int, job announcement
 	ctx, cancel := context.WithTimeout(context.Background(), announcementBroadcastSendTimeout)
 	defer cancel()
 
+	// The severity label is localized per recipient, so it is resolved here rather
+	// than once in Dispatch.
+	severityLabel := announcementSeverityLabel(
+		job.severity,
+		s.notificationEmailService.ResolveRecipientLocale(ctx, job.userID, job.email),
+	)
+
 	err := s.notificationEmailService.Send(ctx, NotificationEmailSendInput{
 		Event:          NotificationEmailEventAnnouncementBroadcast,
 		RecipientEmail: job.email,
@@ -100,7 +105,8 @@ func (s *AnnouncementBroadcastService) processJob(workerID int, job announcement
 		SourceType: "announcement",
 		SourceID:   strconv.FormatInt(job.announcementID, 10),
 		Variables: map[string]string{
-			"announcement_title": job.title,
+			"announcement_title":          job.title,
+			"announcement_severity_label": severityLabel,
 		},
 		// announcement_content is pre-escaped safe HTML (see mdhtml.ToSafeHTML) and is
 		// injected raw so paragraph/line breaks render instead of being escaped again.
@@ -125,6 +131,7 @@ func (s *AnnouncementBroadcastService) Dispatch(ann *Announcement) {
 	annID := ann.ID
 	title := ann.Title
 	contentHTML := mdhtml.ToSafeHTML(ann.Content)
+	severity := ann.Severity
 	targeting := ann.Targeting
 
 	go func() {
@@ -134,88 +141,102 @@ func (s *AnnouncementBroadcastService) Dispatch(ann *Announcement) {
 					"[AnnouncementBroadcast] dispatch panic for announcement %d: %v", annID, r)
 			}
 		}()
-		s.resolveAndEnqueue(annID, title, contentHTML, targeting)
+		s.resolveAndEnqueue(annID, title, contentHTML, severity, targeting)
 	}()
 }
 
-// resolveAndEnqueue pages through all users, matches the targeting rules, and enqueues
-// one send job per matching recipient. It applies backpressure: when the worker queue
-// is full it blocks until a slot frees up (or shutdown), so recipients are never dropped.
-func (s *AnnouncementBroadcastService) resolveAndEnqueue(annID int64, title, contentHTML string, targeting AnnouncementTargeting) {
-	now := time.Now()
-	enqueued := 0
-	suppressed := 0
-
-	for page := 1; ; page++ {
-		select {
-		case <-s.stopCh:
-			return
-		default:
-		}
-
-		listCtx, cancel := context.WithTimeout(context.Background(), announcementBroadcastListTimeout)
-		users, result, err := s.userRepo.List(listCtx, pagination.PaginationParams{
-			Page:     page,
-			PageSize: announcementBroadcastUserPage,
-		})
-		cancel()
-		if err != nil {
-			logger.LegacyPrintf("service.announcement_broadcast",
-				"[AnnouncementBroadcast] list users (page %d) failed for announcement %d: %v", page, annID, err)
-			return
-		}
-
-		for i := range users {
-			u := users[i]
-			email := strings.TrimSpace(u.Email)
-			if email == "" {
-				continue
-			}
-			if !targeting.Matches(u.Balance, activeSubscriptionGroupIDs(u.Subscriptions, now)) {
-				continue
-			}
-
-			name := strings.TrimSpace(u.Username)
-			if name == "" {
-				name = emailRecipientName(email)
-			}
-
-			unsubscribeCtx, unsubscribeCancel := context.WithTimeout(context.Background(), announcementBroadcastListTimeout)
-			unsubscribed, err := s.notificationEmailService.IsUnsubscribed(unsubscribeCtx, email, NotificationEmailEventAnnouncementBroadcast)
-			unsubscribeCancel()
-			if err != nil {
-				logger.LegacyPrintf("service.announcement_broadcast",
-					"[AnnouncementBroadcast] unsubscribe lookup failed for announcement %d recipient %s: %v", annID, email, err)
-				continue
-			}
-			if unsubscribed {
-				suppressed++
-				continue
-			}
-
+// resolveAndEnqueue scans the audience and enqueues one send job per deliverable
+// recipient. It applies backpressure: when the worker queue is full it blocks until
+// a slot frees up (or shutdown), so recipients are never dropped.
+//
+// The scan itself lives in announcement_audience.go and is shared with the admin's
+// audience preview, so the count shown before publishing is the count that is sent.
+func (s *AnnouncementBroadcastService) resolveAndEnqueue(annID int64, title, contentHTML, severity string, targeting AnnouncementTargeting) {
+	aborted := false
+	stats, err := scanAnnouncementAudience(
+		context.Background(), s.userRepo, s.notificationEmailService,
+		targeting, 0, s.stopCh,
+		func(recipient AnnouncementRecipient) bool {
 			job := announcementBroadcastJob{
 				announcementID: annID,
 				title:          title,
 				contentHTML:    contentHTML,
-				userID:         u.ID,
-				email:          email,
-				name:           name,
+				severity:       severity,
+				userID:         recipient.UserID,
+				email:          recipient.Email,
+				name:           recipient.Name,
 			}
 			select {
 			case s.jobs <- job:
-				enqueued++
+				return true
 			case <-s.stopCh:
-				return
+				aborted = true
+				return false
 			}
-		}
-
-		if result == nil || page >= result.Pages || len(users) == 0 {
-			break
-		}
+		},
+	)
+	if err != nil {
+		logger.LegacyPrintf("service.announcement_broadcast",
+			"[AnnouncementBroadcast] audience scan failed for announcement %d: %v", annID, err)
+		return
+	}
+	if aborted {
+		logger.LegacyPrintf("service.announcement_broadcast",
+			"[AnnouncementBroadcast] shutdown interrupted announcement %d after %d recipients", annID, stats.Deliverable)
+		return
 	}
 
 	logger.LegacyPrintf("service.announcement_broadcast",
-		"[AnnouncementBroadcast] enqueued %d recipients, suppressed %d recipients for announcement %d", enqueued, suppressed, annID)
+		"[AnnouncementBroadcast] enqueued %d recipients, suppressed %d recipients for announcement %d",
+		stats.Deliverable, stats.Unsubscribed, annID)
+}
+
+// SendTest delivers one announcement email to a single recipient so an admin can
+// see the rendered result before publishing.
+func (s *AnnouncementBroadcastService) SendTest(ctx context.Context, ann *Announcement, email, name string, userID int64) error {
+	if s == nil || ann == nil || s.notificationEmailService == nil {
+		return ErrAnnouncementTestEmailUnavailable
+	}
+	recipient := strings.TrimSpace(email)
+	if recipient == "" {
+		return ErrAnnouncementTestEmailUnavailable
+	}
+
+	// Send silently no-ops for an unsubscribed recipient on an optional event, so
+	// without this check the admin would see a success and never get the mail.
+	unsubscribed, err := s.notificationEmailService.IsUnsubscribed(ctx, recipient, NotificationEmailEventAnnouncementBroadcast)
+	if err != nil {
+		return err
+	}
+	if unsubscribed {
+		return ErrAnnouncementTestEmailUnsubscribed
+	}
+
+	displayName := strings.TrimSpace(name)
+	if displayName == "" {
+		displayName = emailRecipientName(recipient)
+	}
+	locale := s.notificationEmailService.ResolveRecipientLocale(ctx, userID, recipient)
+
+	return s.notificationEmailService.Send(ctx, NotificationEmailSendInput{
+		Event:          NotificationEmailEventAnnouncementBroadcast,
+		RecipientEmail: recipient,
+		RecipientName:  displayName,
+		UserID:         userID,
+		// A distinct SourceType keeps test sends out of the real broadcast's dedup
+		// namespace; the nonce ReminderKey additionally keeps repeated tests to the
+		// same admin from deduping against each other.
+		SourceType:  "announcement_test",
+		SourceID:    strconv.FormatInt(ann.ID, 10),
+		ReminderKey: strconv.FormatInt(time.Now().UnixNano(), 10),
+		Variables: map[string]string{
+			"announcement_title":          ann.Title,
+			"announcement_severity_label": announcementSeverityLabel(ann.Severity, locale),
+		},
+		RawHTMLVariables: map[string]string{
+			"announcement_content": mdhtml.ToSafeHTML(ann.Content),
+		},
+	})
 }
 
 // Stop stops the worker pool and waits for in-flight sends to finish.
@@ -245,4 +266,29 @@ func activeSubscriptionGroupIDs(subs []UserSubscription, now time.Time) map[int6
 		}
 	}
 	return ids
+}
+
+// announcementSeverityLabel renders a severity as short display text for emails.
+// A label rather than a colour: notificationEmailCard bakes its header accent in at
+// definition time, and an admin-customised stored template freezes it, so a colour
+// placeholder would be silently ignored in exactly the templates that matter.
+func announcementSeverityLabel(severity, locale string) string {
+	chinese := strings.EqualFold(strings.TrimSpace(locale), notificationEmailLocaleChinese)
+	switch severity {
+	case AnnouncementSeverityCritical:
+		if chinese {
+			return "紧急"
+		}
+		return "Critical"
+	case AnnouncementSeverityWarning:
+		if chinese {
+			return "重要"
+		}
+		return "Important"
+	default:
+		if chinese {
+			return "通知"
+		}
+		return "Notice"
+	}
 }

@@ -10,24 +10,24 @@
           @click.stop
         >
           <!-- Header with warm gradient -->
-          <div class="relative overflow-hidden border-b border-primary-100/80 bg-gradient-to-br from-primary-50/80 via-primary-50/50 to-primary-50/30 px-8 py-6 dark:border-dark-700/50 dark:from-primary-900/20 dark:via-primary-900/10 dark:to-primary-900/5">
+          <div :class="['relative overflow-hidden border-b px-8 py-6', tone.header]">
             <!-- Decorative background -->
-            <div class="absolute right-0 top-0 h-full w-64 bg-gradient-to-l from-primary-100/30 to-transparent dark:from-primary-900/20"></div>
+            <div :class="['absolute right-0 top-0 h-full w-64 bg-gradient-to-l to-transparent', tone.decoration]"></div>
 
             <div class="relative z-10">
               <!-- Icon and badge -->
               <div class="mb-3 flex items-center gap-2">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/30">
+                <div :class="['flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg', tone.iconChip]">
                   <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
                 </div>
-                <span class="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-2.5 py-1 text-xs font-medium text-white shadow-lg shadow-primary-500/30">
+                <span :class="['inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r px-2.5 py-1 text-xs font-medium text-white shadow-lg', tone.badge]">
                   <span class="relative flex h-2 w-2">
                     <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
                     <span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
                   </span>
-                  {{ t('announcements.unread') }}
+                  {{ badgeLabel }}
                 </span>
               </div>
 
@@ -49,7 +49,7 @@
           <!-- Body -->
           <div class="max-h-[50vh] overflow-y-auto bg-white px-8 py-8 dark:bg-dark-800">
             <div class="relative">
-              <div class="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-gradient-to-b from-primary-500 via-primary-500 to-primary-500"></div>
+              <div :class="['absolute left-0 top-0 bottom-0 w-1 rounded-full bg-gradient-to-b', tone.rule]"></div>
               <div class="pl-6">
                 <div
                   class="markdown-body prose prose-sm max-w-none dark:prose-invert"
@@ -88,14 +88,42 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderAnnouncementMarkdown } from '@/utils/markdown'
 import { useAnnouncementStore } from '@/stores/announcements'
 import { formatRelativeWithDateTime } from '@/utils/format'
 import type { Announcement, UserAnnouncement } from '@/types'
 import '@/styles/announcement-markdown.css'
 
 type PreviewAnnouncement = Pick<Announcement | UserAnnouncement, 'title' | 'content' | 'created_at'>
+  & Partial<Pick<Announcement, 'severity'>>
+
+/**
+ * Severity is presentation only; each tone reuses existing palette tokens so no new
+ * CSS variables are introduced.
+ */
+const SEVERITY_TONES = {
+  info: {
+    header: 'border-primary-100/80 bg-gradient-to-br from-primary-50/80 via-primary-50/50 to-primary-50/30 dark:border-dark-700/50 dark:from-primary-900/20 dark:via-primary-900/10 dark:to-primary-900/5',
+    decoration: 'from-primary-100/30 dark:from-primary-900/20',
+    iconChip: 'from-primary-500 to-primary-600 shadow-primary-500/30',
+    badge: 'from-primary-500 to-primary-600 shadow-primary-500/30',
+    rule: 'from-primary-500 via-primary-500 to-primary-500',
+  },
+  warning: {
+    header: 'border-amber-100/80 bg-gradient-to-br from-amber-50/80 via-amber-50/50 to-amber-50/30 dark:border-dark-700/50 dark:from-amber-900/20 dark:via-amber-900/10 dark:to-amber-900/5',
+    decoration: 'from-amber-100/30 dark:from-amber-900/20',
+    iconChip: 'from-amber-500 to-amber-600 shadow-amber-500/30',
+    badge: 'from-amber-500 to-amber-600 shadow-amber-500/30',
+    rule: 'from-amber-500 via-amber-500 to-amber-500',
+  },
+  critical: {
+    header: 'border-red-100/80 bg-gradient-to-br from-red-50/80 via-red-50/50 to-red-50/30 dark:border-dark-700/50 dark:from-red-900/20 dark:via-red-900/10 dark:to-red-900/5',
+    decoration: 'from-red-100/30 dark:from-red-900/20',
+    iconChip: 'from-red-500 to-red-600 shadow-red-500/30',
+    badge: 'from-red-500 to-red-600 shadow-red-500/30',
+    rule: 'from-red-500 via-red-500 to-red-500',
+  },
+} as const
 
 const props = withDefaults(defineProps<{
   announcement?: PreviewAnnouncement | null
@@ -115,17 +143,24 @@ const displayedAnnouncement = computed(() => (
   props.preview ? props.announcement : announcementStore.currentPopup
 ))
 
-marked.setOptions({
-  breaks: true,
-  gfm: true,
+const severity = computed(() => displayedAnnouncement.value?.severity ?? 'info')
+const tone = computed(() => SEVERITY_TONES[severity.value] ?? SEVERITY_TONES.info)
+
+/**
+ * The live popup only ever shows unread announcements, so "Unread" is the useful
+ * label there. In preview mode — the admin preview, the banner detail and the
+ * archive — the item may well have been read, so the severity is shown instead.
+ */
+const badgeLabel = computed(() => {
+  if (severity.value !== 'info') return t(`admin.announcements.severityLabels.${severity.value}`)
+  return props.preview
+    ? t('admin.announcements.severityLabels.info')
+    : t('announcements.unread')
 })
 
-const renderedContent = computed(() => {
-  const content = displayedAnnouncement.value?.content
-  if (!content) return ''
-  const html = marked.parse(content) as string
-  return DOMPurify.sanitize(html)
-})
+const renderedContent = computed(() =>
+  renderAnnouncementMarkdown(displayedAnnouncement.value?.content),
+)
 
 function handleDismiss() {
   if (props.preview) {

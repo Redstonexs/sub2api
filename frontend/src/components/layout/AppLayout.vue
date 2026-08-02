@@ -14,6 +14,11 @@
       <!-- Header -->
       <AppHeader />
 
+      <!-- Persistent announcement banner. Below the header so it does not inflate
+           the sticky bar, and inside AppLayout so it covers every authenticated
+           admin and user page while skipping login and public pages. -->
+      <AnnouncementBanner />
+
       <!-- Main Content -->
       <main class="animate-page-enter p-4 md:p-6 lg:p-8">
         <slot />
@@ -31,6 +36,7 @@ import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import AnnouncementBanner from '@/components/common/AnnouncementBanner.vue'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()

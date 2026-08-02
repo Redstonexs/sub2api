@@ -22,6 +22,10 @@ const (
 	FieldStatus = "status"
 	// FieldNotifyMode holds the string denoting the notify_mode field in the database.
 	FieldNotifyMode = "notify_mode"
+	// FieldSeverity holds the string denoting the severity field in the database.
+	FieldSeverity = "severity"
+	// FieldShowBanner holds the string denoting the show_banner field in the database.
+	FieldShowBanner = "show_banner"
 	// FieldTargeting holds the string denoting the targeting field in the database.
 	FieldTargeting = "targeting"
 	// FieldStartsAt holds the string denoting the starts_at field in the database.
@@ -56,6 +60,8 @@ var Columns = []string{
 	FieldContent,
 	FieldStatus,
 	FieldNotifyMode,
+	FieldSeverity,
+	FieldShowBanner,
 	FieldTargeting,
 	FieldStartsAt,
 	FieldEndsAt,
@@ -88,6 +94,12 @@ var (
 	DefaultNotifyMode string
 	// NotifyModeValidator is a validator for the "notify_mode" field. It is called by the builders before save.
 	NotifyModeValidator func(string) error
+	// DefaultSeverity holds the default value on creation for the "severity" field.
+	DefaultSeverity string
+	// SeverityValidator is a validator for the "severity" field. It is called by the builders before save.
+	SeverityValidator func(string) error
+	// DefaultShowBanner holds the default value on creation for the "show_banner" field.
+	DefaultShowBanner bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -122,6 +134,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByNotifyMode orders the results by the notify_mode field.
 func ByNotifyMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNotifyMode, opts...).ToFunc()
+}
+
+// BySeverity orders the results by the severity field.
+func BySeverity(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSeverity, opts...).ToFunc()
+}
+
+// ByShowBanner orders the results by the show_banner field.
+func ByShowBanner(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldShowBanner, opts...).ToFunc()
 }
 
 // ByStartsAt orders the results by the starts_at field.
