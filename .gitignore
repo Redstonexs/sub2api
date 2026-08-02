@@ -130,6 +130,11 @@ scripts
 #openspec/
 code-reviews/
 AGENTS.md
+
+# Generated local architecture maps
+codemap.md
+.slim/
+
 backend/cmd/server/server
 deploy/docker-compose.override.yml
 .gocache/
