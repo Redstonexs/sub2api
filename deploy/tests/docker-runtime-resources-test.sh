@@ -15,12 +15,24 @@ assert_line() {
   grep -Fqx "$line" "$file" || fail "$file is missing: $line"
 }
 
-assert_count() {
+# Every docker image build must ship the entry, whatever the goreleaser layout
+# happens to be. Checking each extra_files block beats a hardcoded occurrence
+# count, which silently goes stale when entries are merged or split (legacy
+# `dockers:` had one per platform/registry; `dockers_v2:` covers them all).
+assert_extra_files_include() {
   file=$1
-  line=$2
-  expected=$3
-  actual=$(grep -Fxc "$line" "$file" || true)
-  [ "$actual" -eq "$expected" ] || fail "$file has $actual occurrences of '$line', expected $expected"
+  entry=$2
+  summary=$(awk -v want="      - $entry" '
+    /^    extra_files:$/ { inblock = 1; blocks++; found = 0; next }
+    inblock && $0 == want { found = 1; next }
+    inblock && /^      - / { next }
+    inblock { inblock = 0; if (!found) missing++ }
+    END { if (inblock && !found) missing++; print blocks + 0, missing + 0 }
+  ' "$file")
+  blocks=${summary% *}
+  missing=${summary#* }
+  [ "$blocks" -gt 0 ] || fail "$file has no extra_files block"
+  [ "$missing" -eq 0 ] || fail "$file: $missing of $blocks extra_files blocks omit '$entry'"
 }
 
 test -s backend/resources/model-pricing/model_prices_and_context_window.json || \
@@ -28,7 +40,7 @@ test -s backend/resources/model-pricing/model_prices_and_context_window.json || 
 
 assert_line Dockerfile.goreleaser 'COPY --chown=sub2api:sub2api backend/resources /app/resources'
 assert_line deploy/Dockerfile 'COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources'
-assert_count .goreleaser.yaml '      - backend/resources' 4
-assert_count .goreleaser.simple.yaml '      - backend/resources' 1
+assert_extra_files_include .goreleaser.yaml backend/resources
+assert_extra_files_include .goreleaser.simple.yaml backend/resources
 
 printf 'docker runtime resources test passed\n'
