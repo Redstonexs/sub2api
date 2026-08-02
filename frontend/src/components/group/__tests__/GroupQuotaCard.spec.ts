@@ -298,13 +298,13 @@ describe('GroupQuotaCard', () => {
 
   // ========== EMPTY STATE TESTS ==========
 
-  it('user with no viewable groups → noViewableGroups text shown', async () => {
+  it('user with no viewable groups → quota card is absent', async () => {
     mockGetMyViewableGroups.mockResolvedValue([])
 
     const wrapper = mount(GroupQuotaCard, { props: { isAdmin: false } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('dashboard.groupQuotaCard.noViewableGroups')
+    expect(wrapper.find('.group-quota-card').exists()).toBe(false)
     expect(mockUserGetGroupQuotaCard).not.toHaveBeenCalled()
   })
 

@@ -1,5 +1,5 @@
 <template>
-  <section class="group-quota-card card overflow-hidden" :aria-label="tk('title')">
+  <section v-if="!showNoViewableGroups" class="group-quota-card card overflow-hidden" :aria-label="tk('title')">
     <GroupQuotaCardControls
       :groups-loading="groupsLoading"
       :group-options="groupOptions"
@@ -21,10 +21,6 @@
       <div v-else-if="error && !cardData" class="py-4">
         <p class="text-sm text-danger-600 dark:text-danger-400">{{ tk('loadFailed') }}</p>
         <button class="btn btn-secondary mt-2 text-xs" @click="retry">Retry</button>
-      </div>
-
-      <div v-else-if="showNoViewableGroups" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        {{ tk('noViewableGroups') }}
       </div>
 
       <Transition name="group-quota-data" mode="out-in">
