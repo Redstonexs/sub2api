@@ -79,3 +79,46 @@ jobs:
           version: v2.9
           args: --timeout=30m
           working-directory: backend
+
+  # Warms a dedicated GoReleaser GOCACHE on default-branch pushes only.
+  # Tag jobs (release.yml) restore this exact-key cache, which cannot be
+  # re-warmed at release time because tag-scoped cache writes are not reusable.
+  # The key is stable so source-only pushes reuse the populated entry.
+  warm-goreleaser-cache:
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - name: Restore GoReleaser Go build cache
+        id: restore-goreleaser-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/goreleaser-go-build
+          key: goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}
+      - name: Create placeholder for embedded frontend
+        if: steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p backend/internal/web/dist
+          # The placeholder makes `go:embed all:dist` compile on a clean checkout.
+          # It is ignored and exists only in the runner workspace.
+          touch backend/internal/web/dist/.cache-warm-placeholder
+      - name: Warm GoReleaser Go build cache
+        if: steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: build --snapshot --clean
+        env:
+          GOCACHE: ${{ runner.temp }}/goreleaser-go-build
+      - name: Save GoReleaser Go build cache
+        if: success() && steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/goreleaser-go-build
+          key: goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}
