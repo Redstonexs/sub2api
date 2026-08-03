@@ -116,6 +116,10 @@ jobs:
           args: build --snapshot --clean
         env:
           GOCACHE: ${{ runner.temp }}/goreleaser-go-build
+          # GoReleaser evaluates the release-section templates even for snapshot
+          # builds (scm releases pipe); non-secret GitHub context, mirrors release.yml.
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
       - name: Save GoReleaser Go build cache
         if: success() && steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
