@@ -1023,9 +1023,11 @@ type GatewayConfig struct {
 
 	// gatewayErrorMessagesLive 保存后台 gateway_error_messages 设置的运行时覆盖
 	// 快照。一旦通过 SetGatewayErrorMessages 发布即视为不可变（clone-on-write）；
-	// nil 表示当前无覆盖，GatewayErrorMessage 回退到上面的静态 ErrorMessages 配置。
+	// 零值 atomic.Pointer 持有 nil 表示当前无覆盖，GatewayErrorMessage 回退到上面的
+	// 静态 ErrorMessages 配置。字段是值类型（非懒分配指针），因此启动阶段 DB 读取失败
+	// 与后续刷新之间的并发读取/写入始终通过原子操作串行化，不会竞争裸指针。
 	// 由 SettingService 在启动加载与设置刷新时写入，跨副本通过远程失效事件收敛。
-	gatewayErrorMessagesLive *atomic.Pointer[gatewayErrorMessagesRuntimeSnapshot] `mapstructure:"-" json:"-" yaml:"-"`
+	gatewayErrorMessagesLive atomic.Pointer[gatewayErrorMessagesRuntimeSnapshot] `mapstructure:"-" json:"-" yaml:"-"`
 }
 
 // gatewayErrorMessagesRuntimeSnapshot 是网关错误提示映射的运行时覆盖快照。
@@ -1042,9 +1044,6 @@ type gatewayErrorMessagesRuntimeSnapshot struct {
 func (c *Config) SetGatewayErrorMessages(messages map[string]string) {
 	if c == nil {
 		return
-	}
-	if c.Gateway.gatewayErrorMessagesLive == nil {
-		c.Gateway.gatewayErrorMessagesLive = &atomic.Pointer[gatewayErrorMessagesRuntimeSnapshot]{}
 	}
 	if len(messages) == 0 {
 		c.Gateway.gatewayErrorMessagesLive.Store(nil)
@@ -1063,11 +1062,7 @@ func (c *Config) GatewayErrorMessagesLive() map[string]string {
 	if c == nil {
 		return nil
 	}
-	live := c.Gateway.gatewayErrorMessagesLive
-	if live == nil {
-		return nil
-	}
-	if snapshot := live.Load(); snapshot != nil {
+	if snapshot := c.Gateway.gatewayErrorMessagesLive.Load(); snapshot != nil {
 		cloned := make(map[string]string, len(snapshot.messages))
 		for key, value := range snapshot.messages {
 			cloned[key] = value
@@ -1086,11 +1081,9 @@ func GatewayErrorMessage(cfg *Config, code int, defaultMessage string) string {
 		return defaultMessage
 	}
 	codeKey := strconv.Itoa(code)
-	if live := cfg.Gateway.gatewayErrorMessagesLive; live != nil {
-		if snapshot := live.Load(); snapshot != nil {
-			if msg, ok := snapshot.messages[codeKey]; ok && strings.TrimSpace(msg) != "" {
-				return msg
-			}
+	if snapshot := cfg.Gateway.gatewayErrorMessagesLive.Load(); snapshot != nil {
+		if msg, ok := snapshot.messages[codeKey]; ok && strings.TrimSpace(msg) != "" {
+			return msg
 		}
 	}
 	msg, ok := cfg.Gateway.ErrorMessages[codeKey]

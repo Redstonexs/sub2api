@@ -181,7 +181,7 @@ func (s *AntigravityGatewayService) getLogConfig() (logBody bool, maxBytes int) 
 	if s.settingService == nil || s.settingService.cfg == nil {
 		return false, maxBytes
 	}
-	cfg := s.settingService.cfg.Gateway
+	cfg := &s.settingService.cfg.Gateway
 	if cfg.LogUpstreamErrorBodyMaxBytes > 0 {
 		maxBytes = cfg.LogUpstreamErrorBodyMaxBytes
 	}

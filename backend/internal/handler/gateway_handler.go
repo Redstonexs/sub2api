@@ -345,6 +345,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					failoverClientGone(c)
 					return
 				default: // FailoverExhausted
+					// 排除列表全由利润门否决造成（可能发生在没有真实 503 的小候选池）：
+					// 与预算耗尽出口一致，按「无可用账号（利润）」写 503，而不是通用 502。
+					if fs.SelectionExhaustedByProfitVeto() {
+						reqLog.Warn("gateway.selection_exhausted_by_profit_veto",
+							zap.Int("profit_veto_count", fs.ProfitVetoCount()),
+							zap.Int("excluded_accounts", len(fs.FailedAccountIDs)),
+						)
+						markOpsRoutingCapacityLimited(c)
+						h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", profitVetoExhaustedText(h.cfg), streamStarted)
+						return
+					}
 					if fs.LastFailoverErr != nil {
 						h.handleFailoverExhausted(c, fs.LastFailoverErr, service.PlatformGemini, streamStarted)
 					} else {
@@ -658,6 +669,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					failoverClientGone(c)
 					return
 				default: // FailoverExhausted
+					// 排除列表全由利润门否决造成（可能发生在没有真实 503 的小候选池）：
+					// 与预算耗尽出口一致，按「无可用账号（利润）」写 503，而不是通用 502。
+					if fs.SelectionExhaustedByProfitVeto() {
+						reqLog.Warn("gateway.selection_exhausted_by_profit_veto",
+							zap.Int("profit_veto_count", fs.ProfitVetoCount()),
+							zap.Int("excluded_accounts", len(fs.FailedAccountIDs)),
+						)
+						markOpsRoutingCapacityLimited(c)
+						h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", profitVetoExhaustedText(h.cfg), streamStarted)
+						return
+					}
 					if fs.LastFailoverErr != nil {
 						h.handleFailoverExhausted(c, fs.LastFailoverErr, platform, streamStarted)
 					} else {

@@ -146,6 +146,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	switchCount := 0
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	// 仅登记利润门终检否决的账号（真实 failover 失败不进入），用于识别
+	// 「排除列表全部由利润否决造成」的纯否决耗尽（见 openAISelectionExhaustedByProfitVeto）。
+	profitVetoedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
@@ -190,6 +193,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
 				return
 			} else {
+				// 排除列表全由利润门否决造成（小候选池在 maxProfitVetoAttempts 前耗尽）：
+				// 按「无可用账号（利润）」写 503，而不是通用 502。
+				if openAISelectionExhaustedByProfitVeto(failedAccountIDs, profitVetoedAccountIDs) {
+					h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
+					return
+				}
 				if lastFailoverErr != nil {
 					h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
 				} else {
@@ -215,7 +224,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		accountReleaseFunc, slotResult := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 利润终检否决：排除该账号重新选号；否决次数达上限则按无可用账号终止。
-			if !recordOpenAIProfitVeto(failedAccountIDs, account.ID, &profitVetoCount) {
+			if !recordOpenAIProfitVetoTracked(failedAccountIDs, profitVetoedAccountIDs, account.ID, &profitVetoCount) {
 				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
 				return
 			}

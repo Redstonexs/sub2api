@@ -129,6 +129,19 @@ func (s *FailoverState) allExclusionsAreProfitVetoed() bool {
 	return true
 }
 
+// SelectionExhaustedByProfitVeto 暴露「本次选号耗尽是否完全由分组利润门否决造成」
+// 的判定（包装 allExclusionsAreProfitVetoed）：排除列表非空，且每个排除账号都来自
+// 利润终检否决（没有真实 failover / 资格失败的账号混入）。此时继续退避重试不会
+// 带来任何新候选——否决判定基于请求级冻结的定价，不会随重试改变——调用方应直接
+// 按「无可用账号（利润）」终止，而不是回落通用的 502。
+//
+// HandleSelectionExhausted 的动作语义不受影响：本方法只是把 503 退避分支内部
+// 已有的短路判定提升为公开入口，让调用方能在进入通用选号耗尽处理（502）之前
+// 识别纯利润否决耗尽并写出对应的 503 响应。
+func (s *FailoverState) SelectionExhaustedByProfitVeto() bool {
+	return s.allExclusionsAreProfitVetoed()
+}
+
 // HandleFailoverError 处理 UpstreamFailoverError，返回下一步动作。
 // 包含：缓存计费判断、同账号重试、临时封禁、切换计数、Antigravity 延时。
 func (s *FailoverState) HandleFailoverError(

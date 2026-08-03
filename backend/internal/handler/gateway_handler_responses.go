@@ -193,6 +193,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				failoverClientGone(c)
 				return
 			default:
+				// 排除列表全由利润门否决造成（可能发生在没有真实 503 的小候选池）：
+				// 与预算耗尽出口一致，按「无可用账号（利润）」写 503，而不是通用 502。
+				if fs.SelectionExhaustedByProfitVeto() {
+					reqLog.Warn("gateway.responses.selection_exhausted_by_profit_veto",
+						zap.Int("profit_veto_count", fs.ProfitVetoCount()),
+						zap.Int("excluded_accounts", len(fs.FailedAccountIDs)),
+					)
+					h.responsesErrorResponse(c, http.StatusServiceUnavailable, "api_error", profitVetoExhaustedText(h.cfg))
+					return
+				}
 				if fs.LastFailoverErr != nil {
 					h.handleResponsesFailoverExhausted(c, fs.LastFailoverErr, streamStarted)
 				} else {

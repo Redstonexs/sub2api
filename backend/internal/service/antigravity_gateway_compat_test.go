@@ -57,12 +57,20 @@ func (c *antigravityCompatTokenCache) ReleaseRefreshLock(context.Context, string
 	return nil
 }
 
-func newAntigravityCompatService(cfg config.GatewayConfig, upstream HTTPUpstream) *AntigravityGatewayService {
+func newAntigravityCompatService(cfg *config.GatewayConfig, upstream HTTPUpstream) *AntigravityGatewayService {
 	tokenProvider := NewAntigravityTokenProvider(
 		nil,
 		&antigravityCompatTokenCache{token: "fresh-oauth-token"},
 		nil,
 	)
+	svcCfg := &config.Config{}
+	if cfg != nil {
+		// GatewayConfig now holds an atomic.Pointer (gatewayErrorMessagesLive), so
+		// it is not copyable; forward only the fields this helper exercises.
+		svcCfg.Gateway.MaxLineSize = cfg.MaxLineSize
+		svcCfg.Gateway.StreamDataIntervalTimeout = cfg.StreamDataIntervalTimeout
+		svcCfg.Gateway.StreamKeepaliveInterval = cfg.StreamKeepaliveInterval
+	}
 	return NewAntigravityGatewayService(
 		nil,
 		nil,
@@ -70,7 +78,7 @@ func newAntigravityCompatService(cfg config.GatewayConfig, upstream HTTPUpstream
 		tokenProvider,
 		nil,
 		upstream,
-		NewSettingService(&antigravitySettingRepoStub{}, &config.Config{Gateway: cfg}),
+		NewSettingService(&antigravitySettingRepoStub{}, svcCfg),
 		nil,
 	)
 }
@@ -154,7 +162,7 @@ func TestAntigravityCompatOAuthUsesNativeTokenAndRoute(t *testing.T) {
 				},
 			}
 			svc := newAntigravityCompatService(
-				config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+				&config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
 				upstream,
 			)
 			c, recorder := newAntigravityCompatContext(http.MethodPost, tt.path, tt.body)
@@ -244,7 +252,7 @@ func TestAntigravityCompatPreservesChatTokenLimit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{antigravityCompatSuccessResponse()}}
-			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
+			svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
 			body := []byte(tt.body)
 			c, _ := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", body)
 
@@ -277,7 +285,7 @@ func TestAntigravityCompatRoutesByMappedModelFamily(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
 			upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{antigravityCompatSuccessResponse()}}
-			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
+			svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
 			body := []byte(`{"model":"` + tt.model + `","messages":[{"role":"user","content":"ok"}],"max_tokens":8}`)
 			c, _ := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", body)
 
@@ -305,7 +313,7 @@ func TestAntigravityCompatUnauthorizedIsCredentialFailure(t *testing.T) {
 		Header:     http.Header{"X-Request-Id": []string{"auth-3757"}},
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"Invalid bearer token"}}`)),
 	}}}
-	svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
+	svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
 	body := []byte(`{"model":"gemini-3.1-pro-high","messages":[{"role":"user","content":"ok"}]}`)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", body)
 
@@ -353,7 +361,7 @@ func TestAntigravityCompatEmptyStreamTriggersFailover(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+			svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 			c, recorder := newAntigravityCompatContext(http.MethodPost, "/", nil)
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
@@ -396,7 +404,7 @@ func TestAntigravityCompatUsageOnlyStreamTriggersFailover(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+			svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 			c, recorder := newAntigravityCompatContext(http.MethodPost, "/", nil)
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
@@ -454,7 +462,7 @@ func TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover(t *testing.T) {
 					`data: {"response":{"responseId":"resp_3757","usageMetadata":{"promptTokenCount":8}}}` + "\n\n",
 				)),
 			}}}
-			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
+			svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
 			c, recorder := newAntigravityCompatContext(http.MethodPost, tt.path, tt.body)
 
 			result, err := tt.call(
@@ -477,7 +485,7 @@ func TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover(t *testing.T) {
 
 func TestAntigravityCompatChatStreamMapsToolCallAndUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+	svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", nil)
 	body := `data: {"response":{"responseId":"resp_3757","candidates":[{"content":{"parts":[{"functionCall":{"id":"call_3757","name":"get_weather","args":{"city":"Tokyo"}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":3}}}` + "\n\n"
 	resp := &http.Response{
@@ -508,7 +516,7 @@ func TestAntigravityCompatChatStreamMapsToolCallAndUsage(t *testing.T) {
 func TestAntigravityCompatFirstEventTimeoutTriggersFailover(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityCompatService(
-		config.GatewayConfig{MaxLineSize: defaultMaxLineSize, StreamDataIntervalTimeout: 1},
+		&config.GatewayConfig{MaxLineSize: defaultMaxLineSize, StreamDataIntervalTimeout: 1},
 		nil,
 	)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", nil)
@@ -543,7 +551,7 @@ func TestAntigravityCompatFirstEventTimeoutTriggersFailover(t *testing.T) {
 
 func TestAntigravityCompatClientDisconnectDrainsUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+	svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 	c, _ := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", nil)
 	c.Writer = &antigravityFailingWriter{ResponseWriter: c.Writer, failAfter: 0}
 	body := strings.Join([]string{
@@ -568,7 +576,7 @@ func TestAntigravityCompatClientDisconnectDrainsUsage(t *testing.T) {
 
 func TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+	svc := newAntigravityCompatService(&config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/responses", nil)
 	body := []byte(`data: {"response":{"responseId":"resp_3757","candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":1}}}` + "\n\n")
 	resp := &http.Response{
@@ -591,7 +599,7 @@ func TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame(t *testing.T) {
 func TestAntigravityCompatKeepaliveAfterFirstEvent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityCompatService(
-		config.GatewayConfig{MaxLineSize: defaultMaxLineSize, StreamKeepaliveInterval: 1},
+		&config.GatewayConfig{MaxLineSize: defaultMaxLineSize, StreamKeepaliveInterval: 1},
 		nil,
 	)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/responses", nil)

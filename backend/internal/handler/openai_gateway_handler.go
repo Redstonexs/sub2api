@@ -433,6 +433,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	firstOutputTimeoutSwitchCount := 0
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	// 仅登记利润门终检否决的账号（真实 failover 失败不进入），用于识别
+	// 「排除列表全部由利润否决造成」的纯否决耗尽（见 openAISelectionExhaustedByProfitVeto）。
+	profitVetoedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
@@ -497,6 +500,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
 				return
 			}
+			// 排除列表全由利润门否决造成（小候选池在 maxProfitVetoAttempts 前耗尽）：
+			// 按「无可用账号（利润）」写 503，而不是通用 502。
+			if openAISelectionExhaustedByProfitVeto(failedAccountIDs, profitVetoedAccountIDs) {
+				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
+				return
+			}
 			if lastFailoverErr != nil {
 				h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
 			} else {
@@ -533,7 +542,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 利润终检否决：排除该账号重新选号，全池耗尽由下一轮选号报错；
 			// 否决次数达上限则直接终止，避免排队抢槽后才终检的延迟放大。
-			if !recordOpenAIProfitVeto(failedAccountIDs, account.ID, &profitVetoCount) {
+			if !recordOpenAIProfitVetoTracked(failedAccountIDs, profitVetoedAccountIDs, account.ID, &profitVetoCount) {
 				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
 				return
 			}
@@ -1013,6 +1022,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	switchCount := 0
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	// 仅登记利润门终检否决的账号（真实 failover 失败不进入），用于识别
+	// 「排除列表全部由利润否决造成」的纯否决耗尽（见 openAISelectionExhaustedByProfitVeto）。
+	profitVetoedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
@@ -1064,6 +1076,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					return
 				}
 			} else {
+				// 排除列表全由利润门否决造成（小候选池在 maxProfitVetoAttempts 前耗尽）：
+				// 按「无可用账号（利润）」写 503，而不是通用 502。
+				if openAISelectionExhaustedByProfitVeto(failedAccountIDs, profitVetoedAccountIDs) {
+					h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
+					return
+				}
 				if lastFailoverErr != nil {
 					h.handleAnthropicFailoverExhausted(c, lastFailoverErr, streamStarted)
 				} else {
@@ -1090,7 +1108,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 利润终检否决：排除该账号重新选号，全池耗尽由下一轮选号报错；
 			// 否决次数达上限则直接终止，避免排队抢槽后才终检的延迟放大。
-			if !recordOpenAIProfitVeto(failedAccountIDs, account.ID, &profitVetoCount) {
+			if !recordOpenAIProfitVetoTracked(failedAccountIDs, profitVetoedAccountIDs, account.ID, &profitVetoCount) {
 				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
 				return
 			}
@@ -1438,6 +1456,32 @@ func recordOpenAIProfitVeto(failedAccountIDs map[int64]struct{}, accountID int64
 	failedAccountIDs[accountID] = struct{}{}
 	*vetoCount++
 	return *vetoCount < maxProfitVetoAttempts
+}
+
+// recordOpenAIProfitVetoTracked 在 recordOpenAIProfitVeto 之外额外维护一个独立的
+// 利润否决账号集（recordOpenAIProfitVeto 只写排除集与计数，签名保持不变）。
+// 否决账号集只包含来自利润门终检否决的账号：真实 failover 失败与 Grok 资格拒绝
+// 只进入排除集、不进入该集合，用于「选号报错是否全部由利润否决造成」的判定。
+func recordOpenAIProfitVetoTracked(failedAccountIDs, profitVetoedAccountIDs map[int64]struct{}, accountID int64, vetoCount *int) bool {
+	profitVetoedAccountIDs[accountID] = struct{}{}
+	return recordOpenAIProfitVeto(failedAccountIDs, accountID, vetoCount)
+}
+
+// openAISelectionExhaustedByProfitVeto 判断 OpenAI 侧选号循环的排除列表是否全部
+// 由利润门终检否决贡献：排除列表非空，且每个排除账号都来自否决（没有真实
+// failover / 资格失败的账号混入）。此时选号报错应被解释为「候选全部越线」，
+// 调用方应按「无可用账号（利润）」终止，而不是回落通用的 502。
+// 语义与 FailoverState.SelectionExhaustedByProfitVeto 一致。
+func openAISelectionExhaustedByProfitVeto(failedAccountIDs, profitVetoedAccountIDs map[int64]struct{}) bool {
+	if len(profitVetoedAccountIDs) == 0 || len(failedAccountIDs) == 0 {
+		return false
+	}
+	for id := range failedAccountIDs {
+		if _, ok := profitVetoedAccountIDs[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // handleOpenAIProfitVetoExhausted 在利润否决预算耗尽时写出错误响应。

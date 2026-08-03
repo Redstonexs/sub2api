@@ -187,6 +187,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	requestCtx := service.WithOpenAIProfitControlSuppressed(c.Request.Context())
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	// 仅登记利润门终检否决的账号（真实 failover 失败与 Grok 资格拒绝不进入），
+	// 用于识别「排除列表全部由利润否决造成」的纯否决耗尽（见
+	// openAISelectionExhaustedByProfitVeto）。媒体路径已豁免利润门，此登记仅
+	// 覆盖防御性否决分支。
+	profitVetoedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
@@ -238,6 +243,14 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
 				h.errorResponse(c, cls.Status, cls.ErrType, cls.Message)
+				return
+			}
+			// 排除列表全由利润门否决造成（防御性分支；媒体路径已豁免利润门）：
+			// 按「无可用账号（利润）」写 503，而不是通用 502。资格拒绝与真实
+			// failover 失败混入时此处不命中，保持既有 grok_media_no_eligible_account
+			// / 502 语义不变。
+			if openAISelectionExhaustedByProfitVeto(failedAccountIDs, profitVetoedAccountIDs) {
+				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
 				return
 			}
 			if lastFailoverErr != nil {
@@ -305,7 +318,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 媒体路径已显式豁免利润门（suppress 标记），此分支仅防御性兜底，
 			// 同样受否决上限约束。
-			if !recordOpenAIProfitVeto(failedAccountIDs, account.ID, &profitVetoCount) {
+			if !recordOpenAIProfitVetoTracked(failedAccountIDs, profitVetoedAccountIDs, account.ID, &profitVetoCount) {
 				h.handleOpenAIProfitVetoExhausted(c, streamStarted, reqLog, profitVetoCount)
 				return
 			}
