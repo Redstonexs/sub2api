@@ -203,16 +203,24 @@
           </transition>
         </div>
 
-        <div v-if="captchaProvider !== 'none'" data-testid="registration-turnstile">
-          <CaptchaWidget
-            ref="captchaRef"
-            :provider="captchaProvider"
+        <!-- Captcha Widget -->
+        <div v-if="captchaEnabled" data-testid="registration-turnstile">
+          <TurnstileWidget
+            ref="turnstileRef"
+            :turnstile-enabled="turnstileEnabled"
             :turnstile-site-key="turnstileSiteKey"
-            :cap-a-p-i-endpoint="capAPIEndpoint"
+            :tencent-enabled="tencentCaptchaEnabled"
+            :tencent-app-id="tencentCaptchaAppId"
+            :aliyun-enabled="aliyunCaptchaEnabled"
+            :aliyun-scene-id="aliyunCaptchaSceneId"
+            :aliyun-prefix="aliyunCaptchaPrefix"
+            :aliyun-region="aliyunCaptchaRegion"
+            :cap-enabled="capCaptchaEnabled"
+            :cap-api-endpoint="capAPIEndpoint"
             :cap-site-key="capSiteKey"
-            @verify="onCaptchaVerify"
-            @expire="onCaptchaExpire"
-            @error="onCaptchaError"
+            @verify="onTurnstileVerify"
+            @expire="onTurnstileExpire"
+            @error="onTurnstileError"
           />
         </div>
 
@@ -231,7 +239,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="registrationActionDisabled || (captchaProvider !== 'none' && !captchaToken)"
+          :disabled="registrationActionDisabled || ((turnstileEnabled || capCaptchaEnabled) && !turnstileToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -281,6 +289,7 @@
           :github-enabled="githubOAuthEnabled"
           :google-enabled="googleOAuthEnabled"
           :show-divider="false"
+          @start="handleOAuthStart"
         />
 
         <LinuxDoOAuthSection
@@ -288,12 +297,14 @@
           :disabled="registrationActionDisabled"
           :aff-code="formData.aff_code"
           :show-divider="false"
+          @start="handleOAuthStart"
         />
         <WechatOAuthSection
           v-if="wechatOAuthEnabled"
           :disabled="registrationActionDisabled"
           :aff-code="formData.aff_code"
           :show-divider="false"
+          @start="handleOAuthStart"
         />
         <OidcOAuthSection
           v-if="oidcOAuthEnabled"
@@ -301,6 +312,7 @@
           :provider-name="oidcOAuthProviderName"
           :aff-code="formData.aff_code"
           :show-divider="false"
+          @start="handleOAuthStart"
         />
       </div>
     </div>
@@ -331,15 +343,19 @@ import WechatOAuthSection from '@/components/auth/WechatOAuthSection.vue'
 import EmailOAuthButtons from '@/components/auth/EmailOAuthButtons.vue'
 import LoginAgreementPrompt from '@/components/auth/LoginAgreementPrompt.vue'
 import Icon from '@/components/icons/Icon.vue'
-import CaptchaWidget from '@/components/CaptchaWidget.vue'
+import TurnstileWidget from '@/components/CaptchaChallenge.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
+  buildOAuthLoginStartURL,
   getPublicSettings,
   isWeChatWebOAuthEnabled,
+  startOAuthLogin,
+  type OAuthLoginStart,
   validatePromoCode,
   validateInvitationCode
 } from '@/api/auth'
 import { buildAuthErrorMessage } from '@/utils/authError'
+import { extractI18nErrorMessage } from '@/utils/apiError'
 import {
   formatRegistrationEmailSuffixWhitelistForMessage,
   isRegistrationEmailSuffixAllowed,
@@ -351,7 +367,7 @@ import {
   resolveAffiliateReferralCode
 } from '@/utils/oauthAffiliate'
 import type { CaptchaProvider, LoginAgreementDocument } from '@/types'
-import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
+import { resolveCaptchaProvider } from '@/utils/captcha'
 
 const { t, locale } = useI18n()
 const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
@@ -378,8 +394,17 @@ const invitationCodeEnabled = ref<boolean>(false)
 const affiliateEnabled = ref<boolean>(false)
 const captchaProvider = ref<CaptchaProvider>('none')
 const turnstileSiteKey = ref<string>('')
+// fork：captcha_provider 是 Turnstile 的开关来源（resolveCaptchaProvider 已兼容仅设置
+// turnstile_enabled 的旧配置），上游按 turnstileEnabled 判断的分支据此派生。
+const turnstileEnabled = computed(() => captchaProvider.value === 'turnstile')
 const capAPIEndpoint = ref<string>('')
 const capSiteKey = ref<string>('')
+const tencentCaptchaEnabled = ref<boolean>(false)
+const tencentCaptchaAppId = ref<string>('')
+const aliyunCaptchaEnabled = ref<boolean>(false)
+const aliyunCaptchaSceneId = ref<string>('')
+const aliyunCaptchaPrefix = ref<string>('')
+const aliyunCaptchaRegion = ref<string>('cn')
 const siteName = ref<string>('Sub2API')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
@@ -396,8 +421,34 @@ const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
 const agreementAccepted = ref<boolean>(false)
 const showAgreementModal = ref<boolean>(false)
 
-const captchaRef = ref<InstanceType<typeof CaptchaWidget> | null>(null)
-const captchaToken = ref<string>('')
+// Captcha（Turnstile / 腾讯 / 阿里云 / fork 的 CAP 共用同一个 token ref）
+const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const turnstileToken = ref<string>('')
+const tencentCaptchaRandstr = ref<string>('')
+const aliyunCaptchaReady = computed(
+  () =>
+    aliyunCaptchaEnabled.value &&
+    Boolean(aliyunCaptchaSceneId.value) &&
+    Boolean(aliyunCaptchaPrefix.value)
+)
+// 动作触发式验证码（腾讯/阿里云）：提交、OAuth 启动时弹窗验证
+const actionCaptchaEnabled = computed(
+  () =>
+    (tencentCaptchaEnabled.value && Boolean(tencentCaptchaAppId.value)) ||
+    aliyunCaptchaReady.value
+)
+const capCaptchaEnabled = computed(
+  () =>
+    captchaProvider.value === 'cap' &&
+    Boolean(capAPIEndpoint.value) &&
+    Boolean(capSiteKey.value)
+)
+const captchaEnabled = computed(
+  () =>
+    (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) ||
+    actionCaptchaEnabled.value ||
+    capCaptchaEnabled.value
+)
 
 // Promo code validation
 const promoValidating = ref<boolean>(false)
@@ -490,6 +541,12 @@ onMounted(async () => {
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     capAPIEndpoint.value = settings.cap_api_endpoint || ''
     capSiteKey.value = settings.cap_site_key || ''
+    tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
+    tencentCaptchaAppId.value = settings.tencent_captcha_app_id || ''
+    aliyunCaptchaEnabled.value = settings.aliyun_captcha_enabled === true
+    aliyunCaptchaSceneId.value = settings.aliyun_captcha_scene_id || ''
+    aliyunCaptchaPrefix.value = settings.aliyun_captcha_prefix || ''
+    aliyunCaptchaRegion.value = settings.aliyun_captcha_region || 'cn'
     siteName.value = settings.site_name || 'Sub2API'
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
@@ -736,19 +793,79 @@ function getInvitationErrorMessage(errorCode?: string): string {
   }
 }
 
-function onCaptchaVerify(token: string): void {
-  captchaToken.value = token
+// ==================== Captcha Handlers ====================
+
+function onTurnstileVerify(token: string, randstr = ''): void {
+  turnstileToken.value = token
+  tencentCaptchaRandstr.value = randstr
   errors.captcha = ''
 }
 
-function onCaptchaExpire(): void {
-  captchaToken.value = ''
+function onTurnstileExpire(): void {
+  turnstileToken.value = ''
+  tencentCaptchaRandstr.value = ''
   errors.captcha = t('auth.turnstileExpired')
 }
 
-function onCaptchaError(): void {
-  captchaToken.value = ''
+function onTurnstileError(): void {
+  turnstileToken.value = ''
+  tencentCaptchaRandstr.value = ''
   errors.captcha = t('auth.turnstileFailed')
+}
+
+function resetCaptchaProof(): void {
+  turnstileRef.value?.reset()
+  turnstileToken.value = ''
+  tencentCaptchaRandstr.value = ''
+  errors.captcha = ''
+}
+
+async function acquireActionProof(): Promise<boolean> {
+  if (!actionCaptchaEnabled.value) return true
+
+  const proof = await turnstileRef.value?.verifyAction()
+  if (!proof) return false
+
+  turnstileToken.value = proof.token
+  tencentCaptchaRandstr.value = proof.randstr
+  return true
+}
+
+async function handleOAuthStart(request: OAuthLoginStart): Promise<void> {
+  if (registrationActionDisabled.value) return
+
+  if (!actionCaptchaEnabled.value) {
+    window.location.href = buildOAuthLoginStartURL(request)
+    return
+  }
+
+  isLoading.value = true
+  try {
+    const proof = await turnstileRef.value?.verifyAction()
+    if (!proof) return
+
+    const result = await startOAuthLogin(
+      request,
+      tencentCaptchaEnabled.value
+        ? {
+            tencent_captcha_ticket: proof.token,
+            tencent_captcha_randstr: proof.randstr
+          }
+        : { turnstile_token: proof.token }
+    )
+    window.location.href = result.authorize_url
+  } catch (error: unknown) {
+    errorMessage.value = extractI18nErrorMessage(
+      error,
+      t,
+      'auth.errors',
+      t('auth.turnstileFailed')
+    )
+    appStore.showError(errorMessage.value)
+  } finally {
+    resetCaptchaProof()
+    isLoading.value = false
+  }
 }
 
 // ==================== Validation ====================
@@ -822,7 +939,7 @@ function validateForm(): boolean {
     }
   }
 
-  if (captchaProvider.value !== 'none' && !captchaToken.value) {
+  if ((turnstileEnabled.value || capCaptchaEnabled.value) && !turnstileToken.value) {
     errors.captcha = t('auth.completeVerification')
     isValid = false
   }
@@ -879,6 +996,10 @@ async function handleRegister(): Promise<void> {
     }
   }
 
+  if (!(await acquireActionProof())) {
+    return
+  }
+
   isLoading.value = true
 
   try {
@@ -895,7 +1016,11 @@ async function handleRegister(): Promise<void> {
         JSON.stringify({
           email: formData.email,
           password: formData.password,
-          ...captchaPayload(captchaProvider.value, captchaToken.value),
+          turnstile_token:
+            turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,
+          tencent_captcha_ticket: tencentCaptchaEnabled.value ? turnstileToken.value : undefined,
+          tencent_captcha_randstr: tencentCaptchaEnabled.value ? tencentCaptchaRandstr.value : undefined,
+          captcha_token: capCaptchaEnabled.value ? turnstileToken.value : undefined,
           promo_code: formData.promo_code || undefined,
           invitation_code: formData.invitation_code || undefined,
           ...(affCode ? { aff_code: affCode } : {})
@@ -911,7 +1036,11 @@ async function handleRegister(): Promise<void> {
     await authStore.register({
       email: formData.email,
       password: formData.password,
-      ...captchaPayload(captchaProvider.value, captchaToken.value),
+      turnstile_token:
+        turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,
+      tencent_captcha_ticket: tencentCaptchaEnabled.value ? turnstileToken.value : undefined,
+      tencent_captcha_randstr: tencentCaptchaEnabled.value ? tencentCaptchaRandstr.value : undefined,
+      captcha_token: capCaptchaEnabled.value ? turnstileToken.value : undefined,
       promo_code: formData.promo_code || undefined,
       invitation_code: formData.invitation_code || undefined,
       ...(affCode ? { aff_code: affCode } : {})
@@ -924,11 +1053,6 @@ async function handleRegister(): Promise<void> {
     // Redirect to dashboard
     await router.push('/dashboard')
   } catch (error: unknown) {
-    if (captchaRef.value) {
-      captchaRef.value.reset()
-      captchaToken.value = ''
-    }
-
     // Handle registration error
     errorMessage.value = buildAuthErrorMessage(error, {
       fallback: t('auth.registrationFailed')
@@ -937,6 +1061,9 @@ async function handleRegister(): Promise<void> {
     // Also show error toast
     appStore.showError(errorMessage.value)
   } finally {
+    if (captchaEnabled.value) {
+      resetCaptchaProof()
+    }
     isLoading.value = false
   }
 }

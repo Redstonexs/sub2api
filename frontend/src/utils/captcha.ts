@@ -23,23 +23,6 @@ export function resolveCaptchaProvider(
   return hasTurnstileConfiguration(settings) ? 'turnstile' : 'none'
 }
 
-export function captchaPayload(
-  provider: CaptchaProvider,
-  token: string
-): { captcha_token?: string; turnstile_token?: string } {
-  const normalizedToken = token.trim()
-  if (!normalizedToken) {
-    return {}
-  }
-  if (provider === 'cap') {
-    return { captcha_token: normalizedToken }
-  }
-  if (provider === 'turnstile') {
-    return { turnstile_token: normalizedToken }
-  }
-  return {}
-}
-
 function hasCapConfiguration(settings: CaptchaPublicSettings): boolean {
   return Boolean(
     settings.cap_api_endpoint?.trim() && settings.cap_site_key?.trim()

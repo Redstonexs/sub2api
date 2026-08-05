@@ -178,6 +178,9 @@ type userSubRepoStub struct{}
 
 func (userSubRepoStub) Create(context.Context, *UserSubscription) error           { return nil }
 func (userSubRepoStub) GetByID(context.Context, int64) (*UserSubscription, error) { return nil, nil }
+func (userSubRepoStub) GetByIDForUpdate(context.Context, int64) (*UserSubscription, error) {
+	return nil, nil
+}
 func (userSubRepoStub) GetByIDIncludeDeleted(context.Context, int64) (*UserSubscription, error) {
 	return nil, nil
 }
@@ -276,7 +279,7 @@ func TestAnnouncementServiceListUserReadStatusReflectsUnsubscribe(t *testing.T) 
 		}},
 		userSubRepoStub{},
 		nil,
-		NewNotificationEmailService(settingRepoStub{values: map[string]string{
+		NewNotificationEmailService(&settingRepoStub{values: map[string]string{
 			notificationEmailPreferenceKey(NotificationEmailEventAnnouncementBroadcast, "user1@example.com"): "unsubscribed",
 		}}, nil),
 	)
@@ -307,7 +310,7 @@ func TestAnnouncementServiceListUserReadStatusWrapsUnsubscribeErrors(t *testing.
 		&announcementUserRepoStub{users: []User{{ID: 1, Email: "user@example.com", Username: "user", Balance: 100}}},
 		userSubRepoStub{},
 		nil,
-		&NotificationEmailService{settingRepo: settingRepoStub{err: context.Canceled}},
+		&NotificationEmailService{settingRepo: &settingRepoStub{err: context.Canceled}},
 	)
 
 	_, _, err := svc.ListUserReadStatus(ctx, ann.ID, pagination.PaginationParams{Page: 1, PageSize: 10}, "")
@@ -458,7 +461,7 @@ func TestAnnouncementServiceListUserReadStatusIssuesNoPerUserQueries(t *testing.
 		}},
 		subRepo,
 		nil,
-		NewNotificationEmailService(settingRepoStub{}, nil),
+		NewNotificationEmailService(&settingRepoStub{}, nil),
 	)
 
 	statuses, _, err := svc.ListUserReadStatus(ctx, ann.ID, pagination.PaginationParams{Page: 1, PageSize: 10}, "")
@@ -495,7 +498,7 @@ func TestAnnouncementServiceListUserReadStatusIgnoresExpiredSubscriptions(t *tes
 		}},
 		&countingUserSubRepoStub{},
 		nil,
-		NewNotificationEmailService(settingRepoStub{}, nil),
+		NewNotificationEmailService(&settingRepoStub{}, nil),
 	)
 
 	statuses, _, err := svc.ListUserReadStatus(ctx, ann.ID, pagination.PaginationParams{Page: 1, PageSize: 10}, "")

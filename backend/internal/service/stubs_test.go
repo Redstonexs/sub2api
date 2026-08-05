@@ -7,16 +7,22 @@ import (
 // settingRepoStub is a shared in-memory fake of SettingRepository used by
 // multiple service test files. It lives in its own file (no build tag) so it is
 // available to both unit-tagged tests and always-compiled tests.
+//
+// Methods use pointer receivers so the call counters stay observable through the
+// interface; construct it as &settingRepoStub{...}.
 type settingRepoStub struct {
-	values map[string]string
-	err    error
+	values           map[string]string
+	err              error
+	getValueCalls    int
+	getMultipleCalls int
 }
 
-func (s settingRepoStub) Get(context.Context, string) (*Setting, error) {
+func (s *settingRepoStub) Get(context.Context, string) (*Setting, error) {
 	return nil, ErrSettingNotFound
 }
 
-func (s settingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+func (s *settingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	s.getValueCalls++
 	if s.err != nil {
 		return "", s.err
 	}
@@ -26,9 +32,10 @@ func (s settingRepoStub) GetValue(ctx context.Context, key string) (string, erro
 	return "", ErrSettingNotFound
 }
 
-func (s settingRepoStub) Set(context.Context, string, string) error { return nil }
+func (s *settingRepoStub) Set(context.Context, string, string) error { return nil }
 
-func (s settingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+func (s *settingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	s.getMultipleCalls++
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -41,10 +48,10 @@ func (s settingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[st
 	return result, nil
 }
 
-func (s settingRepoStub) SetMultiple(context.Context, map[string]string) error { return nil }
+func (s *settingRepoStub) SetMultiple(context.Context, map[string]string) error { return nil }
 
-func (s settingRepoStub) GetAll(context.Context) (map[string]string, error) {
+func (s *settingRepoStub) GetAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-func (s settingRepoStub) Delete(context.Context, string) error { return nil }
+func (s *settingRepoStub) Delete(context.Context, string) error { return nil }

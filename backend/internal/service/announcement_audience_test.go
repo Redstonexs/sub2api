@@ -63,7 +63,7 @@ func TestScanAnnouncementAudienceCountsEachStage(t *testing.T) {
 			{GroupID: 10, ExpiresAt: time.Now().Add(-time.Hour)},
 		}},
 	}}
-	emailSvc := NewNotificationEmailService(settingRepoStub{values: map[string]string{
+	emailSvc := NewNotificationEmailService(&settingRepoStub{values: map[string]string{
 		notificationEmailPreferenceKey(
 			NotificationEmailEventAnnouncementBroadcast, "unsubscribed@example.com"): "unsubscribed",
 	}}, nil)
@@ -212,7 +212,7 @@ func TestPreviewAudienceMatchesWhatWouldBeSent(t *testing.T) {
 		{ID: 2, Email: "b@example.com", Subscriptions: subscribedTo(10)},
 		{ID: 3, Email: "c@example.com"},
 	}
-	emailSvc := NewNotificationEmailService(settingRepoStub{}, nil)
+	emailSvc := NewNotificationEmailService(&settingRepoStub{}, nil)
 
 	svc := NewAnnouncementService(
 		&announcementRepoStub{}, announcementReadRepoStub{},

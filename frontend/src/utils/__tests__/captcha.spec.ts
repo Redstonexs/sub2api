@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { captchaPayload, resolveCaptchaProvider } from '@/utils/captcha'
+import { resolveCaptchaProvider } from '@/utils/captcha'
 
 describe('captcha utilities', () => {
   it('selects CAP only when its public configuration is complete', () => {
@@ -20,11 +20,5 @@ describe('captcha utilities', () => {
       turnstile_enabled: true,
       turnstile_site_key: 'turnstile-key'
     })).toBe('turnstile')
-  })
-
-  it('uses the request field expected by each provider', () => {
-    expect(captchaPayload('cap', 'cap-token')).toEqual({ captcha_token: 'cap-token' })
-    expect(captchaPayload('turnstile', 'turnstile-token')).toEqual({ turnstile_token: 'turnstile-token' })
-    expect(captchaPayload('none', 'ignored')).toEqual({})
   })
 })

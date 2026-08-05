@@ -52,7 +52,7 @@ func TestAuthService_VerifyCaptcha_usesCAPWhenProviderSelected(t *testing.T) {
 	}, capSpy, turnstileSpy)
 
 	// When
-	err := authService.VerifyCaptcha(context.Background(), "cap-token", "turnstile-token", "127.0.0.1")
+	err := authService.VerifyCaptcha(context.Background(), CaptchaProof{CapToken: "cap-token", TurnstileToken: "turnstile-token"}, "127.0.0.1")
 
 	// Then
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestAuthService_VerifyCaptcha_rejectsCAPWhenStandaloneRejectsToken(t *testi
 	}, capSpy, turnstileSpy)
 
 	// When
-	err := authService.VerifyCaptcha(context.Background(), "replayed-cap-token", "", "127.0.0.1")
+	err := authService.VerifyCaptcha(context.Background(), CaptchaProof{CapToken: "replayed-cap-token"}, "127.0.0.1")
 
 	// Then
 	require.ErrorIs(t, err, ErrCapVerificationFailed)
@@ -94,7 +94,7 @@ func TestAuthService_VerifyCaptcha_usesTurnstileWhenLegacyProviderIsConfigured(t
 	}, capSpy, turnstileSpy)
 
 	// When
-	err := authService.VerifyCaptcha(context.Background(), "", "turnstile-token", "127.0.0.1")
+	err := authService.VerifyCaptcha(context.Background(), CaptchaProof{TurnstileToken: "turnstile-token"}, "127.0.0.1")
 
 	// Then
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestAuthService_VerifyCaptchaForRegister_skipsDuplicateCAPWhenEmailVerifica
 	}, capSpy, turnstileSpy)
 
 	// When
-	err := authService.VerifyCaptchaForRegister(context.Background(), "", "", "127.0.0.1", "123456")
+	err := authService.VerifyCaptchaForRegister(context.Background(), CaptchaProof{}, "127.0.0.1", "123456")
 
 	// Then
 	require.NoError(t, err)

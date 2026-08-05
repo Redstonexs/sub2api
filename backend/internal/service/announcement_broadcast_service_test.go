@@ -43,7 +43,7 @@ func TestActiveSubscriptionGroupIDsEmpty(t *testing.T) {
 func TestAnnouncementBroadcastSkipsUnsubscribedRecipients(t *testing.T) {
 	ctx := context.Background()
 	settingKey := notificationEmailPreferenceKey(NotificationEmailEventAnnouncementBroadcast, "user1@example.com")
-	notificationEmailService := NewNotificationEmailService(settingRepoStub{values: map[string]string{
+	notificationEmailService := NewNotificationEmailService(&settingRepoStub{values: map[string]string{
 		settingKey: "unsubscribed",
 	}}, nil)
 
@@ -102,7 +102,7 @@ func TestAnnouncementBroadcastOnlyTargetsActiveUsers(t *testing.T) {
 	}}
 	svc := &AnnouncementBroadcastService{
 		userRepo:                 userRepo,
-		notificationEmailService: NewNotificationEmailService(settingRepoStub{}, nil),
+		notificationEmailService: NewNotificationEmailService(&settingRepoStub{}, nil),
 		jobs:                     make(chan announcementBroadcastJob, announcementBroadcastBuffer),
 		stopCh:                   make(chan struct{}),
 	}
