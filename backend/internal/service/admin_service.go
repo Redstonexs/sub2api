@@ -264,6 +264,10 @@ type CreateGroupInput struct {
 	MaxReasoningEffort string
 	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。
 	ReasoningEffortMappings []ReasoningEffortMapping
+	// 分组 QoS 降级阶梯（QoSMetric 空串按 list 处理）
+	QoSEnabled bool
+	QoSMetric  string
+	QoSTiers   []GroupQoSTier
 	// 分组利润控制（五个 token 平台分组可启用；margin/buffer 为小数，nil 按 0 处理）
 	ProfitControlEnabled bool
 	ProfitMinMargin      *float64
@@ -329,6 +333,10 @@ type UpdateGroupInput struct {
 	MaxReasoningEffort *string
 	// ReasoningEffortMappings nil 表示不修改，空数组表示清空，非空数组表示替换。
 	ReasoningEffortMappings *[]ReasoningEffortMapping
+	// 分组 QoS（nil 表示不修改；QoSTiers 空数组表示清空阶梯）
+	QoSEnabled *bool
+	QoSMetric  *string
+	QoSTiers   *[]GroupQoSTier
 	// 分组利润控制（nil 表示不修改；margin/buffer 为小数）
 	ProfitControlEnabled *bool
 	ProfitMinMargin      *float64

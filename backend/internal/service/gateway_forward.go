@@ -910,7 +910,12 @@ func (s *GatewayService) checkChannelPricingRestriction(ctx context.Context, gro
 		return false
 	}
 	mapping := s.channelService.ResolveChannelMapping(ctx, *groupID, requestedModel)
-	billingModel := billingModelForRestriction(mapping.BillingModelSource, requestedModel, mapping.MappedModel)
+	// QoS 降级后，限制检查要针对用户实际会拿到的模型，而不是它请求的那个。
+	effectiveRequestedModel := requestedModel
+	if mapping.QoSApplied {
+		effectiveRequestedModel = mapping.MappedModel
+	}
+	billingModel := billingModelForRestriction(mapping.BillingModelSource, effectiveRequestedModel, mapping.MappedModel)
 	if billingModel == "" {
 		return false
 	}

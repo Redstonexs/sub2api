@@ -108,6 +108,13 @@ type Group struct {
 	ProfitMinMargin      float64 // 最低毛利率，小数存储（0.30=30%）
 	ProfitSafetyBuffer   float64 // 安全缓冲，小数，与 margin 相加后从 D 中扣除
 
+	// 分组 QoS 降级阶梯：按用户在本分组的滚动窗口消耗逐级降级，
+	// 取代「未超限全速、超限直接拒绝」的二元行为。
+	// QoSTiers 按严重程度升序存放，命中的最高档位整档生效。
+	QoSEnabled bool
+	QoSMetric  string // list=未打折原价（默认），charged=实际扣费
+	QoSTiers   []GroupQoSTier
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

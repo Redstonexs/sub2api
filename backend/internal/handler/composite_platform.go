@@ -69,7 +69,13 @@ func openAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKe
 	if effectiveAPIKeyPlatform(c, apiKey) != service.PlatformOpenAI {
 		return "", nil, false
 	}
-	return apiKey.Group.MaxReasoningEffort, apiKey.Group.ReasoningEffortMappings, true
+	// 分组常设上限与当前生效的 QoS 档位上限取更严格者：降级中的用户不应
+	// 因为分组本身放得宽就绕过 QoS 天花板。
+	maxEffort := service.EffectiveMaxReasoningEffort(
+		apiKey.Group.MaxReasoningEffort,
+		service.GroupQoSDecisionFromContext(c.Request.Context()),
+	)
+	return maxEffort, apiKey.Group.ReasoningEffortMappings, true
 }
 
 func applyOpenAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey, body []byte) ([]byte, bool) {

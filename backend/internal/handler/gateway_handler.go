@@ -2373,6 +2373,12 @@ func billingErrorDetails(err error) (status int, code, message string, retryAfte
 		retrySeconds := 60 - int(time.Now().Unix()%60)
 		return http.StatusTooManyRequests, "rate_limit_exceeded", msg, retrySeconds
 	}
+	// 分组 QoS 硬阻断：窗口滚动后恢复，按 429 让 SDK 退避。不给 Retry-After——
+	// 恢复时刻取决于日/周/月窗口起点，可能远在数小时之后，给一个具体秒数只会
+	// 诱导客户端做无意义的密集重试。
+	if errors.Is(err, service.ErrGroupQoSBlocked) {
+		return http.StatusTooManyRequests, "rate_limit_exceeded", pkgerrors.Message(err), 0
+	}
 	if errors.Is(err, service.ErrUserPlatformDailyQuotaExhausted) ||
 		errors.Is(err, service.ErrUserPlatformWeeklyQuotaExhausted) ||
 		errors.Is(err, service.ErrUserPlatformMonthlyQuotaExhausted) {

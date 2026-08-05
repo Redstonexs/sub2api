@@ -29,6 +29,9 @@ const (
 	// apiKey 已加载但尚未写入 ContextKeyAPIKey；该键让 Ops 错误日志仍能取到
 	// user/group/platform。仅供 Ops 错误日志读取，不代表请求已通过鉴权。
 	ContextKeyOpsFallbackAPIKey ContextKey = "ops_fallback_api_key"
+	// ContextKeyGroupQoSDecision 本次请求生效的分组 QoS 降级档位（*service.GroupQoSDecision）。
+	// 仅在命中档位时写入；handler 据此回写诊断响应头。
+	ContextKeyGroupQoSDecision ContextKey = "group_qos_decision"
 )
 
 // ForcePlatform 返回设置强制平台的中间件

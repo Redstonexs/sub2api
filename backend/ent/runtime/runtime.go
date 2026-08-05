@@ -44,6 +44,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupqosusage"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -1204,6 +1205,20 @@ func init() {
 	groupDescProfitSafetyBuffer := groupFields[51].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+	// groupDescQosEnabled is the schema descriptor for qos_enabled field.
+	groupDescQosEnabled := groupFields[52].Descriptor()
+	// group.DefaultQosEnabled holds the default value on creation for the qos_enabled field.
+	group.DefaultQosEnabled = groupDescQosEnabled.Default.(bool)
+	// groupDescQosMetric is the schema descriptor for qos_metric field.
+	groupDescQosMetric := groupFields[53].Descriptor()
+	// group.DefaultQosMetric holds the default value on creation for the qos_metric field.
+	group.DefaultQosMetric = groupDescQosMetric.Default.(string)
+	// group.QosMetricValidator is a validator for the "qos_metric" field. It is called by the builders before save.
+	group.QosMetricValidator = groupDescQosMetric.Validators[0].(func(string) error)
+	// groupDescQosTiers is the schema descriptor for qos_tiers field.
+	groupDescQosTiers := groupFields[54].Descriptor()
+	// group.DefaultQosTiers holds the default value on creation for the qos_tiers field.
+	group.DefaultQosTiers = groupDescQosTiers.Default.([]domain.GroupQoSTier)
 	groupviewgrantMixin := schema.GroupViewGrant{}.Mixin()
 	groupviewgrantMixinHooks1 := groupviewgrantMixin[1].Hooks()
 	groupviewgrant.Hooks[0] = groupviewgrantMixinHooks1[0]
@@ -2383,6 +2398,37 @@ func init() {
 	userattributevalueDescValue := userattributevalueFields[2].Descriptor()
 	// userattributevalue.DefaultValue holds the default value on creation for the value field.
 	userattributevalue.DefaultValue = userattributevalueDescValue.Default.(string)
+	usergroupqosusageMixin := schema.UserGroupQoSUsage{}.Mixin()
+	usergroupqosusageMixinHooks1 := usergroupqosusageMixin[1].Hooks()
+	usergroupqosusage.Hooks[0] = usergroupqosusageMixinHooks1[0]
+	usergroupqosusageMixinInters1 := usergroupqosusageMixin[1].Interceptors()
+	usergroupqosusage.Interceptors[0] = usergroupqosusageMixinInters1[0]
+	usergroupqosusageMixinFields0 := usergroupqosusageMixin[0].Fields()
+	_ = usergroupqosusageMixinFields0
+	usergroupqosusageFields := schema.UserGroupQoSUsage{}.Fields()
+	_ = usergroupqosusageFields
+	// usergroupqosusageDescCreatedAt is the schema descriptor for created_at field.
+	usergroupqosusageDescCreatedAt := usergroupqosusageMixinFields0[0].Descriptor()
+	// usergroupqosusage.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usergroupqosusage.DefaultCreatedAt = usergroupqosusageDescCreatedAt.Default.(func() time.Time)
+	// usergroupqosusageDescUpdatedAt is the schema descriptor for updated_at field.
+	usergroupqosusageDescUpdatedAt := usergroupqosusageMixinFields0[1].Descriptor()
+	// usergroupqosusage.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	usergroupqosusage.DefaultUpdatedAt = usergroupqosusageDescUpdatedAt.Default.(func() time.Time)
+	// usergroupqosusage.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	usergroupqosusage.UpdateDefaultUpdatedAt = usergroupqosusageDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// usergroupqosusageDescDailyUsageUsd is the schema descriptor for daily_usage_usd field.
+	usergroupqosusageDescDailyUsageUsd := usergroupqosusageFields[2].Descriptor()
+	// usergroupqosusage.DefaultDailyUsageUsd holds the default value on creation for the daily_usage_usd field.
+	usergroupqosusage.DefaultDailyUsageUsd = usergroupqosusageDescDailyUsageUsd.Default.(float64)
+	// usergroupqosusageDescWeeklyUsageUsd is the schema descriptor for weekly_usage_usd field.
+	usergroupqosusageDescWeeklyUsageUsd := usergroupqosusageFields[3].Descriptor()
+	// usergroupqosusage.DefaultWeeklyUsageUsd holds the default value on creation for the weekly_usage_usd field.
+	usergroupqosusage.DefaultWeeklyUsageUsd = usergroupqosusageDescWeeklyUsageUsd.Default.(float64)
+	// usergroupqosusageDescMonthlyUsageUsd is the schema descriptor for monthly_usage_usd field.
+	usergroupqosusageDescMonthlyUsageUsd := usergroupqosusageFields[4].Descriptor()
+	// usergroupqosusage.DefaultMonthlyUsageUsd holds the default value on creation for the monthly_usage_usd field.
+	usergroupqosusage.DefaultMonthlyUsageUsd = usergroupqosusageDescMonthlyUsageUsd.Default.(float64)
 	userplatformquotaMixin := schema.UserPlatformQuota{}.Mixin()
 	userplatformquotaMixinHooks1 := userplatformquotaMixin[1].Hooks()
 	userplatformquota.Hooks[0] = userplatformquotaMixinHooks1[0]

@@ -53,6 +53,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupqosusage"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 
@@ -140,6 +141,8 @@ type Client struct {
 	UserAttributeDefinition *UserAttributeDefinitionClient
 	// UserAttributeValue is the client for interacting with the UserAttributeValue builders.
 	UserAttributeValue *UserAttributeValueClient
+	// UserGroupQoSUsage is the client for interacting with the UserGroupQoSUsage builders.
+	UserGroupQoSUsage *UserGroupQoSUsageClient
 	// UserPlatformQuota is the client for interacting with the UserPlatformQuota builders.
 	UserPlatformQuota *UserPlatformQuotaClient
 	// UserSubscription is the client for interacting with the UserSubscription builders.
@@ -193,6 +196,7 @@ func (c *Client) init() {
 	c.UserAllowedGroup = NewUserAllowedGroupClient(c.config)
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
 	c.UserAttributeValue = NewUserAttributeValueClient(c.config)
+	c.UserGroupQoSUsage = NewUserGroupQoSUsageClient(c.config)
 	c.UserPlatformQuota = NewUserPlatformQuotaClient(c.config)
 	c.UserSubscription = NewUserSubscriptionClient(c.config)
 }
@@ -325,6 +329,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserGroupQoSUsage:             NewUserGroupQoSUsageClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 	}, nil
@@ -384,6 +389,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserGroupQoSUsage:             NewUserGroupQoSUsageClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 	}, nil
@@ -425,7 +431,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
 		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
 		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.UserGroupQoSUsage, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -445,7 +451,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
 		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
 		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.UserGroupQoSUsage, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -530,6 +536,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserAttributeDefinition.mutate(ctx, m)
 	case *UserAttributeValueMutation:
 		return c.UserAttributeValue.mutate(ctx, m)
+	case *UserGroupQoSUsageMutation:
+		return c.UserGroupQoSUsage.mutate(ctx, m)
 	case *UserPlatformQuotaMutation:
 		return c.UserPlatformQuota.mutate(ctx, m)
 	case *UserSubscriptionMutation:
@@ -6679,6 +6687,141 @@ func (c *UserAttributeValueClient) mutate(ctx context.Context, m *UserAttributeV
 	}
 }
 
+// UserGroupQoSUsageClient is a client for the UserGroupQoSUsage schema.
+type UserGroupQoSUsageClient struct {
+	config
+}
+
+// NewUserGroupQoSUsageClient returns a client for the UserGroupQoSUsage from the given config.
+func NewUserGroupQoSUsageClient(c config) *UserGroupQoSUsageClient {
+	return &UserGroupQoSUsageClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usergroupqosusage.Hooks(f(g(h())))`.
+func (c *UserGroupQoSUsageClient) Use(hooks ...Hook) {
+	c.hooks.UserGroupQoSUsage = append(c.hooks.UserGroupQoSUsage, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usergroupqosusage.Intercept(f(g(h())))`.
+func (c *UserGroupQoSUsageClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserGroupQoSUsage = append(c.inters.UserGroupQoSUsage, interceptors...)
+}
+
+// Create returns a builder for creating a UserGroupQoSUsage entity.
+func (c *UserGroupQoSUsageClient) Create() *UserGroupQoSUsageCreate {
+	mutation := newUserGroupQoSUsageMutation(c.config, OpCreate)
+	return &UserGroupQoSUsageCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserGroupQoSUsage entities.
+func (c *UserGroupQoSUsageClient) CreateBulk(builders ...*UserGroupQoSUsageCreate) *UserGroupQoSUsageCreateBulk {
+	return &UserGroupQoSUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserGroupQoSUsageClient) MapCreateBulk(slice any, setFunc func(*UserGroupQoSUsageCreate, int)) *UserGroupQoSUsageCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserGroupQoSUsageCreateBulk{err: fmt.Errorf("calling to UserGroupQoSUsageClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserGroupQoSUsageCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserGroupQoSUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserGroupQoSUsage.
+func (c *UserGroupQoSUsageClient) Update() *UserGroupQoSUsageUpdate {
+	mutation := newUserGroupQoSUsageMutation(c.config, OpUpdate)
+	return &UserGroupQoSUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserGroupQoSUsageClient) UpdateOne(_m *UserGroupQoSUsage) *UserGroupQoSUsageUpdateOne {
+	mutation := newUserGroupQoSUsageMutation(c.config, OpUpdateOne, withUserGroupQoSUsage(_m))
+	return &UserGroupQoSUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserGroupQoSUsageClient) UpdateOneID(id int64) *UserGroupQoSUsageUpdateOne {
+	mutation := newUserGroupQoSUsageMutation(c.config, OpUpdateOne, withUserGroupQoSUsageID(id))
+	return &UserGroupQoSUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserGroupQoSUsage.
+func (c *UserGroupQoSUsageClient) Delete() *UserGroupQoSUsageDelete {
+	mutation := newUserGroupQoSUsageMutation(c.config, OpDelete)
+	return &UserGroupQoSUsageDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserGroupQoSUsageClient) DeleteOne(_m *UserGroupQoSUsage) *UserGroupQoSUsageDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserGroupQoSUsageClient) DeleteOneID(id int64) *UserGroupQoSUsageDeleteOne {
+	builder := c.Delete().Where(usergroupqosusage.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserGroupQoSUsageDeleteOne{builder}
+}
+
+// Query returns a query builder for UserGroupQoSUsage.
+func (c *UserGroupQoSUsageClient) Query() *UserGroupQoSUsageQuery {
+	return &UserGroupQoSUsageQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserGroupQoSUsage},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserGroupQoSUsage entity by its id.
+func (c *UserGroupQoSUsageClient) Get(ctx context.Context, id int64) (*UserGroupQoSUsage, error) {
+	return c.Query().Where(usergroupqosusage.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserGroupQoSUsageClient) GetX(ctx context.Context, id int64) *UserGroupQoSUsage {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UserGroupQoSUsageClient) Hooks() []Hook {
+	hooks := c.hooks.UserGroupQoSUsage
+	return append(hooks[:len(hooks):len(hooks)], usergroupqosusage.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserGroupQoSUsageClient) Interceptors() []Interceptor {
+	inters := c.inters.UserGroupQoSUsage
+	return append(inters[:len(inters):len(inters)], usergroupqosusage.Interceptors[:]...)
+}
+
+func (c *UserGroupQoSUsageClient) mutate(ctx context.Context, m *UserGroupQoSUsageMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserGroupQoSUsageCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserGroupQoSUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserGroupQoSUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserGroupQoSUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserGroupQoSUsage mutation op: %q", m.Op())
+	}
+}
+
 // UserPlatformQuotaClient is a client for the UserPlatformQuota schema.
 type UserPlatformQuotaClient struct {
 	config
@@ -7041,7 +7184,7 @@ type (
 		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
 		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
 		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription []ent.Hook
+		UserGroupQoSUsage, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
@@ -7053,7 +7196,7 @@ type (
 		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
 		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
 		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription []ent.Interceptor
+		UserGroupQoSUsage, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

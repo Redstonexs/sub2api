@@ -627,6 +627,14 @@
           v-model:max-effort="createForm.max_reasoning_effort"
           v-model:mappings="createForm.reasoning_effort_mappings"
         />
+        <QoSPolicyFields
+          ref="createQoSPolicyRef"
+          id-prefix="create-group-qos"
+          :platform="createForm.platform"
+          v-model:enabled="createForm.qos_enabled"
+          v-model:metric="createForm.qos_metric"
+          v-model:tiers="createForm.qos_tiers"
+        />
         <div
           v-if="createForm.subscription_type !== 'subscription'"
           data-tour="group-form-exclusive"
@@ -2225,6 +2233,14 @@
           :platform="editForm.platform"
           v-model:max-effort="editForm.max_reasoning_effort"
           v-model:mappings="editForm.reasoning_effort_mappings"
+        />
+        <QoSPolicyFields
+          ref="editQoSPolicyRef"
+          id-prefix="edit-group-qos"
+          :platform="editForm.platform"
+          v-model:enabled="editForm.qos_enabled"
+          v-model:metric="editForm.qos_metric"
+          v-model:tiers="editForm.qos_tiers"
         />
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
@@ -4173,6 +4189,7 @@ import type {
   CompositeRouteEndpoint,
   CompositeRouteMatchType,
   GroupPlatform,
+  GroupQoSMetric,
   SubscriptionType,
 } from "@/types";
 import type { Column } from "@/components/common/types";
@@ -4191,6 +4208,7 @@ import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesMo
 import GroupViewGrantManager from "@/components/group/GroupViewGrantManager.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
 import ReasoningEffortPolicyFields from "@/components/admin/group/ReasoningEffortPolicyFields.vue";
+import QoSPolicyFields from "@/components/admin/group/QoSPolicyFields.vue";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
 import { extractApiErrorMessage } from "@/utils/apiError";
@@ -4227,6 +4245,12 @@ import {
   supportsReasoningEffortPolicyPlatform,
   type ReasoningEffortMappingRow,
 } from "./groupsReasoningEffort";
+import {
+  groupQoSTiersToAPI,
+  groupQoSTiersToRows,
+  normalizeGroupQoSMetric,
+  type GroupQoSTierRow,
+} from "./groupsQoS";
 import {
   getDefaultImagePreviewPrice,
   getDefaultVideoPreviewPrice,
@@ -4705,6 +4729,8 @@ type ReasoningEffortPolicyFieldsExpose = {
 };
 const createReasoningEffortPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
 const editReasoningEffortPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
+const createQoSPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
+const editQoSPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
 const modelsListCandidatesTracker = createModelsListCandidatesTracker();
 const createModelsListSelectedCount = computed(
   () => createModelsListState.items.filter((item) => item.selected).length,
@@ -4776,6 +4802,9 @@ const createForm = reactive({
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
   reasoning_effort_mappings: [] as ReasoningEffortMappingRow[],
+  qos_enabled: false,
+  qos_metric: "list" as GroupQoSMetric,
+  qos_tiers: [] as GroupQoSTierRow[],
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -5131,6 +5160,9 @@ const editForm = reactive({
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
   reasoning_effort_mappings: [] as ReasoningEffortMappingRow[],
+  qos_enabled: false,
+  qos_metric: "list" as GroupQoSMetric,
+  qos_tiers: [] as GroupQoSTierRow[],
 });
 
 type ImagePricingFormState = {
@@ -5565,6 +5597,7 @@ const closeCreateModal = () => {
   createForm.max_reasoning_effort = "";
   createForm.reasoning_effort_mappings = [];
   createReasoningEffortPolicyRef.value?.resetValidation();
+  createQoSPolicyRef.value?.resetValidation();
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
 };
@@ -5623,6 +5656,9 @@ const handleCreateGroup = async () => {
   ) {
     return;
   }
+  if (createQoSPolicyRef.value && !createQoSPolicyRef.value.validate()) {
+    return;
+  }
   if (!validateProfitControlForm(createForm)) {
     return;
   }
@@ -5661,6 +5697,9 @@ const handleCreateGroup = async () => {
       reasoning_effort_mappings: reasoningEffortMappingsToAPI(
         createForm.reasoning_effort_mappings,
       ),
+      qos_enabled: createForm.qos_enabled,
+      qos_metric: createForm.qos_metric,
+      qos_tiers: groupQoSTiersToAPI(createForm.qos_tiers),
       // 利润控制：界面百分比转小数提交；仅五个 token 平台可启用
       profit_control_enabled:
         isProfitControlPlatform(createForm.platform) &&
@@ -5801,6 +5840,9 @@ const handleEdit = async (group: AdminGroup) => {
     group.reasoning_effort_mappings,
     group.platform,
   );
+  editForm.qos_enabled = group.qos_enabled ?? false;
+  editForm.qos_metric = normalizeGroupQoSMetric(group.qos_metric);
+  editForm.qos_tiers = groupQoSTiersToRows(group.qos_tiers);
   resetModelsListState(editModelsListState, group.models_list_config);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(
@@ -5820,6 +5862,7 @@ const closeEditModal = () => {
   editForm.max_reasoning_effort = "";
   editForm.reasoning_effort_mappings = [];
   editReasoningEffortPolicyRef.value?.resetValidation();
+  editQoSPolicyRef.value?.resetValidation();
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
   editForm.peak_rate_enabled = false;
@@ -5851,6 +5894,9 @@ const handleUpdateGroup = async () => {
     editReasoningEffortPolicyRef.value &&
     !editReasoningEffortPolicyRef.value.validate()
   ) {
+    return;
+  }
+  if (editQoSPolicyRef.value && !editQoSPolicyRef.value.validate()) {
     return;
   }
   if (!validateProfitControlForm(editForm)) {
@@ -5898,6 +5944,9 @@ const handleUpdateGroup = async () => {
       reasoning_effort_mappings: reasoningEffortMappingsToAPI(
         editForm.reasoning_effort_mappings,
       ),
+      qos_enabled: editForm.qos_enabled,
+      qos_metric: editForm.qos_metric,
+      qos_tiers: groupQoSTiersToAPI(editForm.qos_tiers),
       // 利润控制：界面百分比转小数提交；仅五个 token 平台可启用
       profit_control_enabled:
         isProfitControlPlatform(editForm.platform) &&
@@ -6275,6 +6324,7 @@ watch(
       newVal,
     );
     createReasoningEffortPolicyRef.value?.resetValidation();
+  createQoSPolicyRef.value?.resetValidation();
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       createForm.require_oauth_only = false;
       createForm.require_privacy_set = false;
@@ -6323,6 +6373,7 @@ watch(
       newVal,
     );
     editReasoningEffortPolicyRef.value?.resetValidation();
+  editQoSPolicyRef.value?.resetValidation();
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;

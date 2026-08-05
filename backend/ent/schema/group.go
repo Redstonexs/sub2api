@@ -248,6 +248,21 @@ func (Group) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(0).
 			Comment("安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0"),
+
+		// 分组 QoS 降级阶梯（migration 194）：按用户在本分组的滚动窗口消耗，
+		// 逐级降级（模型改写 / 推理强度上限 / RPM 压制 / 硬阻断），
+		// 取代「未超限完全放行、超限直接拒绝」的二元行为。
+		field.Bool("qos_enabled").
+			Default(false).
+			Comment("是否启用分组 QoS 降级阶梯"),
+		field.String("qos_metric").
+			MaxLen(16).
+			Default(domain.GroupQoSMetricList).
+			Comment("QoS 阈值计量口径：list=未打折原价，charged=实际扣费"),
+		field.JSON("qos_tiers", []domain.GroupQoSTier{}).
+			Default([]domain.GroupQoSTier{}).
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("QoS 阶梯，按严重程度升序；命中的最高档位生效"),
 	}
 }
 

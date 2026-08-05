@@ -216,6 +216,10 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProfitControlEnabled,
 				group.FieldProfitMinMargin,
 				group.FieldProfitSafetyBuffer,
+				// 分组 QoS：降级判定同样只读认证快照，漏选会让整个阶梯静默失效。
+				group.FieldQosEnabled,
+				group.FieldQosMetric,
+				group.FieldQosTiers,
 			)
 		}).
 		Only(ctx)
@@ -996,6 +1000,9 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		ProfitControlEnabled:            g.ProfitControlEnabled,
 		ProfitMinMargin:                 g.ProfitMinMargin,
 		ProfitSafetyBuffer:              g.ProfitSafetyBuffer,
+		QoSEnabled:                      g.QosEnabled,
+		QoSMetric:                       g.QosMetric,
+		QoSTiers:                        g.QosTiers,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

@@ -126,6 +126,12 @@ const (
 	FieldProfitMinMargin = "profit_min_margin"
 	// FieldProfitSafetyBuffer holds the string denoting the profit_safety_buffer field in the database.
 	FieldProfitSafetyBuffer = "profit_safety_buffer"
+	// FieldQosEnabled holds the string denoting the qos_enabled field in the database.
+	FieldQosEnabled = "qos_enabled"
+	// FieldQosMetric holds the string denoting the qos_metric field in the database.
+	FieldQosMetric = "qos_metric"
+	// FieldQosTiers holds the string denoting the qos_tiers field in the database.
+	FieldQosTiers = "qos_tiers"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -265,6 +271,9 @@ var Columns = []string{
 	FieldProfitControlEnabled,
 	FieldProfitMinMargin,
 	FieldProfitSafetyBuffer,
+	FieldQosEnabled,
+	FieldQosMetric,
+	FieldQosTiers,
 }
 
 var (
@@ -390,6 +399,14 @@ var (
 	DefaultProfitMinMargin float64
 	// DefaultProfitSafetyBuffer holds the default value on creation for the "profit_safety_buffer" field.
 	DefaultProfitSafetyBuffer float64
+	// DefaultQosEnabled holds the default value on creation for the "qos_enabled" field.
+	DefaultQosEnabled bool
+	// DefaultQosMetric holds the default value on creation for the "qos_metric" field.
+	DefaultQosMetric string
+	// QosMetricValidator is a validator for the "qos_metric" field. It is called by the builders before save.
+	QosMetricValidator func(string) error
+	// DefaultQosTiers holds the default value on creation for the "qos_tiers" field.
+	DefaultQosTiers []domain.GroupQoSTier
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -648,6 +665,16 @@ func ByProfitMinMargin(opts ...sql.OrderTermOption) OrderOption {
 // ByProfitSafetyBuffer orders the results by the profit_safety_buffer field.
 func ByProfitSafetyBuffer(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProfitSafetyBuffer, opts...).ToFunc()
+}
+
+// ByQosEnabled orders the results by the qos_enabled field.
+func ByQosEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQosEnabled, opts...).ToFunc()
+}
+
+// ByQosMetric orders the results by the qos_metric field.
+func ByQosMetric(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQosMetric, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

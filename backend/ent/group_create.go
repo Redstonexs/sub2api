@@ -768,6 +768,40 @@ func (_c *GroupCreate) SetNillableProfitSafetyBuffer(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetQosEnabled sets the "qos_enabled" field.
+func (_c *GroupCreate) SetQosEnabled(v bool) *GroupCreate {
+	_c.mutation.SetQosEnabled(v)
+	return _c
+}
+
+// SetNillableQosEnabled sets the "qos_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQosEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetQosEnabled(*v)
+	}
+	return _c
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (_c *GroupCreate) SetQosMetric(v string) *GroupCreate {
+	_c.mutation.SetQosMetric(v)
+	return _c
+}
+
+// SetNillableQosMetric sets the "qos_metric" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQosMetric(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetQosMetric(*v)
+	}
+	return _c
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (_c *GroupCreate) SetQosTiers(v []domain.GroupQoSTier) *GroupCreate {
+	_c.mutation.SetQosTiers(v)
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1068,6 +1102,18 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultProfitSafetyBuffer
 		_c.mutation.SetProfitSafetyBuffer(v)
 	}
+	if _, ok := _c.mutation.QosEnabled(); !ok {
+		v := group.DefaultQosEnabled
+		_c.mutation.SetQosEnabled(v)
+	}
+	if _, ok := _c.mutation.QosMetric(); !ok {
+		v := group.DefaultQosMetric
+		_c.mutation.SetQosMetric(v)
+	}
+	if _, ok := _c.mutation.QosTiers(); !ok {
+		v := group.DefaultQosTiers
+		_c.mutation.SetQosTiers(v)
+	}
 	return nil
 }
 
@@ -1234,6 +1280,20 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ProfitSafetyBuffer(); !ok {
 		return &ValidationError{Name: "profit_safety_buffer", err: errors.New(`ent: missing required field "Group.profit_safety_buffer"`)}
+	}
+	if _, ok := _c.mutation.QosEnabled(); !ok {
+		return &ValidationError{Name: "qos_enabled", err: errors.New(`ent: missing required field "Group.qos_enabled"`)}
+	}
+	if _, ok := _c.mutation.QosMetric(); !ok {
+		return &ValidationError{Name: "qos_metric", err: errors.New(`ent: missing required field "Group.qos_metric"`)}
+	}
+	if v, ok := _c.mutation.QosMetric(); ok {
+		if err := group.QosMetricValidator(v); err != nil {
+			return &ValidationError{Name: "qos_metric", err: fmt.Errorf(`ent: validator failed for field "Group.qos_metric": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.QosTiers(); !ok {
+		return &ValidationError{Name: "qos_tiers", err: errors.New(`ent: missing required field "Group.qos_tiers"`)}
 	}
 	return nil
 }
@@ -1481,6 +1541,18 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ProfitSafetyBuffer(); ok {
 		_spec.SetField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 		_node.ProfitSafetyBuffer = value
+	}
+	if value, ok := _c.mutation.QosEnabled(); ok {
+		_spec.SetField(group.FieldQosEnabled, field.TypeBool, value)
+		_node.QosEnabled = value
+	}
+	if value, ok := _c.mutation.QosMetric(); ok {
+		_spec.SetField(group.FieldQosMetric, field.TypeString, value)
+		_node.QosMetric = value
+	}
+	if value, ok := _c.mutation.QosTiers(); ok {
+		_spec.SetField(group.FieldQosTiers, field.TypeJSON, value)
+		_node.QosTiers = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -2515,6 +2587,42 @@ func (u *GroupUpsert) UpdateProfitSafetyBuffer() *GroupUpsert {
 // AddProfitSafetyBuffer adds v to the "profit_safety_buffer" field.
 func (u *GroupUpsert) AddProfitSafetyBuffer(v float64) *GroupUpsert {
 	u.Add(group.FieldProfitSafetyBuffer, v)
+	return u
+}
+
+// SetQosEnabled sets the "qos_enabled" field.
+func (u *GroupUpsert) SetQosEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldQosEnabled, v)
+	return u
+}
+
+// UpdateQosEnabled sets the "qos_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQosEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldQosEnabled)
+	return u
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (u *GroupUpsert) SetQosMetric(v string) *GroupUpsert {
+	u.Set(group.FieldQosMetric, v)
+	return u
+}
+
+// UpdateQosMetric sets the "qos_metric" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQosMetric() *GroupUpsert {
+	u.SetExcluded(group.FieldQosMetric)
+	return u
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (u *GroupUpsert) SetQosTiers(v []domain.GroupQoSTier) *GroupUpsert {
+	u.Set(group.FieldQosTiers, v)
+	return u
+}
+
+// UpdateQosTiers sets the "qos_tiers" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQosTiers() *GroupUpsert {
+	u.SetExcluded(group.FieldQosTiers)
 	return u
 }
 
@@ -3571,6 +3679,48 @@ func (u *GroupUpsertOne) AddProfitSafetyBuffer(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateProfitSafetyBuffer() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetQosEnabled sets the "qos_enabled" field.
+func (u *GroupUpsertOne) SetQosEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosEnabled(v)
+	})
+}
+
+// UpdateQosEnabled sets the "qos_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQosEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosEnabled()
+	})
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (u *GroupUpsertOne) SetQosMetric(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosMetric(v)
+	})
+}
+
+// UpdateQosMetric sets the "qos_metric" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQosMetric() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosMetric()
+	})
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (u *GroupUpsertOne) SetQosTiers(v []domain.GroupQoSTier) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosTiers(v)
+	})
+}
+
+// UpdateQosTiers sets the "qos_tiers" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQosTiers() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosTiers()
 	})
 }
 
@@ -4793,6 +4943,48 @@ func (u *GroupUpsertBulk) AddProfitSafetyBuffer(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateProfitSafetyBuffer() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetQosEnabled sets the "qos_enabled" field.
+func (u *GroupUpsertBulk) SetQosEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosEnabled(v)
+	})
+}
+
+// UpdateQosEnabled sets the "qos_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQosEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosEnabled()
+	})
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (u *GroupUpsertBulk) SetQosMetric(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosMetric(v)
+	})
+}
+
+// UpdateQosMetric sets the "qos_metric" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQosMetric() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosMetric()
+	})
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (u *GroupUpsertBulk) SetQosTiers(v []domain.GroupQoSTier) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQosTiers(v)
+	})
+}
+
+// UpdateQosTiers sets the "qos_tiers" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQosTiers() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQosTiers()
 	})
 }
 

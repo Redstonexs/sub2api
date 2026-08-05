@@ -465,6 +465,18 @@ func (f UserAttributeValueFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserAttributeValueMutation", m)
 }
 
+// The UserGroupQoSUsageFunc type is an adapter to allow the use of ordinary
+// function as UserGroupQoSUsage mutator.
+type UserGroupQoSUsageFunc func(context.Context, *ent.UserGroupQoSUsageMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserGroupQoSUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserGroupQoSUsageMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserGroupQoSUsageMutation", m)
+}
+
 // The UserPlatformQuotaFunc type is an adapter to allow the use of ordinary
 // function as UserPlatformQuota mutator.
 type UserPlatformQuotaFunc func(context.Context, *ent.UserPlatformQuotaMutation) (ent.Value, error)

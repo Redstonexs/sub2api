@@ -125,6 +125,13 @@ type APIKeyAuthGroupSnapshot struct {
 	ProfitControlEnabled bool    `json:"profit_control_enabled"`
 	ProfitMinMargin      float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
+
+	// 分组 QoS 降级阶梯：与利润控制同理，降级判定在网关热路径上读的就是这份
+	// 快照。三个字段与 GetByKeyForAuth 的投影都不得删减——漏掉任一个，
+	// QoSEnabled 会拿到零值 false 而让整个阶梯静默失效。
+	QoSEnabled bool           `json:"qos_enabled"`
+	QoSMetric  string         `json:"qos_metric,omitempty"`
+	QoSTiers   []GroupQoSTier `json:"qos_tiers,omitempty"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

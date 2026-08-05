@@ -29,6 +29,11 @@ var (
 	ErrGroupRPMExceeded = infraerrors.TooManyRequests("GROUP_RPM_EXCEEDED", "group requests-per-minute limit exceeded")
 	ErrUserRPMExceeded  = infraerrors.TooManyRequests("USER_RPM_EXCEEDED", "user requests-per-minute limit exceeded")
 
+	// 分组 QoS 阶梯的最高档：用量已越过硬阻断阈值。
+	// 与既有限额一致选 429 而非 403——窗口滚动后即可恢复，属于暂时性资源用尽，
+	// SDK 会据此自动退避而不是当成权限错误直接失败。
+	ErrGroupQoSBlocked = infraerrors.TooManyRequests("GROUP_QOS_BLOCKED", "usage in this group has reached its limit; access is temporarily restricted")
+
 	// user × platform quota（HTTP 429 Too Many Requests + Retry-After header）。
 	// 选用 429 而非 403：限额耗尽属于"暂时性资源用尽，重试可恢复"的场景（RFC 6585），
 	// 大量 SDK（如 OpenAI 兼容客户端）只对 429 触发自动退避并读取 Retry-After，
@@ -768,6 +773,11 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		}
 	}
 
+	// 分组 QoS 硬阻断档：放在 RPM 之前，避免为注定被拒的请求增加限流计数。
+	if decision := GroupQoSDecisionFromContext(ctx); decision != nil && decision.Block {
+		return ErrGroupQoSBlocked
+	}
+
 	// RPM 限流：级联回落（Override → Group → User），放在最后以避免为注定失败的请求增加计数。
 	if err := s.checkRPM(ctx, user, group); err != nil {
 		return err
@@ -809,33 +819,32 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 			}
 		}
 
+		// 组层有效上限（0 = 不限制）：
+		//   override 非 nil 时替代 group.rpm_limit（override=0 表示该用户在该分组免检）；
+		//   否则用 group.rpm_limit。计算成单一上限后只做一次计数，避免重复自增。
+		groupLayerLimit := 0
 		if override != nil {
-			// override=0 → 该用户在该分组免检（但 user 级仍会在下面检查）。
-			if *override > 0 {
-				count, incErr := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
-				if incErr != nil {
-					logger.LegacyPrintf(
-						"service.billing_cache",
-						"Warning: rpm increment (override) failed for user=%d group=%d: %v",
-						user.ID, group.ID, incErr,
-					)
-					// fail-open
-				} else if count > *override {
-					return ErrGroupRPMExceeded
-				}
-			}
-			// override 命中后跳过 group.rpm_limit（override 替代 group），但不 return——继续检查 user 级。
+			groupLayerLimit = *override
 		} else if group.RPMLimit > 0 {
-			// 无 override，检查 group.rpm_limit。
-			count, err := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
-			if err != nil {
+			groupLayerLimit = group.RPMLimit
+		}
+
+		// QoS 档位的 RPM 压制只能收紧、不能放宽：降级中的用户不应因为分组
+		// 或专属 override 给得宽就逃掉压制。
+		if decision := GroupQoSDecisionFromContext(ctx); decision != nil && decision.RPMLimit != nil {
+			groupLayerLimit = tightenRPMLimit(groupLayerLimit, *decision.RPMLimit)
+		}
+
+		if groupLayerLimit > 0 {
+			count, incErr := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
+			if incErr != nil {
 				logger.LegacyPrintf(
 					"service.billing_cache",
-					"Warning: rpm increment (group) failed for user=%d group=%d: %v",
-					user.ID, group.ID, err,
+					"Warning: rpm increment failed for user=%d group=%d: %v",
+					user.ID, group.ID, incErr,
 				)
 				// fail-open
-			} else if count > group.RPMLimit {
+			} else if count > groupLayerLimit {
 				return ErrGroupRPMExceeded
 			}
 		}
@@ -858,6 +867,18 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 	}
 
 	return nil
+}
+
+// tightenRPMLimit 取两个 RPM 上限中更严格的一个。两侧都以 0 表示"不限制"，
+// 因此 0 永远不会把另一侧收紧。
+func tightenRPMLimit(current, candidate int) int {
+	if candidate <= 0 {
+		return current
+	}
+	if current <= 0 || candidate < current {
+		return candidate
+	}
+	return current
 }
 
 func (s *BillingCacheService) minimumBalanceReserve() float64 {

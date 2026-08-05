@@ -109,6 +109,11 @@ type ChannelMappingResult struct {
 	ChannelID          int64  // 渠道 ID（0 = 无渠道关联）
 	Mapped             bool   // 是否发生了映射
 	BillingModelSource string // 计费模型来源（"requested" / "upstream" / "channel_mapped"）
+	// QoSApplied 表示本次映射中包含分组 QoS 降级改写。
+	//
+	// 计费必须据此忽略 BillingModelSource="requested"：用户实际拿到的是降级后的
+	// 便宜模型，若仍按原始请求模型计费，就会出现「给了 luna、按 sol 收费」。
+	QoSApplied bool
 }
 
 // BuildModelMappingChain 根据映射结果和上游实际模型构建映射链描述。
@@ -140,6 +145,7 @@ func (r ChannelMappingResult) ToUsageFields(reqModel, upstreamModel string) Chan
 		ChannelMappedModel: channelMappedModel,
 		BillingModelSource: r.BillingModelSource,
 		ModelMappingChain:  r.BuildModelMappingChain(reqModel, upstreamModel),
+		QoSApplied:         r.QoSApplied,
 	}
 }
 
@@ -519,14 +525,17 @@ func (s *ChannelService) GetChannelModelPricing(ctx context.Context, groupID int
 // ResolveChannelMapping 解析渠道级模型映射（热路径 O(1)）
 // 返回映射结果，包含映射后的模型名、渠道 ID、计费模型来源。
 func (s *ChannelService) ResolveChannelMapping(ctx context.Context, groupID int64, model string) ChannelMappingResult {
+	qosModel, qosApplied := ApplyGroupQoSModelMapping(ctx, model)
+
 	lk, err := s.lookupGroupChannel(ctx, groupID)
 	if err != nil {
 		slog.Warn("failed to load channel cache for mapping", "group_id", groupID, "error", err)
 	}
 	if lk == nil {
-		return ChannelMappingResult{MappedModel: model}
+		// 绝大多数分组没有绑定渠道，QoS 降级必须在这条路径上同样生效。
+		return ChannelMappingResult{MappedModel: qosModel, Mapped: qosApplied, QoSApplied: qosApplied}
 	}
-	return resolveMapping(lk, groupID, model)
+	return resolveMapping(lk, groupID, qosModel, qosApplied)
 }
 
 // IsModelRestricted 检查模型是否被渠道限制。
@@ -547,25 +556,32 @@ func (s *ChannelService) IsModelRestricted(ctx context.Context, groupID int64, m
 // 返回映射结果。模型限制检查已移至调度阶段（GatewayService.checkChannelPricingRestriction），
 // restricted 始终返回 false，保留签名兼容性。
 func (s *ChannelService) ResolveChannelMappingAndRestrict(ctx context.Context, groupID *int64, model string) (ChannelMappingResult, bool) {
+	qosModel, qosApplied := ApplyGroupQoSModelMapping(ctx, model)
+
 	if groupID == nil {
-		return ChannelMappingResult{MappedModel: model}, false
+		return ChannelMappingResult{MappedModel: qosModel, Mapped: qosApplied, QoSApplied: qosApplied}, false
 	}
 	lk, _ := s.lookupGroupChannel(ctx, *groupID)
 	if lk == nil {
-		return ChannelMappingResult{MappedModel: model}, false
+		return ChannelMappingResult{MappedModel: qosModel, Mapped: qosApplied, QoSApplied: qosApplied}, false
 	}
-	return resolveMapping(lk, *groupID, model), false
+	return resolveMapping(lk, *groupID, qosModel, qosApplied), false
 }
 
 // resolveMapping 基于已查找的渠道信息解析模型映射。
 // antigravity 分组依次尝试所有匹配平台，确保跨平台同名映射各自独立。
-func resolveMapping(lk *channelLookup, groupID int64, model string) ChannelMappingResult {
+//
+// model 是「已应用分组 QoS 降级之后」的模型名，qosApplied 表示降级是否发生过。
+// 顺序是刻意的：QoS 决定用户拿到哪一档产品，渠道映射再决定本部署如何命名/路由它。
+func resolveMapping(lk *channelLookup, groupID int64, model string, qosApplied bool) ChannelMappingResult {
 	// lk.channel 来自已装填的缓存，BillingModelSource 已在 populateChannelCache 阶段归一化，
 	// 这里无需重复兜底。
 	result := ChannelMappingResult{
 		MappedModel:        model,
 		ChannelID:          lk.channel.ID,
 		BillingModelSource: lk.channel.BillingModelSource,
+		Mapped:             qosApplied,
+		QoSApplied:         qosApplied,
 	}
 
 	modelLower := strings.ToLower(model)

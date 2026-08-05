@@ -309,6 +309,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_REASONING_EFFORT_MAPPING", "%v", err)
 	}
+	qosTiers, err := NormalizeGroupQoSTiers(platform, input.QoSTiers)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_QOS_TIERS", "%v", err)
+	}
 
 	subscriptionType := input.SubscriptionType
 	if subscriptionType == "" {
@@ -493,6 +497,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		RPMLimit:                        input.RPMLimit,
 		MaxReasoningEffort:              maxReasoningEffort,
 		ReasoningEffortMappings:         reasoningEffortMappings,
+		QoSEnabled:                      input.QoSEnabled,
+		QoSMetric:                       NormalizeGroupQoSMetric(input.QoSMetric),
+		QoSTiers:                        qosTiers,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if group.Platform != PlatformOpenAI {
@@ -844,6 +851,19 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_REASONING_EFFORT_MAPPING", "%v", err)
 		}
 		group.ReasoningEffortMappings = reasoningEffortMappings
+	}
+	if input.QoSTiers != nil {
+		qosTiers, err := NormalizeGroupQoSTiers(group.Platform, *input.QoSTiers)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_QOS_TIERS", "%v", err)
+		}
+		group.QoSTiers = qosTiers
+	}
+	if input.QoSMetric != nil {
+		group.QoSMetric = NormalizeGroupQoSMetric(*input.QoSMetric)
+	}
+	if input.QoSEnabled != nil {
+		group.QoSEnabled = *input.QoSEnabled
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if group.Platform != PlatformOpenAI {

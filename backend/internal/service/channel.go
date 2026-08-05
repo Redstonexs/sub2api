@@ -390,6 +390,19 @@ type ChannelUsageFields struct {
 	ChannelMappedModel string // 渠道映射后的模型名（无映射时等于 OriginalModel）
 	BillingModelSource string // 计费模型来源："requested" / "upstream" / "channel_mapped"
 	ModelMappingChain  string // 映射链描述，如 "a→b→c"
+	// QoSApplied 表示本次请求被分组 QoS 降级改写过模型。
+	// 计费据此忽略 BillingModelSource="requested"，避免按用户「请求的」
+	// 高价模型给已降级的便宜输出计费。
+	QoSApplied bool
+}
+
+// shouldBillAtRequestedModel 判断计费是否应回落到「用户请求的」模型。
+//
+// QoS 降级过的请求一律不可以：用户拿到的是被换成的便宜模型，若仍按原始请求
+// 模型计价，就成了「既降质量又照原价收费」。两条计费路径
+// （gateway_usage_billing.go 与 openai_gateway_usage.go）共用本规则。
+func shouldBillAtRequestedModel(source, originalModel string, qosApplied bool) bool {
+	return source == BillingModelSourceRequested && originalModel != "" && !qosApplied
 }
 
 // SupportedModel 渠道的一个支持模型条目（无通配符、可直接展示给用户）

@@ -104,10 +104,12 @@ var ProviderSet = wire.NewSet(
 	NewUserPlatformQuotaRepository,     // T14: user × platform quota
 	NewUserPlatformQuotaServiceAdapter, // T14: adapter → service.UserPlatformQuotaRepository
 	NewGroupViewGrantRepository,
+	NewUserGroupQoSUsageRepository, // 分组 QoS 降级阶梯计数器
 
 	// Cache implementations
 	NewGatewayCache,
 	NewBillingCache,
+	NewUserGroupQoSCache,
 	NewAPIKeyCache,
 	NewSettingsInvalidationBus,
 	NewTempUnschedCache,

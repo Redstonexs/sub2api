@@ -305,6 +305,16 @@ func ProfitSafetyBuffer(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldProfitSafetyBuffer, v))
 }
 
+// QosEnabled applies equality check predicate on the "qos_enabled" field. It's identical to QosEnabledEQ.
+func QosEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldQosEnabled, v))
+}
+
+// QosMetric applies equality check predicate on the "qos_metric" field. It's identical to QosMetricEQ.
+func QosMetric(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldQosMetric, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2293,6 +2303,81 @@ func ProfitSafetyBufferLT(v float64) predicate.Group {
 // ProfitSafetyBufferLTE applies the LTE predicate on the "profit_safety_buffer" field.
 func ProfitSafetyBufferLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldProfitSafetyBuffer, v))
+}
+
+// QosEnabledEQ applies the EQ predicate on the "qos_enabled" field.
+func QosEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldQosEnabled, v))
+}
+
+// QosEnabledNEQ applies the NEQ predicate on the "qos_enabled" field.
+func QosEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldQosEnabled, v))
+}
+
+// QosMetricEQ applies the EQ predicate on the "qos_metric" field.
+func QosMetricEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldQosMetric, v))
+}
+
+// QosMetricNEQ applies the NEQ predicate on the "qos_metric" field.
+func QosMetricNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldQosMetric, v))
+}
+
+// QosMetricIn applies the In predicate on the "qos_metric" field.
+func QosMetricIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldQosMetric, vs...))
+}
+
+// QosMetricNotIn applies the NotIn predicate on the "qos_metric" field.
+func QosMetricNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldQosMetric, vs...))
+}
+
+// QosMetricGT applies the GT predicate on the "qos_metric" field.
+func QosMetricGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldQosMetric, v))
+}
+
+// QosMetricGTE applies the GTE predicate on the "qos_metric" field.
+func QosMetricGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldQosMetric, v))
+}
+
+// QosMetricLT applies the LT predicate on the "qos_metric" field.
+func QosMetricLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldQosMetric, v))
+}
+
+// QosMetricLTE applies the LTE predicate on the "qos_metric" field.
+func QosMetricLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldQosMetric, v))
+}
+
+// QosMetricContains applies the Contains predicate on the "qos_metric" field.
+func QosMetricContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldQosMetric, v))
+}
+
+// QosMetricHasPrefix applies the HasPrefix predicate on the "qos_metric" field.
+func QosMetricHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldQosMetric, v))
+}
+
+// QosMetricHasSuffix applies the HasSuffix predicate on the "qos_metric" field.
+func QosMetricHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldQosMetric, v))
+}
+
+// QosMetricEqualFold applies the EqualFold predicate on the "qos_metric" field.
+func QosMetricEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldQosMetric, v))
+}
+
+// QosMetricContainsFold applies the ContainsFold predicate on the "qos_metric" field.
+func QosMetricContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldQosMetric, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

@@ -135,6 +135,9 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
 		RPMLimit:                source.RPMLimit,
 		MaxReasoningEffort:      source.MaxReasoningEffort,
 		ReasoningEffortMappings: append([]ReasoningEffortMapping(nil), source.ReasoningEffortMappings...),
+		QoSEnabled:              source.QoSEnabled,
+		QoSMetric:               source.QoSMetric,
+		QoSTiers:                append([]GroupQoSTier(nil), source.QoSTiers...),
 	}
 }
 

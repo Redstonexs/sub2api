@@ -1010,6 +1010,46 @@ func (_u *GroupUpdate) AddProfitSafetyBuffer(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetQosEnabled sets the "qos_enabled" field.
+func (_u *GroupUpdate) SetQosEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetQosEnabled(v)
+	return _u
+}
+
+// SetNillableQosEnabled sets the "qos_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQosEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetQosEnabled(*v)
+	}
+	return _u
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (_u *GroupUpdate) SetQosMetric(v string) *GroupUpdate {
+	_u.mutation.SetQosMetric(v)
+	return _u
+}
+
+// SetNillableQosMetric sets the "qos_metric" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQosMetric(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetQosMetric(*v)
+	}
+	return _u
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (_u *GroupUpdate) SetQosTiers(v []domain.GroupQoSTier) *GroupUpdate {
+	_u.mutation.SetQosTiers(v)
+	return _u
+}
+
+// AppendQosTiers appends value to the "qos_tiers" field.
+func (_u *GroupUpdate) AppendQosTiers(v []domain.GroupQoSTier) *GroupUpdate {
+	_u.mutation.AppendQosTiers(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1351,6 +1391,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QosMetric(); ok {
+		if err := group.QosMetricValidator(v); err != nil {
+			return &ValidationError{Name: "qos_metric", err: fmt.Errorf(`ent: validator failed for field "Group.qos_metric": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1651,6 +1696,20 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QosEnabled(); ok {
+		_spec.SetField(group.FieldQosEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.QosMetric(); ok {
+		_spec.SetField(group.FieldQosMetric, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QosTiers(); ok {
+		_spec.SetField(group.FieldQosTiers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedQosTiers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldQosTiers, value)
+		})
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2984,6 +3043,46 @@ func (_u *GroupUpdateOne) AddProfitSafetyBuffer(v float64) *GroupUpdateOne {
 	return _u
 }
 
+// SetQosEnabled sets the "qos_enabled" field.
+func (_u *GroupUpdateOne) SetQosEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetQosEnabled(v)
+	return _u
+}
+
+// SetNillableQosEnabled sets the "qos_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQosEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQosEnabled(*v)
+	}
+	return _u
+}
+
+// SetQosMetric sets the "qos_metric" field.
+func (_u *GroupUpdateOne) SetQosMetric(v string) *GroupUpdateOne {
+	_u.mutation.SetQosMetric(v)
+	return _u
+}
+
+// SetNillableQosMetric sets the "qos_metric" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQosMetric(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQosMetric(*v)
+	}
+	return _u
+}
+
+// SetQosTiers sets the "qos_tiers" field.
+func (_u *GroupUpdateOne) SetQosTiers(v []domain.GroupQoSTier) *GroupUpdateOne {
+	_u.mutation.SetQosTiers(v)
+	return _u
+}
+
+// AppendQosTiers appends value to the "qos_tiers" field.
+func (_u *GroupUpdateOne) AppendQosTiers(v []domain.GroupQoSTier) *GroupUpdateOne {
+	_u.mutation.AppendQosTiers(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3338,6 +3437,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QosMetric(); ok {
+		if err := group.QosMetricValidator(v); err != nil {
+			return &ValidationError{Name: "qos_metric", err: fmt.Errorf(`ent: validator failed for field "Group.qos_metric": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -3655,6 +3759,20 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QosEnabled(); ok {
+		_spec.SetField(group.FieldQosEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.QosMetric(); ok {
+		_spec.SetField(group.FieldQosMetric, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QosTiers(); ok {
+		_spec.SetField(group.FieldQosTiers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedQosTiers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldQosTiers, value)
+		})
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

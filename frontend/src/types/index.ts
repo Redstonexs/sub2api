@@ -567,6 +567,28 @@ export interface ReasoningEffortMapping {
   to: string
 }
 
+export type GroupQoSWindow = 'daily' | 'weekly' | 'monthly'
+export type GroupQoSMetric = 'list' | 'charged'
+
+export interface GroupQoSModelMapping {
+  from: string
+  to: string
+}
+
+/**
+ * One rung of a group's QoS degradation ladder. It takes effect once the
+ * requester's spend in `window` reaches `threshold_usd`. Every action is
+ * optional; a tier may apply any subset of them.
+ */
+export interface GroupQoSTier {
+  window: GroupQoSWindow
+  threshold_usd: number
+  model_mappings?: GroupQoSModelMapping[]
+  max_reasoning_effort?: string
+  rpm_limit?: number | null
+  block?: boolean
+}
+
 export interface Group {
   id: number
   name: string
@@ -576,6 +598,10 @@ export interface Group {
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
   reasoning_effort_mappings?: ReasoningEffortMapping[]
+  // QoS degradation ladder (admin-only; never returned on user-facing group endpoints)
+  qos_enabled?: boolean
+  qos_metric?: GroupQoSMetric
+  qos_tiers?: GroupQoSTier[]
   is_exclusive: boolean
   status: 'active' | 'inactive'
   subscription_type: SubscriptionType
@@ -821,6 +847,9 @@ export interface CreateGroupRequest {
   rpm_limit?: number
   max_reasoning_effort?: string
   reasoning_effort_mappings?: ReasoningEffortMapping[]
+  qos_enabled?: boolean
+  qos_metric?: GroupQoSMetric
+  qos_tiers?: GroupQoSTier[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   // 从指定分组复制账号
@@ -876,6 +905,9 @@ export interface UpdateGroupRequest {
   rpm_limit?: number
   max_reasoning_effort?: string
   reasoning_effort_mappings?: ReasoningEffortMapping[]
+  qos_enabled?: boolean
+  qos_metric?: GroupQoSMetric
+  qos_tiers?: GroupQoSTier[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   copy_accounts_from_group_ids?: number[]

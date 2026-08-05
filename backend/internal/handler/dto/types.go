@@ -162,6 +162,12 @@ type AdminGroup struct {
 	ProfitMinMargin      float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
 
+	// 分组 QoS 降级阶梯。同样仅管理员可见：阶梯里写着触发阈值与降级目标模型，
+	// 下放给普通用户等于把反滥用策略的判定线直接告诉被限制的人。
+	QoSEnabled bool                  `json:"qos_enabled"`
+	QoSMetric  string                `json:"qos_metric"`
+	QoSTiers   []domain.GroupQoSTier `json:"qos_tiers"`
+
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
 	ModelRoutingEnabled bool               `json:"model_routing_enabled"`

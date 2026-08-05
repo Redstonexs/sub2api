@@ -197,10 +197,40 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 		}
 	}
 
+	// QoS 计数器在 legacy 兜底路径同样要累加，否则该路径下的消耗不会推动降级阶梯。
+	recordGroupQoSUsage(billingCtx, p, deps)
+
 	// NOTE: finalizePostUsageBilling is NOT called here to avoid double-queuing
 	// cache updates. The legacy path does DB writes directly; the finalize path
 	// does cache queue + notifications. Notifications are dispatched separately
 	// by the caller after recording the usage log.
+}
+
+// recordGroupQoSUsage 把本次请求的消耗累加到 (user, group) QoS 计数器。
+//
+// 计量口径由分组的 qos_metric 决定，默认 list（未打折原价）：折扣分组正是滥用
+// 高发地，按实际扣费计量会让折扣越深、越晚触发降级。
+//
+// 仅对已启用 QoS 的分组写入，避免为绝大多数分组付出无谓的写放大。
+func recordGroupQoSUsage(ctx context.Context, p *postUsageBillingParams, deps *billingDeps) {
+	if deps == nil || deps.groupQoSService == nil || p == nil || p.Cost == nil {
+		return
+	}
+	if p.User == nil || p.APIKey == nil || p.APIKey.GroupID == nil {
+		return
+	}
+	if !GroupQoSEligible(p.APIKey.Group) {
+		return
+	}
+
+	cost := p.Cost.TotalCost
+	if NormalizeGroupQoSMetric(p.APIKey.Group.QoSMetric) == GroupQoSMetricCharged {
+		cost = p.Cost.ActualCost
+	}
+	if cost <= 0 {
+		return
+	}
+	deps.groupQoSService.RecordUsage(ctx, p.User.ID, *p.APIKey.GroupID, cost)
 }
 
 func resolveUsageBillingRequestID(ctx context.Context, upstreamRequestID string) string {
@@ -377,6 +407,8 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		}
 	}
 
+	recordGroupQoSUsage(ctx, p, deps)
+
 	// Notification checks run async — all parameters are already captured,
 	// no dependency on the request context or upstream connection.
 	go notifyBalanceLow(p, deps, result)
@@ -507,6 +539,7 @@ type billingDeps struct {
 	deferredService       *DeferredService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	groupQoSService       *GroupQoSService
 	cfg                   *config.Config
 }
 
@@ -519,6 +552,7 @@ func (s *GatewayService) billingDeps() *billingDeps {
 		deferredService:       s.deferredService,
 		balanceNotifyService:  s.balanceNotifyService,
 		userPlatformQuotaRepo: s.userPlatformQuotaRepo,
+		groupQoSService:       s.groupQoSService,
 		cfg:                   s.cfg,
 	}
 }
@@ -702,7 +736,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" {
 		billingModel = input.ChannelMappedModel
 	}
-	if input.BillingModelSource == BillingModelSourceRequested && input.OriginalModel != "" {
+	if shouldBillAtRequestedModel(input.BillingModelSource, input.OriginalModel, input.QoSApplied) {
 		billingModel = input.OriginalModel
 	}
 	// composite 分组的公开别名（如 all/claude）会经 OriginalModel/ChannelMappedModel

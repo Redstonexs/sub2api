@@ -121,6 +121,8 @@ type CreateGroupRequest struct {
 	ProfitControlEnabled            bool     `json:"profit_control_enabled"`
 	ProfitMinMargin                 *float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer              *float64 `json:"profit_safety_buffer"`
+	QoSEnabled                      bool     `json:"qos_enabled"`
+	QoSMetric                       string   `json:"qos_metric"`
 	ImagePrice1K                    *float64 `json:"image_price_1k"`
 	ImagePrice2K                    *float64 `json:"image_price_2k"`
 	ImagePrice4K                    *float64 `json:"image_price_4k"`
@@ -151,6 +153,8 @@ type CreateGroupRequest struct {
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
 	// OpenAI/Codex 推理强度精确映射。
 	ReasoningEffortMappings []service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
+	// QoSTiers 分组 QoS 降级阶梯，按严重程度升序。
+	QoSTiers []service.GroupQoSTier `json:"qos_tiers"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -183,6 +187,8 @@ type UpdateGroupRequest struct {
 	ProfitControlEnabled            *bool    `json:"profit_control_enabled"`
 	ProfitMinMargin                 *float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer              *float64 `json:"profit_safety_buffer"`
+	QoSEnabled                      *bool    `json:"qos_enabled"`
+	QoSMetric                       *string  `json:"qos_metric"`
 	ImagePrice1K                    *float64 `json:"image_price_1k"`
 	ImagePrice2K                    *float64 `json:"image_price_2k"`
 	ImagePrice4K                    *float64 `json:"image_price_4k"`
@@ -213,6 +219,8 @@ type UpdateGroupRequest struct {
 	MaxReasoningEffort *string `json:"max_reasoning_effort"`
 	// nil 不修改，空数组清空，非空数组替换。
 	ReasoningEffortMappings *[]service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
+	// QoSTiers nil 表示不修改，空数组表示清空阶梯。
+	QoSTiers *[]service.GroupQoSTier `json:"qos_tiers"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -513,6 +521,9 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		ProfitControlEnabled:            req.ProfitControlEnabled,
 		ProfitMinMargin:                 req.ProfitMinMargin,
 		ProfitSafetyBuffer:              req.ProfitSafetyBuffer,
+		QoSEnabled:                      req.QoSEnabled,
+		QoSMetric:                       req.QoSMetric,
+		QoSTiers:                        req.QoSTiers,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,
@@ -635,6 +646,9 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		ProfitControlEnabled:            req.ProfitControlEnabled,
 		ProfitMinMargin:                 req.ProfitMinMargin,
 		ProfitSafetyBuffer:              req.ProfitSafetyBuffer,
+		QoSEnabled:                      req.QoSEnabled,
+		QoSMetric:                       req.QoSMetric,
+		QoSTiers:                        req.QoSTiers,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,
