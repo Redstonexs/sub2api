@@ -3,10 +3,12 @@
 FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
+	src/api/__tests__/channelMonitorV2.spec.ts \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
 	src/views/auth/__tests__/WechatCallbackView.spec.ts \
 	src/views/user/__tests__/PaymentView.spec.ts \
 	src/views/user/__tests__/PaymentResultView.spec.ts \
+	src/views/user/__tests__/ChannelStatusView.mode.spec.ts \
 	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
 	src/views/admin/__tests__/SettingsView.spec.ts \
 	src/utils/__tests__/markdown.spec.ts \
@@ -15,7 +17,10 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/common/__tests__/AnnouncementBanner.spec.ts \
 	src/views/admin/__tests__/AnnouncementsView.spec.ts \
 	src/views/user/__tests__/AnnouncementsView.spec.ts \
-	src/i18n/__tests__/localeIntegrity.spec.ts
+	src/i18n/__tests__/localeIntegrity.spec.ts \
+	src/features/channel-monitor-v2/__tests__/designSystem.structure.spec.ts \
+	src/features/channel-monitor-v2/__tests__/monitorFormat.spec.ts \
+	src/features/channel-monitor-v2/__tests__/monitorZoom.spec.ts
 
 # 一键编译前后端
 build: build-backend build-frontend

@@ -43,6 +43,22 @@ func (s *grokMediaOwnerCacheStub) DeleteSessionAccountID(context.Context, int64,
 	return nil
 }
 
+func (s *grokMediaOwnerCacheStub) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
+	return nil
+}
+
+func (s *grokMediaOwnerCacheStub) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *grokMediaOwnerCacheStub) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (s *grokMediaOwnerCacheStub) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+	return nil
+}
+
 func TestOpenAIGatewayServiceGrokMediaVideoRequestOwner(t *testing.T) {
 	groupID := int64(44)
 	cache := &grokMediaOwnerCacheStub{}

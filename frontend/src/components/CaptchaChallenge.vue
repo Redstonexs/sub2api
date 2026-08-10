@@ -11,6 +11,7 @@
     v-else-if="tencentEnabled && tencentAppId"
     ref="tencentRef"
     :app-id="tencentAppId"
+    :region="tencentRegion"
   />
   <CapCaptchaWidget
     v-else-if="capEnabled && capApiEndpoint && capSiteKey"
@@ -57,6 +58,7 @@ const props = defineProps<{
   capEnabled?: boolean
   capApiEndpoint?: string
   capSiteKey?: string
+  tencentRegion?: string
   aliyunEnabled?: boolean
   aliyunSceneId?: string
   aliyunPrefix?: string

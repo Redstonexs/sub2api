@@ -24,6 +24,7 @@
         :turnstile-site-key="turnstileSiteKey"
         :tencent-enabled="tencentCaptchaEnabled"
         :tencent-app-id="tencentCaptchaAppId"
+        :tencent-region="tencentCaptchaRegion"
         :aliyun-enabled="aliyunCaptchaEnabled"
         :aliyun-scene-id="aliyunCaptchaSceneId"
         :aliyun-prefix="aliyunCaptchaPrefix"
@@ -151,6 +152,7 @@ const capAPIEndpoint = ref('')
 const capSiteKey = ref('')
 const tencentCaptchaEnabled = ref(false)
 const tencentCaptchaAppId = ref('')
+const tencentCaptchaRegion = ref('cn')
 const aliyunCaptchaEnabled = ref(false)
 const aliyunCaptchaSceneId = ref('')
 const aliyunCaptchaPrefix = ref('')
@@ -374,6 +376,7 @@ onMounted(async () => {
     capSiteKey.value = settings.cap_site_key || ''
     tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
     tencentCaptchaAppId.value = settings.tencent_captcha_app_id || ''
+    tencentCaptchaRegion.value = settings.tencent_captcha_region || 'cn'
     aliyunCaptchaEnabled.value = settings.aliyun_captcha_enabled === true
     aliyunCaptchaSceneId.value = settings.aliyun_captcha_scene_id || ''
     aliyunCaptchaPrefix.value = settings.aliyun_captcha_prefix || ''
@@ -387,6 +390,7 @@ onMounted(async () => {
     capSiteKey.value = ''
     tencentCaptchaEnabled.value = false
     tencentCaptchaAppId.value = ''
+    tencentCaptchaRegion.value = 'cn'
     aliyunCaptchaEnabled.value = false
     aliyunCaptchaSceneId.value = ''
     aliyunCaptchaPrefix.value = ''

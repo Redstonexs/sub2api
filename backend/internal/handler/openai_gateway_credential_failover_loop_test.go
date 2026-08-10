@@ -281,6 +281,22 @@ func (c *grokCredentialHandlerGatewayCache) DeleteSessionAccountID(_ context.Con
 	return nil
 }
 
+func (c *grokCredentialHandlerGatewayCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
+	return nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+	return nil
+}
+
 func (c *grokCredentialHandlerTokenCache) GetAccessToken(context.Context, string) (string, error) {
 	return "", errors.New("not cached")
 }

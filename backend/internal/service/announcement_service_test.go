@@ -216,11 +216,13 @@ func (userSubRepoStub) ExistsByUserIDAndGroupID(context.Context, int64, int64) (
 func (userSubRepoStub) ExistsActiveByUserIDAndGroupID(context.Context, int64, int64) (bool, error) {
 	return false, nil
 }
-func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error    { return nil }
-func (userSubRepoStub) UpdateStatus(context.Context, int64, string) error       { return nil }
-func (userSubRepoStub) UpdateNotes(context.Context, int64, string) error        { return nil }
-func (userSubRepoStub) ActivateWindows(context.Context, int64, time.Time) error { return nil }
-func (userSubRepoStub) ResetUsageWindows(context.Context, int64, bool, bool, bool, time.Time) error {
+func (userSubRepoStub) ExtendExpiry(context.Context, int64, time.Time) error { return nil }
+func (userSubRepoStub) UpdateStatus(context.Context, int64, string) error    { return nil }
+func (userSubRepoStub) UpdateNotes(context.Context, int64, string) error     { return nil }
+func (userSubRepoStub) ActivateWindows(context.Context, int64, time.Time, time.Time) error {
+	return nil
+}
+func (userSubRepoStub) ResetUsageWindows(context.Context, int64, bool, bool, bool, time.Time, time.Time) error {
 	return nil
 }
 func (userSubRepoStub) ResetDailyUsage(context.Context, int64, *time.Time, time.Time) error {

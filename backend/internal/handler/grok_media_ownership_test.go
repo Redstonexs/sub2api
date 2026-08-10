@@ -48,6 +48,22 @@ func (s *grokMediaOwnerHandlerCache) DeleteSessionAccountID(context.Context, int
 	return nil
 }
 
+func (s *grokMediaOwnerHandlerCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
+	return nil
+}
+
+func (s *grokMediaOwnerHandlerCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *grokMediaOwnerHandlerCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (s *grokMediaOwnerHandlerCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+	return nil
+}
+
 type grokMediaOwnerHandlerAccountRepo struct {
 	service.AccountRepository
 	account service.Account
