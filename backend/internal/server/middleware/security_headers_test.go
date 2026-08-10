@@ -356,9 +356,10 @@ func TestSecurityHeaders_AddsCAPCapabilities_when_CAPEnabled(t *testing.T) {
 
 			// Then
 			csp := w.Header().Get("Content-Security-Policy")
-			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", "'wasm-unsafe-eval'"))
-			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", "'unsafe-eval'"))
-			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "worker-src", "blob:"))
+			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", CapWASMUnsafeEval))
+			assert.Equal(t, tt.wantCAPCSP, directiveHasValue(csp, "script-src", CapUnsafeEval))
+			// worker-src blob: is also the unconditional Tencent worker requirement, so it is present in both states.
+			assert.True(t, directiveHasValue(csp, "worker-src", CapBlobWorkerSource))
 		})
 	}
 
