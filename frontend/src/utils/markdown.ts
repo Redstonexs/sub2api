@@ -54,6 +54,19 @@ export const ANNOUNCEMENT_ALLOWED_ATTR: readonly string[] = [
 ]
 
 /**
+ * Stamped on every surviving image, mirroring `responsiveImageStyle` in
+ * backend/internal/pkg/mdhtml/mdhtml.go. Externally hosted images arrive at
+ * their natural size, so without it a wide screenshot overflows the email card
+ * and is cut off on phones.
+ *
+ * `style` is deliberately absent from `ANNOUNCEMENT_ALLOWED_ATTR`: the hook
+ * below *sets* it after sanitization, so — exactly as on the backend, where the
+ * bluemonday policy admits this one literal and nothing else — an author cannot
+ * smuggle their own CSS in through an image.
+ */
+export const ANNOUNCEMENT_IMAGE_STYLE = 'max-width:100%;height:auto'
+
+/**
  * Images must be absolute http(s) URLs. There is no upload endpoint, and a
  * relative or protocol-relative `src` resolves against the mail client's base
  * rather than ours. Mirrors `absoluteHTTPURL` on the backend.
@@ -115,6 +128,7 @@ announcementPurifier.addHook('afterSanitizeAttributes', (node) => {
     const value = element.getAttribute(attr)
     if (value !== null && !NUMBER_OR_PERCENT.test(value)) element.removeAttribute(attr)
   }
+  element.setAttribute('style', ANNOUNCEMENT_IMAGE_STYLE)
 })
 
 /**

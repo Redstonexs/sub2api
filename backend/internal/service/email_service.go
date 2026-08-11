@@ -499,6 +499,12 @@ func (s *EmailService) sendViaResend(ctx context.Context, cfg *EmailDeliveryConf
 		"subject": sanitizeEmailHeader(subject),
 		"html":    body,
 	}
+	// Resend derives its own text part when "text" is omitted; sending ours keeps
+	// the plain-text rendition identical to the SMTP path. Omitted when empty so
+	// that fallback still applies — an explicit "" disables it entirely.
+	if plain := htmlToPlainText(body); plain != "" {
+		payload["text"] = plain
+	}
 	return s.postEmailAPI(ctx, string(EmailProviderResend), cfg.APIBaseURL+"/emails", cfg.APIKey, payload)
 }
 
@@ -629,8 +635,9 @@ func (s *EmailService) SendVerifyCode(ctx context.Context, email, siteName strin
 	}
 
 	// 构建邮件内容
-	subject := fmt.Sprintf("[%s] Email Verification Code", siteName)
-	body := s.buildVerifyCodeEmailBody(code, siteName)
+	fallbackLocale := firstEmailLocale(locale)
+	subject := legacyEmailSubject(fallbackLocale, siteName, "Email verification code", "邮箱验证码")
+	body := s.buildVerifyCodeEmailBody(fallbackLocale, code, siteName)
 
 	// 发送邮件
 	if err := s.SendEmail(ctx, email, subject, body); err != nil {
@@ -675,44 +682,43 @@ func (s *EmailService) VerifyCode(ctx context.Context, email, code string) error
 	return nil
 }
 
-// buildVerifyCodeEmailBody 构建验证码邮件HTML内容
-func (s *EmailService) buildVerifyCodeEmailBody(code, siteName string) string {
-	return fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 24px; }
-        .content { padding: 40px 30px; text-align: center; }
-        .code { font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #333; background-color: #f8f9fa; padding: 20px 30px; border-radius: 8px; display: inline-block; margin: 20px 0; font-family: monospace; }
-        .info { color: #666; font-size: 14px; line-height: 1.6; margin-top: 20px; }
-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>%s</h1>
-        </div>
-        <div class="content">
-            <p style="font-size: 18px; color: #333;">Your verification code is:</p>
-            <div class="code">%s</div>
-            <div class="info">
-                <p>This code will expire in <strong>15 minutes</strong>.</p>
-                <p>If you did not request this code, please ignore this email.</p>
-            </div>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply.</p>
-        </div>
-    </div>
-</body>
-</html>
-`, html.EscapeString(siteName), code)
+// buildVerifyCodeEmailBody renders the fallback verification-code email used when
+// NotificationEmailService's templated path fails.
+//
+// It deliberately reuses the same shell, accent and wording as the official
+// auth.verify_code template: a recipient should not be able to tell which path
+// produced the mail, and the fallback should not be the one email that is neither
+// responsive nor in their language.
+func (s *EmailService) buildVerifyCodeEmailBody(locale, code, siteName string) string {
+	minutes := strconv.Itoa(int(verifyCodeTTL / time.Minute))
+	title, content := "Email verification code", `
+<p>Your verification code is:</p>
+<p class="code">`+html.EscapeString(code)+`</p>
+<p>This code expires in <strong>`+minutes+`</strong> minutes.</p>
+<p>If you did not request this code, please ignore this email.</p>`
+	if isChineseEmailLocale(locale) {
+		title, content = "邮箱验证码", `
+<p>您的验证码是：</p>
+<p class="code">`+html.EscapeString(code)+`</p>
+<p>验证码将在 <strong>`+minutes+`</strong> 分钟后失效。</p>
+<p>如果不是您本人操作，请忽略此邮件。</p>`
+	}
+	return emailLayout{
+		Locale:  locale,
+		Accent:  "#4f46e5",
+		Title:   title,
+		Content: content,
+		Footer:  emailAutoSendFooter(locale, html.EscapeString(siteName)),
+	}.render()
+}
+
+// legacyEmailSubject localizes the subject of a fallback email. The templated
+// path localizes its own subjects; these are the only ones left hardcoded.
+func legacyEmailSubject(locale, siteName, en, zh string) string {
+	if isChineseEmailLocale(locale) {
+		return fmt.Sprintf("[%s] %s", siteName, zh)
+	}
+	return fmt.Sprintf("[%s] %s", siteName, en)
 }
 
 // TestSMTPConnectionWithConfig 使用指定配置测试SMTP连接。
@@ -802,8 +808,9 @@ func (s *EmailService) SendPasswordResetEmail(ctx context.Context, email, siteNa
 	}
 
 	// Build email content
-	subject := fmt.Sprintf("[%s] 密码重置请求", siteName)
-	body := s.buildPasswordResetEmailBody(fullResetURL, siteName)
+	fallbackLocale := firstEmailLocale(locale)
+	subject := legacyEmailSubject(fallbackLocale, siteName, "Password reset request", "密码重置请求")
+	body := s.buildPasswordResetEmailBody(fallbackLocale, fullResetURL, siteName)
 
 	// Send email
 	if err := s.SendEmail(ctx, email, subject, body); err != nil {
@@ -864,50 +871,46 @@ func (s *EmailService) ConsumePasswordResetToken(ctx context.Context, email, tok
 	return nil
 }
 
-// buildPasswordResetEmailBody builds the HTML content for password reset email
-func (s *EmailService) buildPasswordResetEmailBody(resetURL, siteName string) string {
-	return fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 24px; }
-        .content { padding: 40px 30px; text-align: center; }
-        .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; margin: 20px 0; }
-        .button:hover { opacity: 0.9; }
-        .info { color: #666; font-size: 14px; line-height: 1.6; margin-top: 20px; }
-        .link-fallback { color: #666; font-size: 12px; word-break: break-all; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; }
-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
-        .warning { color: #e74c3c; font-weight: 500; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>%s</h1>
-        </div>
-        <div class="content">
-            <p style="font-size: 18px; color: #333;">密码重置请求</p>
-            <p style="color: #666;">您已请求重置密码。请点击下方按钮设置新密码：</p>
-            <a href="%s" class="button">重置密码</a>
-            <div class="info">
-                <p>此链接将在 <strong>30 分钟</strong>后失效。</p>
-                <p class="warning">如果您没有请求重置密码，请忽略此邮件。您的密码将保持不变。</p>
-            </div>
-            <div class="link-fallback">
-                <p>如果按钮无法点击，请复制以下链接到浏览器中打开：</p>
-                <p>%s</p>
-            </div>
-        </div>
-        <div class="footer">
-            <p>这是一封自动发送的邮件，请勿回复。</p>
-        </div>
-    </div>
-</body>
-</html>
-`, html.EscapeString(siteName), html.EscapeString(resetURL), html.EscapeString(resetURL))
+// buildPasswordResetEmailBody renders the fallback password-reset email, mirroring
+// the official auth.password_reset template. See buildVerifyCodeEmailBody.
+func (s *EmailService) buildPasswordResetEmailBody(locale, resetURL, siteName string) string {
+	link := html.EscapeString(resetURL)
+	minutes := strconv.Itoa(int(passwordResetTokenTTL / time.Minute))
+	title, content := "Password reset", `
+<p>We received a request to reset your password. Use the button below to set a new one.</p>
+<p><a class="button" href="`+link+`">Reset password</a></p>
+<p>This link expires in <strong>`+minutes+`</strong> minutes.</p>
+<p class="muted">If the button does not work, copy this link into your browser:<br>`+link+`</p>
+<p>If you did not request this, you can safely ignore this email — your password stays unchanged.</p>`
+	if isChineseEmailLocale(locale) {
+		title, content = "密码重置", `
+<p>我们收到了您的密码重置请求，请点击下方按钮设置新密码。</p>
+<p><a class="button" href="`+link+`">重置密码</a></p>
+<p>此链接将在 <strong>`+minutes+`</strong> 分钟后失效。</p>
+<p class="muted">如果按钮无法点击，请复制以下链接到浏览器中打开：<br>`+link+`</p>
+<p>如果不是您本人操作，请忽略此邮件，您的密码将保持不变。</p>`
+	}
+	return emailLayout{
+		Locale:  locale,
+		Accent:  "#7c3aed",
+		Title:   title,
+		Content: content,
+		Footer:  emailAutoSendFooter(locale, html.EscapeString(siteName)),
+	}.render()
+}
+
+// BuildTestEmailBody renders the "SMTP works" message an admin sends from the
+// settings page. It lives here rather than in the handler so it shares the one
+// responsive shell every other email uses — the point of a test send is to show
+// what real mail will look like.
+func BuildTestEmailBody(siteName string) string {
+	return emailLayout{
+		Locale: notificationEmailDefaultLocale,
+		Accent: "#16a34a",
+		Title:  "Email configuration successful",
+		Content: `
+<p>This is a test message from <strong>` + html.EscapeString(siteName) + `</strong>.</p>
+<p>If you can read it, your SMTP settings are working and notification emails will be delivered.</p>`,
+		Footer: emailAutoSendFooter(notificationEmailDefaultLocale, html.EscapeString(siteName)),
+	}.render()
 }

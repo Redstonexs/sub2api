@@ -151,3 +151,30 @@ func TestToSafeHTMLKeepsStrikethrough(t *testing.T) {
 		t.Fatalf("expected strikethrough to survive sanitization, got %q", got)
 	}
 }
+
+// Announcement images are externally hosted and arrive at their natural size, so
+// without a fluid inline style a wide asset is cut off by the email card on every
+// phone. The literal must match responsiveImageStylePattern exactly or the
+// sanitizer drops the attribute.
+func TestToSafeHTMLMakesImagesFluid(t *testing.T) {
+	got := ToSafeHTML(`![wide](https://cdn.example.com/wide.png)`)
+
+	if !strings.Contains(got, `style="max-width:100%;height:auto"`) {
+		t.Fatalf("expected a responsive inline style on the image, got %q", got)
+	}
+}
+
+// The sanitizer must admit only the one literal the transformer writes, so an
+// allowed style attribute cannot become a CSS injection point.
+func TestSafeHTMLPolicyRejectsForeignImageStyles(t *testing.T) {
+	for _, style := range []string{
+		`position:absolute;top:0`,
+		`max-width:100%;height:auto;position:fixed`,
+		`MAX-WIDTH:100%;HEIGHT:AUTO`,
+	} {
+		got := safeHTMLPolicy.Sanitize(`<img src="https://cdn.example.com/a.png" style="` + style + `">`)
+		if strings.Contains(got, "style=") {
+			t.Fatalf("style %q should have been stripped, got %q", style, got)
+		}
+	}
+}

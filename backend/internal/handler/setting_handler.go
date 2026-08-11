@@ -141,8 +141,43 @@ func (h *SettingHandler) UnsubscribeNotificationEmail(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	body := "<!doctype html><html><head><meta charset=\"utf-8\"><title>Unsubscribed</title></head><body style=\"font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;\"><h1>Unsubscribed</h1><p>You have unsubscribed <strong>" + html.EscapeString(result.Email) + "</strong> from <strong>" + html.EscapeString(result.Event) + "</strong> emails.</p></body></html>"
-	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(body))
+	// This page is reached by tapping a link inside an email, so it is opened on a
+	// phone more often than not, and by whoever received that email — which is why
+	// it follows the recipient's stored locale rather than defaulting to English.
+	locale := h.notificationEmailService.ResolveRecipientLocale(c.Request.Context(), 0, result.Email)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(unsubscribeConfirmationPage(locale, result)))
+}
+
+// unsubscribeConfirmationPage renders the opt-out confirmation shown after an
+// unsubscribe link is followed.
+func unsubscribeConfirmationPage(locale string, result service.NotificationEmailUnsubscribeResult) string {
+	email := html.EscapeString(result.Email)
+	event := html.EscapeString(service.LocalizedNotificationEmailEventLabel(result.Event, locale))
+
+	lang, title, heading, body := "en", "Unsubscribed", "Unsubscribed",
+		"<strong>"+email+"</strong> will no longer receive <strong>"+event+"</strong> emails."
+	note := "Changed your mind? You can turn these emails back on from your notification settings."
+	if service.IsChineseEmailLocale(locale) {
+		lang, title, heading, body = "zh-CN", "已退订", "已退订",
+			"<strong>"+email+"</strong> 将不再收到<strong>"+event+"</strong>。"
+		note = "如需恢复接收，可在通知设置中重新开启。"
+	}
+
+	return `<!doctype html>
+<html lang="` + lang + `">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>` + title + `</title>
+</head>
+<body style="margin:0;padding:24px 16px;background-color:#f4f4f5;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;line-height:1.7;">
+<div style="max-width:520px;margin:0 auto;padding:28px 24px;background-color:#ffffff;border-radius:12px;">
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;">` + heading + `</h1>
+<p style="margin:0 0 12px;font-size:15px;word-break:break-word;">` + body + `</p>
+<p style="margin:0;color:#71717a;font-size:13px;">` + note + `</p>
+</div>
+</body>
+</html>`
 }
 
 func publicLoginAgreementDocumentsToDTO(items []service.LoginAgreementDocument) []dto.LoginAgreementDocument {

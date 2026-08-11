@@ -134,6 +134,13 @@ func TestOpsScheduledReportLegacyTemplateReceivesSummaryHTML(t *testing.T) {
 	messageBody := smtpServer.lastMessageBody(t)
 	require.Contains(t, messageBody, `<section data-template="legacy">`)
 	require.Contains(t, messageBody, `<h2>日报</h2>`)
+
+	// The same message also carries a readable text/plain alternative derived from
+	// that HTML, so the mail is not delivered as HTML-only.
+	messageText := smtpServer.lastMessageText(t)
+	require.Contains(t, messageText, "日报")
+	require.Contains(t, messageText, "- Total Requests: 0")
+	require.NotContains(t, messageText, "<section")
 }
 
 func TestFormatOpsReportIntegerGroupsDigits(t *testing.T) {

@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"html"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
@@ -105,7 +104,7 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 	ctx := c.Request.Context()
 	siteName := h.settingService.GetSiteName(ctx)
 	subject := "[" + siteName + "] Test Email"
-	body := buildTestEmailBody(siteName)
+	body := service.BuildTestEmailBody(siteName)
 
 	// API 渠道（resend/cyberpanel）：使用已保存的渠道配置直接发送，无需 SMTP 主机。
 	if h.emailService.ResolveProvider(ctx) != service.EmailProviderSMTP {
@@ -166,41 +165,6 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "Test email sent successfully"})
-}
-
-// buildTestEmailBody 渲染“测试邮件”的 HTML 正文。
-func buildTestEmailBody(siteName string) string {
-	return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
-        .content { padding: 40px 30px; text-align: center; }
-        .success { color: #10b981; font-size: 48px; margin-bottom: 20px; }
-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>` + html.EscapeString(siteName) + `</h1>
-        </div>
-        <div class="content">
-            <div class="success">✓</div>
-            <h2>Email Configuration Successful!</h2>
-            <p>This is a test email to verify your email settings are working correctly.</p>
-        </div>
-        <div class="footer">
-            <p>This is an automated test message.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
 }
 
 // ListEmailTemplates returns all editable notification email templates.

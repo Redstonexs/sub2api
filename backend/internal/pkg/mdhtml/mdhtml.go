@@ -68,10 +68,28 @@ func fallbackHTML(content string) string {
 // protocol-relative src resolves against the *mail client's* base, not ours.
 var absoluteHTTPURL = regexp.MustCompile(`^https?://`)
 
-// externalImagesOnly drops image nodes whose destination is not an absolute
-// http(s) URL, before rendering.
+// responsiveImageStyle is stamped on every surviving image.
 //
-// Doing this in the parser rather than leaving it to bluemonday matters: the
+// Externally hosted images arrive at their natural size, so a 1600px screenshot
+// used to render 1600px wide and run off the side of the email card — visibly
+// cut off on every phone. This has to be an *inline* style: the shell's
+// stylesheet rule covers most clients, but the ones that strip <style> are
+// exactly the ones where a cropped image is never recoverable.
+//
+// It is a fixed literal so newSafeHTMLPolicy can allow this exact value and
+// nothing else, which keeps `style` from becoming a general-purpose CSS
+// injection point on announcement content.
+const responsiveImageStyle = "max-width:100%;height:auto"
+
+// responsiveImageStylePattern must stay anchored: bluemonday matches attribute
+// policies with an unanchored MatchString, so an unanchored pattern here would
+// admit any style string that merely contained the literal.
+var responsiveImageStylePattern = regexp.MustCompile(`^` + regexp.QuoteMeta(responsiveImageStyle) + `$`)
+
+// externalImagesOnly drops image nodes whose destination is not an absolute
+// http(s) URL and makes the survivors fluid, before rendering.
+//
+// Doing the drop in the parser rather than leaving it to bluemonday matters: the
 // sanitizer can only strip the offending src attribute, and an element that still
 // carries an allowed attribute (alt) survives as a src-less <img>, which mail
 // clients draw as a broken-image placeholder. Removing the node emits nothing at
@@ -84,10 +102,17 @@ func (externalImagesOnly) Transform(doc *ast.Document, _ text.Reader, _ parser.C
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		if img, ok := n.(*ast.Image); ok && !absoluteHTTPURL.Match(img.Destination) {
+		img, ok := n.(*ast.Image)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		if !absoluteHTTPURL.Match(img.Destination) {
 			doomed = append(doomed, n)
 			return ast.WalkSkipChildren, nil
 		}
+		// goldmark renders image attributes through ImageAttributeFilter, which
+		// extends GlobalAttributeFilter — "style" is in the latter, so this lands.
+		img.SetAttributeString("style", []byte(responsiveImageStyle))
 		return ast.WalkContinue, nil
 	})
 	// Mutating during the walk would invalidate the sibling links it follows.
@@ -118,6 +143,11 @@ func newSafeHTMLPolicy() *bluemonday.Policy {
 	policy.AllowAttrs("src").Matching(absoluteHTTPURL).OnElements("img")
 	policy.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
 	policy.AllowAttrs("width", "height").Matching(bluemonday.NumberOrPercent).OnElements("img")
+	// Only the one literal externalImagesOnly writes; see responsiveImageStyle.
+	// Deliberately not policy.AllowStyles(): registering any style policy flips
+	// bluemonday to its CSS-property sanitizer for *every* element, which is a far
+	// wider surface than the single fixed declaration we actually need.
+	policy.AllowAttrs("style").Matching(responsiveImageStylePattern).OnElements("img")
 
 	policy.AllowStandardURLs()
 	return policy

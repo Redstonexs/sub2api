@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import {
   ANNOUNCEMENT_ALLOWED_ATTR,
   ANNOUNCEMENT_ALLOWED_TAGS,
+  ANNOUNCEMENT_IMAGE_STYLE,
   renderAnnouncementEmailPreview,
   renderAnnouncementMarkdown,
   sanitizeAnnouncementHtml,
@@ -94,6 +95,26 @@ describe('image handling', () => {
     expect(html).toContain('src="https://cdn.example.com/a.png"')
     expect(html).toContain('width="100%"')
     expect(html).not.toContain('height=')
+  })
+
+  it('makes every image fluid, matching the backend', () => {
+    // Externally hosted images arrive at their natural size; without this a wide
+    // asset overflows the email card and is cut off on phones.
+    expect(renderAnnouncementMarkdown('![logo](https://cdn.example.com/logo.png)'))
+      .toContain(`style="${ANNOUNCEMENT_IMAGE_STYLE}"`)
+    expect(renderAnnouncementEmailPreview('![logo](https://cdn.example.com/logo.png)'))
+      .toContain(`style="${ANNOUNCEMENT_IMAGE_STYLE}"`)
+  })
+
+  it('replaces an author-supplied style rather than trusting it', () => {
+    // `style` is not in the allowlist; the hook sets it after sanitization, so an
+    // author cannot smuggle CSS in through an image. Mirrors the backend policy,
+    // which admits only the one literal.
+    const html = sanitizeAnnouncementHtml(
+      '<img src="https://cdn.example.com/a.png" style="position:fixed;top:0">',
+    )
+    expect(html).toContain(`style="${ANNOUNCEMENT_IMAGE_STYLE}"`)
+    expect(html).not.toContain('position:fixed')
   })
 })
 

@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"io"
 	"mime"
-	"mime/quotedprintable"
+	"mime/multipart"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -49,16 +49,83 @@ func TestBuildSMTPMessageProducesStandardsCompliantMIME(t *testing.T) {
 	require.NoError(t, err)
 	require.Regexp(t, regexp.MustCompile(`^<[0-9a-f]{32}@example\.com>$`), parsed.Header.Get("Message-ID"))
 	require.Equal(t, "1.0", parsed.Header.Get("MIME-Version"))
+
+	// An HTML body ships as multipart/alternative so clients that render the text
+	// part have one, and so the message does not read as HTML-only to spam filters.
+	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "multipart/alternative", mediaType)
+	require.NotEmpty(t, params["boundary"])
+
+	// multipart.Reader hides Content-Transfer-Encoding and decodes quoted-printable
+	// transparently, so assert the raw bytes carry it.
+	require.Contains(t, string(message.data), "Content-Transfer-Encoding: quoted-printable")
+
+	reader := multipart.NewReader(parsed.Body, params["boundary"])
+
+	// RFC 2046 §5.1.4: least-preferred alternative first, so text/plain precedes HTML.
+	textPart, err := reader.NextPart()
+	require.NoError(t, err)
+	textType, textParams, err := mime.ParseMediaType(textPart.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "text/plain", textType)
+	require.Equal(t, "UTF-8", textParams["charset"])
+	textBody, err := io.ReadAll(textPart)
+	require.NoError(t, err)
+	require.Contains(t, string(textBody), "验证码：123456 & ready")
+	require.NotContains(t, string(textBody), "<body")
+
+	htmlPart, err := reader.NextPart()
+	require.NoError(t, err)
+	htmlType, htmlParams, err := mime.ParseMediaType(htmlPart.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "text/html", htmlType)
+	require.Equal(t, "UTF-8", htmlParams["charset"])
+	htmlBody, err := io.ReadAll(htmlPart)
+	require.NoError(t, err)
+	require.Equal(t, strings.ReplaceAll(body, "\n", "\r\n"), string(htmlBody))
+
+	_, err = reader.NextPart()
+	require.ErrorIs(t, err, io.EOF)
+}
+
+// A body with no readable text has nothing to alternate between, so it stays a
+// single part rather than shipping an empty text/plain alternative.
+func TestBuildSMTPMessageKeepsTextlessBodySinglePart(t *testing.T) {
+	config := &SMTPConfig{Host: "smtp.example.com", From: "reply@example.com"}
+
+	message, err := buildSMTPMessage(config, "user@example.net", "subject", `<html><body><style>p { color: red; }</style></body></html>`)
+	require.NoError(t, err)
+
+	parsed, err := mail.ReadMessage(bytes.NewReader(message.data))
+	require.NoError(t, err)
 	require.Equal(t, "quoted-printable", parsed.Header.Get("Content-Transfer-Encoding"))
 
 	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
 	require.NoError(t, err)
 	require.Equal(t, "text/html", mediaType)
 	require.Equal(t, "UTF-8", params["charset"])
+}
 
-	decodedBody, err := io.ReadAll(quotedprintable.NewReader(parsed.Body))
-	require.NoError(t, err)
-	require.Equal(t, strings.ReplaceAll(body, "\n", "\r\n"), string(decodedBody))
+// Each message gets its own boundary; a fixed one could collide with body content
+// and truncate the message at the false delimiter.
+func TestBuildSMTPMessageUsesUniqueBoundaries(t *testing.T) {
+	config := &SMTPConfig{Host: "smtp.example.com", From: "reply@example.com"}
+
+	boundaryOf := func(t *testing.T) string {
+		t.Helper()
+		message, err := buildSMTPMessage(config, "user@example.net", "subject", "<p>hello</p>")
+		require.NoError(t, err)
+		parsed, err := mail.ReadMessage(bytes.NewReader(message.data))
+		require.NoError(t, err)
+		_, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+		require.NoError(t, err)
+		return params["boundary"]
+	}
+
+	first, second := boundaryOf(t), boundaryOf(t)
+	require.NotEmpty(t, first)
+	require.NotEqual(t, first, second)
 }
 
 func TestBuildSMTPMessagePreventsHeaderInjection(t *testing.T) {

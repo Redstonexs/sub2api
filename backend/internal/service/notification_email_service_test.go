@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
 	"net"
 	"net/mail"
@@ -607,6 +609,31 @@ func (s *notificationEmailTestSMTPServer) lastMessageBody(t *testing.T) string {
 	message, err := mail.ReadMessage(strings.NewReader(s.lastMessage()))
 	require.NoError(t, err)
 
+	// Messages now ship as multipart/alternative (text/plain + text/html), so reach
+	// into the HTML part; callers assert on markup. multipart.Reader decodes
+	// quoted-printable transparently, hence no explicit decode on that path.
+	mediaType, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	if mediaType == "multipart/alternative" {
+		reader := multipart.NewReader(message.Body, params["boundary"])
+		for {
+			part, err := reader.NextPart()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err)
+			partType, _, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+			require.NoError(t, err)
+			if partType != "text/html" {
+				continue
+			}
+			body, err := io.ReadAll(part)
+			require.NoError(t, err)
+			return string(body)
+		}
+		t.Fatalf("multipart message has no text/html part")
+	}
+
 	bodyReader := io.Reader(message.Body)
 	if strings.EqualFold(message.Header.Get("Content-Transfer-Encoding"), "quoted-printable") {
 		bodyReader = quotedprintable.NewReader(message.Body)
@@ -614,6 +641,36 @@ func (s *notificationEmailTestSMTPServer) lastMessageBody(t *testing.T) string {
 	body, err := io.ReadAll(bodyReader)
 	require.NoError(t, err)
 	return string(body)
+}
+
+// lastMessageText returns the text/plain alternative of the last message.
+func (s *notificationEmailTestSMTPServer) lastMessageText(t *testing.T) string {
+	t.Helper()
+
+	message, err := mail.ReadMessage(strings.NewReader(s.lastMessage()))
+	require.NoError(t, err)
+	mediaType, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "multipart/alternative", mediaType)
+
+	reader := multipart.NewReader(message.Body, params["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		partType, _, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+		require.NoError(t, err)
+		if partType != "text/plain" {
+			continue
+		}
+		body, err := io.ReadAll(part)
+		require.NoError(t, err)
+		return string(body)
+	}
+	t.Fatalf("multipart message has no text/plain part")
+	return ""
 }
 
 func (s *notificationEmailTestSMTPServer) close() {
