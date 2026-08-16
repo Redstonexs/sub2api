@@ -1226,17 +1226,17 @@ func init() {
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
 	// groupDescQosEnabled is the schema descriptor for qos_enabled field.
-	groupDescQosEnabled := groupFields[57].Descriptor()
+	groupDescQosEnabled := groupFields[59].Descriptor()
 	// group.DefaultQosEnabled holds the default value on creation for the qos_enabled field.
 	group.DefaultQosEnabled = groupDescQosEnabled.Default.(bool)
 	// groupDescQosMetric is the schema descriptor for qos_metric field.
-	groupDescQosMetric := groupFields[58].Descriptor()
+	groupDescQosMetric := groupFields[60].Descriptor()
 	// group.DefaultQosMetric holds the default value on creation for the qos_metric field.
 	group.DefaultQosMetric = groupDescQosMetric.Default.(string)
 	// group.QosMetricValidator is a validator for the "qos_metric" field. It is called by the builders before save.
 	group.QosMetricValidator = groupDescQosMetric.Validators[0].(func(string) error)
 	// groupDescQosTiers is the schema descriptor for qos_tiers field.
-	groupDescQosTiers := groupFields[59].Descriptor()
+	groupDescQosTiers := groupFields[61].Descriptor()
 	// group.DefaultQosTiers holds the default value on creation for the qos_tiers field.
 	group.DefaultQosTiers = groupDescQosTiers.Default.([]domain.GroupQoSTier)
 	groupviewgrantMixin := schema.GroupViewGrant{}.Mixin()
