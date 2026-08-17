@@ -1,5 +1,5 @@
 <template>
-  <div class="table-page-layout" :class="{ 'mobile-mode': isMobile }">
+  <div class="table-page-layout min-w-0 max-w-full" :class="{ 'mobile-mode': isMobile }">
     <!-- 固定区域：操作按钮 -->
     <div v-if="$slots.actions" class="layout-section-fixed">
       <slot name="actions" />
@@ -11,8 +11,8 @@
     </div>
 
     <!-- 滚动区域：表格 -->
-    <div class="layout-section-scrollable">
-      <div class="card table-scroll-container">
+    <div class="layout-section-scrollable min-w-0 max-w-full">
+      <div class="card table-scroll-container min-w-0 max-w-full">
         <slot name="table" />
       </div>
     </div>
@@ -67,6 +67,7 @@ onUnmounted(() => {
   @apply flex-1 overflow-x-auto overflow-y-auto;
   /* 确保横向滚动条显示在最底部 */
   scrollbar-gutter: stable;
+  overscroll-behavior-inline: contain;
 }
 
 .table-scroll-container :deep(table) {

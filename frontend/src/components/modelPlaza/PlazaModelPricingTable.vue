@@ -1,6 +1,6 @@
 <template>
-  <div class="plaza-pricing-table overflow-x-auto" :style="accentStyle">
-    <table class="w-full min-w-[860px] table-fixed border-collapse text-sm tabular-nums">
+  <div class="plaza-pricing-table w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain" :style="accentStyle">
+    <table class="w-full min-w-[1080px] table-fixed border-collapse text-sm tabular-nums">
       <colgroup>
         <col class="w-[22%]" />
         <col class="w-[10%]" />
