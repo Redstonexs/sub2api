@@ -125,6 +125,65 @@ func TestGroupQuotaCardFromService_whenEmptyAccounts_thenAccountsIsEmptyArray(t 
 	}
 }
 
+func TestGroupQuotaCardFromService_whenWindowStatsPresent_thenWindowStatsSerialized(t *testing.T) {
+	// Given: an account whose 5h and 7d windows each carry window stats
+	resetsAt := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	result := &service.GroupQuotaCardResult{
+		GroupID: 7,
+		Accounts: []service.GroupQuotaAccount{
+			{
+				AccountID:   42,
+				DisplayName: "prod-account",
+				FiveHour: &service.WindowUsage{
+					Utilization: 38.0,
+					ResetsAt:    &resetsAt,
+					WindowStats: &service.WindowStats{Requests: 120, Tokens: 45000, Cost: 3.5, UserCost: 4.2},
+				},
+				SevenDay: &service.WindowUsage{
+					Utilization: 15.0,
+					WindowStats: &service.WindowStats{Requests: 900, Tokens: 310000, Cost: 27.75, UserCost: 31.1},
+				},
+			},
+		},
+	}
+	group := &service.Group{ID: 7, Name: "claude-team", Platform: service.PlatformAnthropic}
+	// When: mapping and serializing
+	out := GroupQuotaCardFromService(result, group)
+	raw, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// Then: window_stats carries requests, tokens, cost and user_cost on both windows
+	five := out.Accounts[0].FiveHour
+	if five == nil || five.WindowStats == nil {
+		t.Fatalf("expected five_hour window_stats, got %+v", out.Accounts[0])
+	}
+	if five.WindowStats.Requests != 120 || five.WindowStats.Tokens != 45000 || five.WindowStats.Cost != 3.5 {
+		t.Fatalf("unexpected five_hour window_stats: %+v", five.WindowStats)
+	}
+	if five.WindowStats.UserCost == nil || *five.WindowStats.UserCost != 4.2 {
+		t.Fatalf("unexpected five_hour user_cost: %v", five.WindowStats.UserCost)
+	}
+	seven := out.Accounts[0].SevenDay
+	if seven == nil || seven.WindowStats == nil {
+		t.Fatalf("expected seven_day window_stats, got %+v", out.Accounts[0])
+	}
+	if seven.WindowStats.Requests != 900 || seven.WindowStats.Tokens != 310000 || seven.WindowStats.Cost != 27.75 {
+		t.Fatalf("unexpected seven_day window_stats: %+v", seven.WindowStats)
+	}
+	if seven.WindowStats.UserCost == nil || *seven.WindowStats.UserCost != 31.1 {
+		t.Fatalf("unexpected seven_day user_cost: %v", seven.WindowStats.UserCost)
+	}
+	for _, want := range []string{
+		`"five_hour":{"utilization":38,"resets_at":"2026-07-27T12:00:00Z","window_stats":{"requests":120,"tokens":45000,"cost":3.5,"user_cost":4.2}}`,
+		`"seven_day":{"utilization":15,"resets_at":null,"window_stats":{"requests":900,"tokens":310000,"cost":27.75,"user_cost":31.1}}`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("expected %s in %s", want, raw)
+		}
+	}
+}
+
 func TestGroupQuotaCardFromService_whenNilInput_thenNil(t *testing.T) {
 	// Given: nil inputs
 	// When/Then: mapper returns nil instead of panicking

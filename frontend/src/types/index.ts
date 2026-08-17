@@ -2021,6 +2021,7 @@ export interface ApiKeyUsageTrendPoint {
 export interface GroupQuotaWindowUsage {
   utilization: number
   resets_at: string | null
+  window_stats?: WindowStats | null
 }
 
 export interface GroupQuotaAccount {

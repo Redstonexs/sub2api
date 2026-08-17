@@ -741,8 +741,16 @@ type GroupQuotaCardAccount struct {
 
 // GroupQuotaCardWindow 单个时间窗口的用量摘要。
 type GroupQuotaCardWindow struct {
-	Utilization float64    `json:"utilization"`
-	ResetsAt    *time.Time `json:"resets_at"`
+	Utilization float64                `json:"utilization"`
+	ResetsAt    *time.Time             `json:"resets_at"`
+	WindowStats *GroupQuotaWindowStats `json:"window_stats,omitempty"`
+}
+
+type GroupQuotaWindowStats struct {
+	Requests int64    `json:"requests"`
+	Tokens   int64    `json:"tokens"`
+	Cost     float64  `json:"cost"`
+	UserCost *float64 `json:"user_cost,omitempty"`
 }
 
 // GroupViewGrantEntry 分组额度卡片查看授权记录（管理端列表）。

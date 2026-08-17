@@ -19,6 +19,7 @@ const (
 type WindowUsage struct {
 	Utilization float64
 	ResetsAt    *time.Time
+	WindowStats *WindowStats
 }
 
 // GroupQuotaAccount 分组配额卡片中的单个账号条目。
@@ -174,6 +175,7 @@ func usageWindowToWindowUsage(p *UsageProgress) *WindowUsage {
 	return &WindowUsage{
 		Utilization: p.Utilization,
 		ResetsAt:    p.ResetsAt,
+		WindowStats: p.WindowStats,
 	}
 }
 

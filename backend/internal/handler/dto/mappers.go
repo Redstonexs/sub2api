@@ -932,7 +932,16 @@ func groupQuotaCardWindowFromService(w *service.WindowUsage) *GroupQuotaCardWind
 	return &GroupQuotaCardWindow{
 		Utilization: w.Utilization,
 		ResetsAt:    w.ResetsAt,
+		WindowStats: groupQuotaWindowStatsFromService(w.WindowStats),
 	}
+}
+
+func groupQuotaWindowStatsFromService(s *service.WindowStats) *GroupQuotaWindowStats {
+	if s == nil {
+		return nil
+	}
+	userCost := s.UserCost
+	return &GroupQuotaWindowStats{Requests: s.Requests, Tokens: s.Tokens, Cost: s.Cost, UserCost: &userCost}
 }
 
 // GroupViewGrantFromService converts a grant record (with usernames) into the API DTO.

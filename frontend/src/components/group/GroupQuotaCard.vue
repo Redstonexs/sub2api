@@ -65,6 +65,7 @@
                     label="5h"
                     :utilization="acct.five_hour.utilization"
                     :resets-at="acct.five_hour.resets_at"
+                    :window-stats="acct.five_hour.window_stats"
                     color="amber"
                   />
                   <div v-else class="pl-[33px] text-[10px] text-gray-400 dark:text-gray-500">
@@ -75,6 +76,7 @@
                     label="7d"
                     :utilization="acct.seven_day.utilization"
                     :resets-at="acct.seven_day.resets_at"
+                    :window-stats="acct.seven_day.window_stats"
                     color="emerald"
                   />
                   <div v-else class="pl-[33px] text-[10px] text-gray-400 dark:text-gray-500">

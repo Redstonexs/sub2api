@@ -140,6 +140,34 @@ describe('GroupQuotaCard', () => {
     expect(wrapper.text()).toContain('dashboard.groupQuotaCard.noData')
   })
 
+  it('passes window usage metrics to the shared account usage bar', async () => {
+    const cardWithStats: GroupQuotaCardType = {
+      ...SAMPLE_CARD,
+      accounts: [{
+        ...SAMPLE_CARD.accounts[0],
+        five_hour: {
+          utilization: 80,
+          resets_at: null,
+          window_stats: { requests: 659, tokens: 84_800_000, cost: 68.24, user_cost: 68.24 }
+        }
+      }]
+    }
+    mockGetMyViewableGroups.mockResolvedValue(SAMPLE_GROUPS)
+    mockUserGetGroupQuotaCard.mockResolvedValue(cardWithStats)
+
+    const wrapper = mount(GroupQuotaCard, { props: { isAdmin: false } })
+    await flushPromises()
+
+    const bars = wrapper.findAllComponents(UsageProgressBar)
+    // The first 5h bar belongs to the aggregate totals; the account row follows it.
+    const accountBar = bars[2]
+    expect(accountBar?.props('windowStats')).toEqual(cardWithStats.accounts[0].five_hour?.window_stats)
+    expect(wrapper.text()).toContain('659 req')
+    expect(wrapper.text()).toContain('84.8M')
+    expect(wrapper.text()).toContain('A $68.24')
+    expect(wrapper.text()).toContain('U $68.24')
+  })
+
   it('renders accounts in server-provided order — no client-side re-sort', async () => {
     // Feed unsorted accounts; verify DOM order matches input order
     const unsortedCard: GroupQuotaCardType = {
