@@ -636,7 +636,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 	if requestedModel == "" {
 		requestedModel = l.Model
 	}
-	return UsageLog{
+	dto := UsageLog{
 		ID:                        l.ID,
 		UserID:                    l.UserID,
 		APIKeyID:                  l.APIKeyID,
@@ -690,6 +690,20 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		Group:                     GroupFromServiceShallow(l.Group),
 		Subscription:              UserSubscriptionFromService(l.Subscription),
 	}
+	// Group QoS 快照映射：nil=未知（无生效档位/历史行）；false=已知未受影响；
+	// true=至少一项效果真实发生，effects 列出命名效果。
+	if l.GroupQoSRecord != nil {
+		tier := l.GroupQoSRecord.Tier
+		window := l.GroupQoSRecord.Window
+		affected := l.GroupQoSRecord.Affected()
+		dto.GroupQoSTier = &tier
+		dto.GroupQoSWindow = &window
+		dto.GroupQoSAffected = &affected
+		if affected {
+			dto.GroupQoSEffects = l.GroupQoSRecord.Effects.Names()
+		}
+	}
+	return dto
 }
 
 // UsageLogFromService converts a service UsageLog to DTO for regular users.

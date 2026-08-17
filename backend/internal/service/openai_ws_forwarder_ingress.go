@@ -217,8 +217,16 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				nil,
 			)
 		}
+		// 每个 turn 打开独立的 QoS 用量快照效果窗口：前一轮的效果不得泄漏到
+		// 后续未受影响的 turn（AfterTurn 读取本 turn 的效果位）。这里必须放在
+		// 推理改写标记之前——本 turn 的响应帧在上一轮 readClientMessage 中解析，
+		// BeforeTurn 再重置会把这个 turn 刚标记的效果抹掉。
+		BeginGroupQoSTurn(ctx, turn)
 		if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
 			if capped, changed := ApplyOpenAIReasoningEffortPolicy(normalized, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
+				// Mark with the pre-policy body so the effect test can compare
+				// the QoS outcome against the standing group policy alone.
+				MarkGroupQoSReasoningEffect(ctx, normalized)
 				normalized = capped
 			}
 		}

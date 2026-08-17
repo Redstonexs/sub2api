@@ -66,6 +66,10 @@ type LiveCallRecord struct {
 	UserAgent       string
 	IPAddress       string
 	InboundEndpoint string
+	// GroupQoSRecord 是建连准入时刻冻结的分组 QoS 降级快照，随会话携带到
+	// finalize 的 usage 行。会话结算运行在请求生命周期之外，绝不能回头读
+	// 已过期的请求 ctx——快照必须在 CreateLiveCall 时冻结进记录本身。
+	GroupQoSRecord *GroupQoSRecordSnapshot
 	// AttestationCiphertext 仅用于让同一会话的 Sideband 复用创建时的证明。
 	AttestationCiphertext string
 }

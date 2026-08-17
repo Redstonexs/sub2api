@@ -623,6 +623,48 @@ func (_c *UsageLogCreate) SetNillableCacheTTLOverridden(v *bool) *UsageLogCreate
 	return _c
 }
 
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (_c *UsageLogCreate) SetGroupQosTier(v int16) *UsageLogCreate {
+	_c.mutation.SetGroupQosTier(v)
+	return _c
+}
+
+// SetNillableGroupQosTier sets the "group_qos_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableGroupQosTier(v *int16) *UsageLogCreate {
+	if v != nil {
+		_c.SetGroupQosTier(*v)
+	}
+	return _c
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (_c *UsageLogCreate) SetGroupQosWindow(v string) *UsageLogCreate {
+	_c.mutation.SetGroupQosWindow(v)
+	return _c
+}
+
+// SetNillableGroupQosWindow sets the "group_qos_window" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableGroupQosWindow(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetGroupQosWindow(*v)
+	}
+	return _c
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (_c *UsageLogCreate) SetGroupQosEffectMask(v int16) *UsageLogCreate {
+	_c.mutation.SetGroupQosEffectMask(v)
+	return _c
+}
+
+// SetNillableGroupQosEffectMask sets the "group_qos_effect_mask" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableGroupQosEffectMask(v *int16) *UsageLogCreate {
+	if v != nil {
+		_c.SetGroupQosEffectMask(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *UsageLogCreate) SetCreatedAt(v time.Time) *UsageLogCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -928,6 +970,11 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.CacheTTLOverridden(); !ok {
 		return &ValidationError{Name: "cache_ttl_overridden", err: errors.New(`ent: missing required field "UsageLog.cache_ttl_overridden"`)}
 	}
+	if v, ok := _c.mutation.GroupQosWindow(); ok {
+		if err := usagelog.GroupQosWindowValidator(v); err != nil {
+			return &ValidationError{Name: "group_qos_window", err: fmt.Errorf(`ent: validator failed for field "UsageLog.group_qos_window": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "UsageLog.created_at"`)}
 	}
@@ -1130,6 +1177,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
 		_node.CacheTTLOverridden = value
+	}
+	if value, ok := _c.mutation.GroupQosTier(); ok {
+		_spec.SetField(usagelog.FieldGroupQosTier, field.TypeInt16, value)
+		_node.GroupQosTier = &value
+	}
+	if value, ok := _c.mutation.GroupQosWindow(); ok {
+		_spec.SetField(usagelog.FieldGroupQosWindow, field.TypeString, value)
+		_node.GroupQosWindow = &value
+	}
+	if value, ok := _c.mutation.GroupQosEffectMask(); ok {
+		_spec.SetField(usagelog.FieldGroupQosEffectMask, field.TypeInt16, value)
+		_node.GroupQosEffectMask = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(usagelog.FieldCreatedAt, field.TypeTime, value)
@@ -2079,6 +2138,72 @@ func (u *UsageLogUpsert) SetCacheTTLOverridden(v bool) *UsageLogUpsert {
 // UpdateCacheTTLOverridden sets the "cache_ttl_overridden" field to the value that was provided on create.
 func (u *UsageLogUpsert) UpdateCacheTTLOverridden() *UsageLogUpsert {
 	u.SetExcluded(usagelog.FieldCacheTTLOverridden)
+	return u
+}
+
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (u *UsageLogUpsert) SetGroupQosTier(v int16) *UsageLogUpsert {
+	u.Set(usagelog.FieldGroupQosTier, v)
+	return u
+}
+
+// UpdateGroupQosTier sets the "group_qos_tier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateGroupQosTier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldGroupQosTier)
+	return u
+}
+
+// AddGroupQosTier adds v to the "group_qos_tier" field.
+func (u *UsageLogUpsert) AddGroupQosTier(v int16) *UsageLogUpsert {
+	u.Add(usagelog.FieldGroupQosTier, v)
+	return u
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (u *UsageLogUpsert) ClearGroupQosTier() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldGroupQosTier)
+	return u
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (u *UsageLogUpsert) SetGroupQosWindow(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldGroupQosWindow, v)
+	return u
+}
+
+// UpdateGroupQosWindow sets the "group_qos_window" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateGroupQosWindow() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldGroupQosWindow)
+	return u
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (u *UsageLogUpsert) ClearGroupQosWindow() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldGroupQosWindow)
+	return u
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (u *UsageLogUpsert) SetGroupQosEffectMask(v int16) *UsageLogUpsert {
+	u.Set(usagelog.FieldGroupQosEffectMask, v)
+	return u
+}
+
+// UpdateGroupQosEffectMask sets the "group_qos_effect_mask" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateGroupQosEffectMask() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldGroupQosEffectMask)
+	return u
+}
+
+// AddGroupQosEffectMask adds v to the "group_qos_effect_mask" field.
+func (u *UsageLogUpsert) AddGroupQosEffectMask(v int16) *UsageLogUpsert {
+	u.Add(usagelog.FieldGroupQosEffectMask, v)
+	return u
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (u *UsageLogUpsert) ClearGroupQosEffectMask() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldGroupQosEffectMask)
 	return u
 }
 
@@ -3069,6 +3194,83 @@ func (u *UsageLogUpsertOne) SetCacheTTLOverridden(v bool) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateCacheTTLOverridden() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateCacheTTLOverridden()
+	})
+}
+
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (u *UsageLogUpsertOne) SetGroupQosTier(v int16) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosTier(v)
+	})
+}
+
+// AddGroupQosTier adds v to the "group_qos_tier" field.
+func (u *UsageLogUpsertOne) AddGroupQosTier(v int16) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddGroupQosTier(v)
+	})
+}
+
+// UpdateGroupQosTier sets the "group_qos_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateGroupQosTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosTier()
+	})
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (u *UsageLogUpsertOne) ClearGroupQosTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosTier()
+	})
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (u *UsageLogUpsertOne) SetGroupQosWindow(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosWindow(v)
+	})
+}
+
+// UpdateGroupQosWindow sets the "group_qos_window" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateGroupQosWindow() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosWindow()
+	})
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (u *UsageLogUpsertOne) ClearGroupQosWindow() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosWindow()
+	})
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertOne) SetGroupQosEffectMask(v int16) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosEffectMask(v)
+	})
+}
+
+// AddGroupQosEffectMask adds v to the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertOne) AddGroupQosEffectMask(v int16) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddGroupQosEffectMask(v)
+	})
+}
+
+// UpdateGroupQosEffectMask sets the "group_qos_effect_mask" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateGroupQosEffectMask() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosEffectMask()
+	})
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertOne) ClearGroupQosEffectMask() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosEffectMask()
 	})
 }
 
@@ -4225,6 +4427,83 @@ func (u *UsageLogUpsertBulk) SetCacheTTLOverridden(v bool) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateCacheTTLOverridden() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateCacheTTLOverridden()
+	})
+}
+
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (u *UsageLogUpsertBulk) SetGroupQosTier(v int16) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosTier(v)
+	})
+}
+
+// AddGroupQosTier adds v to the "group_qos_tier" field.
+func (u *UsageLogUpsertBulk) AddGroupQosTier(v int16) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddGroupQosTier(v)
+	})
+}
+
+// UpdateGroupQosTier sets the "group_qos_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateGroupQosTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosTier()
+	})
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (u *UsageLogUpsertBulk) ClearGroupQosTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosTier()
+	})
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (u *UsageLogUpsertBulk) SetGroupQosWindow(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosWindow(v)
+	})
+}
+
+// UpdateGroupQosWindow sets the "group_qos_window" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateGroupQosWindow() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosWindow()
+	})
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (u *UsageLogUpsertBulk) ClearGroupQosWindow() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosWindow()
+	})
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertBulk) SetGroupQosEffectMask(v int16) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetGroupQosEffectMask(v)
+	})
+}
+
+// AddGroupQosEffectMask adds v to the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertBulk) AddGroupQosEffectMask(v int16) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddGroupQosEffectMask(v)
+	})
+}
+
+// UpdateGroupQosEffectMask sets the "group_qos_effect_mask" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateGroupQosEffectMask() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateGroupQosEffectMask()
+	})
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (u *UsageLogUpsertBulk) ClearGroupQosEffectMask() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearGroupQosEffectMask()
 	})
 }
 

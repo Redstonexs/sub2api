@@ -280,6 +280,21 @@ func CacheTTLOverridden(v bool) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldCacheTTLOverridden, v))
 }
 
+// GroupQosTier applies equality check predicate on the "group_qos_tier" field. It's identical to GroupQosTierEQ.
+func GroupQosTier(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosTier, v))
+}
+
+// GroupQosWindow applies equality check predicate on the "group_qos_window" field. It's identical to GroupQosWindowEQ.
+func GroupQosWindow(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosWindow, v))
+}
+
+// GroupQosEffectMask applies equality check predicate on the "group_qos_effect_mask" field. It's identical to GroupQosEffectMaskEQ.
+func GroupQosEffectMask(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosEffectMask, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldCreatedAt, v))
@@ -2458,6 +2473,181 @@ func CacheTTLOverriddenEQ(v bool) predicate.UsageLog {
 // CacheTTLOverriddenNEQ applies the NEQ predicate on the "cache_ttl_overridden" field.
 func CacheTTLOverriddenNEQ(v bool) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNEQ(FieldCacheTTLOverridden, v))
+}
+
+// GroupQosTierEQ applies the EQ predicate on the "group_qos_tier" field.
+func GroupQosTierEQ(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosTier, v))
+}
+
+// GroupQosTierNEQ applies the NEQ predicate on the "group_qos_tier" field.
+func GroupQosTierNEQ(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldGroupQosTier, v))
+}
+
+// GroupQosTierIn applies the In predicate on the "group_qos_tier" field.
+func GroupQosTierIn(vs ...int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldGroupQosTier, vs...))
+}
+
+// GroupQosTierNotIn applies the NotIn predicate on the "group_qos_tier" field.
+func GroupQosTierNotIn(vs ...int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldGroupQosTier, vs...))
+}
+
+// GroupQosTierGT applies the GT predicate on the "group_qos_tier" field.
+func GroupQosTierGT(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldGroupQosTier, v))
+}
+
+// GroupQosTierGTE applies the GTE predicate on the "group_qos_tier" field.
+func GroupQosTierGTE(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldGroupQosTier, v))
+}
+
+// GroupQosTierLT applies the LT predicate on the "group_qos_tier" field.
+func GroupQosTierLT(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldGroupQosTier, v))
+}
+
+// GroupQosTierLTE applies the LTE predicate on the "group_qos_tier" field.
+func GroupQosTierLTE(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldGroupQosTier, v))
+}
+
+// GroupQosTierIsNil applies the IsNil predicate on the "group_qos_tier" field.
+func GroupQosTierIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldGroupQosTier))
+}
+
+// GroupQosTierNotNil applies the NotNil predicate on the "group_qos_tier" field.
+func GroupQosTierNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldGroupQosTier))
+}
+
+// GroupQosWindowEQ applies the EQ predicate on the "group_qos_window" field.
+func GroupQosWindowEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowNEQ applies the NEQ predicate on the "group_qos_window" field.
+func GroupQosWindowNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowIn applies the In predicate on the "group_qos_window" field.
+func GroupQosWindowIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldGroupQosWindow, vs...))
+}
+
+// GroupQosWindowNotIn applies the NotIn predicate on the "group_qos_window" field.
+func GroupQosWindowNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldGroupQosWindow, vs...))
+}
+
+// GroupQosWindowGT applies the GT predicate on the "group_qos_window" field.
+func GroupQosWindowGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowGTE applies the GTE predicate on the "group_qos_window" field.
+func GroupQosWindowGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowLT applies the LT predicate on the "group_qos_window" field.
+func GroupQosWindowLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowLTE applies the LTE predicate on the "group_qos_window" field.
+func GroupQosWindowLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowContains applies the Contains predicate on the "group_qos_window" field.
+func GroupQosWindowContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowHasPrefix applies the HasPrefix predicate on the "group_qos_window" field.
+func GroupQosWindowHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowHasSuffix applies the HasSuffix predicate on the "group_qos_window" field.
+func GroupQosWindowHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowIsNil applies the IsNil predicate on the "group_qos_window" field.
+func GroupQosWindowIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldGroupQosWindow))
+}
+
+// GroupQosWindowNotNil applies the NotNil predicate on the "group_qos_window" field.
+func GroupQosWindowNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldGroupQosWindow))
+}
+
+// GroupQosWindowEqualFold applies the EqualFold predicate on the "group_qos_window" field.
+func GroupQosWindowEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldGroupQosWindow, v))
+}
+
+// GroupQosWindowContainsFold applies the ContainsFold predicate on the "group_qos_window" field.
+func GroupQosWindowContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldGroupQosWindow, v))
+}
+
+// GroupQosEffectMaskEQ applies the EQ predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskEQ(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskNEQ applies the NEQ predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskNEQ(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskIn applies the In predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskIn(vs ...int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldGroupQosEffectMask, vs...))
+}
+
+// GroupQosEffectMaskNotIn applies the NotIn predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskNotIn(vs ...int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldGroupQosEffectMask, vs...))
+}
+
+// GroupQosEffectMaskGT applies the GT predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskGT(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskGTE applies the GTE predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskGTE(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskLT applies the LT predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskLT(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskLTE applies the LTE predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskLTE(v int16) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldGroupQosEffectMask, v))
+}
+
+// GroupQosEffectMaskIsNil applies the IsNil predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldGroupQosEffectMask))
+}
+
+// GroupQosEffectMaskNotNil applies the NotNil predicate on the "group_qos_effect_mask" field.
+func GroupQosEffectMaskNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldGroupQosEffectMask))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

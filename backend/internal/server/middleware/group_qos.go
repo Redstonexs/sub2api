@@ -32,6 +32,16 @@ func bindGroupQoSDecision(c *gin.Context, qosService *service.GroupQoSService, a
 		return
 	}
 	c.Request = c.Request.WithContext(service.WithGroupQoSDecision(c.Request.Context(), decision))
+	// Freeze the admission-time QoS record snapshot for this request. It is
+	// request-scoped and concurrency-safe; usage billing runs on the worker
+	// pool's background context, so the handler must read this snapshot and
+	// carry it into the RecordUsage input before the task is submitted.
+	c.Request = c.Request.WithContext(service.BindGroupQoSRecordSnapshot(
+		c.Request.Context(),
+		service.GroupQoSRecordSnapshotFromDecision(decision),
+		apiKey.Group.MaxReasoningEffort,
+		apiKey.Group.ReasoningEffortMappings,
+	))
 	c.Set(string(ContextKeyGroupQoSDecision), decision)
 
 	// Degradation is otherwise invisible: the client just sees quieter, cheaper

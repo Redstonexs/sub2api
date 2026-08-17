@@ -35,7 +35,39 @@ func clientRequestedModel(c *gin.Context, fallback string) string {
 }
 
 func clientRequestedUsageFields(c *gin.Context, mapping service.ChannelMappingResult, fallbackModel, upstreamModel string) service.ChannelUsageFields {
-	return mapping.ToUsageFields(clientRequestedModel(c, fallbackModel), upstreamModel)
+	return withGroupQoSRecord(c, mapping.ToUsageFields(clientRequestedModel(c, fallbackModel), upstreamModel))
+}
+
+// withGroupQoSRecord attaches the request's admission-time group QoS snapshot to
+// the usage fields. Billing runs asynchronously on the worker pool's background
+// context (which cannot see the request context), so the frozen snapshot must be
+// carried inside the input.
+//
+// c is only safe to dereference on the request goroutine. Asynchronous callbacks
+// (e.g. the WS AfterTurn hook running on the passthrough relay goroutine) must
+// use withGroupQoSRecordFromContext with a request-scoped context captured
+// before the relay started.
+func withGroupQoSRecord(c *gin.Context, fields service.ChannelUsageFields) service.ChannelUsageFields {
+	if c == nil || c.Request == nil {
+		return fields
+	}
+	return withGroupQoSRecordFromContext(c.Request.Context(), fields)
+}
+
+// withGroupQoSRecordFromContext attaches the request's admission-time group QoS
+// snapshot to the usage fields from an already-captured, request-scoped context.
+// The WS AfterTurn callback runs on the passthrough relay goroutine, which can
+// outlive the Gin handler goroutine: once the handler returns, the gin pool
+// recycles the *gin.Context and repoints c.Request to an unrelated request, so
+// the callback must never read the original *gin.Context or c.Request. The
+// snapshot is read from the same accumulator the relay marks per-turn effects
+// into, preserving per-turn isolation.
+func withGroupQoSRecordFromContext(ctx context.Context, fields service.ChannelUsageFields) service.ChannelUsageFields {
+	if ctx == nil {
+		return fields
+	}
+	fields.GroupQoSRecord = service.GroupQoSRecordSnapshotFromContext(ctx)
+	return fields
 }
 
 func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.ContentModerationDecision {

@@ -181,6 +181,25 @@ func (UsageLog) Fields() []ent.Field {
 		field.Bool("cache_ttl_overridden").
 			Default(false),
 
+		// Group QoS 降级快照（准入时刻冻结）：
+		//   三列总是同时写入，NULL 一起为 NULL —— NULL 表示无生效档位
+		//   （未降级 / fail-open / 历史行），不得回填默认值。
+		//   group_qos_effect_mask 是位域：model=1, reasoning=2, rpm=4；
+		//   0 表示档位生效但未对本请求产生实质影响。
+		field.Int16("group_qos_tier").
+			Optional().
+			Nillable().
+			Comment("生效的 QoS 档位序号（1-based，与 X-Sub2API-QoS-Tier 一致）"),
+		field.String("group_qos_window").
+			MaxLen(16).
+			Optional().
+			Nillable().
+			Comment("触发档位的滚动窗口：daily/weekly/monthly"),
+		field.Int16("group_qos_effect_mask").
+			Optional().
+			Nillable().
+			Comment("QoS 实际效果位域：model=1, reasoning=2, rpm=4；0=未产生实质影响"),
+
 		// 时间戳（只有 created_at，日志不可修改）
 		field.Time("created_at").
 			Default(time.Now).

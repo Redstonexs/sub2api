@@ -81,6 +81,9 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	}
 	if account.Platform == PlatformOpenAI {
 		if policyBody, changed := ApplyOpenAIReasoningEffortPolicyFromContext(ctx, chatBody); changed {
+			// Mark with the pre-policy body: the effect test compares the QoS
+			// outcome against the standing group ceiling + mappings alone.
+			MarkGroupQoSReasoningEffect(ctx, chatBody)
 			chatBody = policyBody
 			if effectiveEffort := strings.TrimSpace(gjson.GetBytes(chatBody, "reasoning_effort").String()); effectiveEffort != "" {
 				reasoningEffort = &effectiveEffort

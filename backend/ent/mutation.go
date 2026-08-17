@@ -45096,6 +45096,11 @@ type UsageLogMutation struct {
 	video_duration_seconds       *int
 	addvideo_duration_seconds    *int
 	cache_ttl_overridden         *bool
+	group_qos_tier               *int16
+	addgroup_qos_tier            *int16
+	group_qos_window             *string
+	group_qos_effect_mask        *int16
+	addgroup_qos_effect_mask     *int16
 	created_at                   *time.Time
 	clearedFields                map[string]struct{}
 	user                         *int64
@@ -47578,6 +47583,195 @@ func (m *UsageLogMutation) ResetCacheTTLOverridden() {
 	m.cache_ttl_overridden = nil
 }
 
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (m *UsageLogMutation) SetGroupQosTier(i int16) {
+	m.group_qos_tier = &i
+	m.addgroup_qos_tier = nil
+}
+
+// GroupQosTier returns the value of the "group_qos_tier" field in the mutation.
+func (m *UsageLogMutation) GroupQosTier() (r int16, exists bool) {
+	v := m.group_qos_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupQosTier returns the old "group_qos_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldGroupQosTier(ctx context.Context) (v *int16, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupQosTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupQosTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupQosTier: %w", err)
+	}
+	return oldValue.GroupQosTier, nil
+}
+
+// AddGroupQosTier adds i to the "group_qos_tier" field.
+func (m *UsageLogMutation) AddGroupQosTier(i int16) {
+	if m.addgroup_qos_tier != nil {
+		*m.addgroup_qos_tier += i
+	} else {
+		m.addgroup_qos_tier = &i
+	}
+}
+
+// AddedGroupQosTier returns the value that was added to the "group_qos_tier" field in this mutation.
+func (m *UsageLogMutation) AddedGroupQosTier() (r int16, exists bool) {
+	v := m.addgroup_qos_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (m *UsageLogMutation) ClearGroupQosTier() {
+	m.group_qos_tier = nil
+	m.addgroup_qos_tier = nil
+	m.clearedFields[usagelog.FieldGroupQosTier] = struct{}{}
+}
+
+// GroupQosTierCleared returns if the "group_qos_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) GroupQosTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldGroupQosTier]
+	return ok
+}
+
+// ResetGroupQosTier resets all changes to the "group_qos_tier" field.
+func (m *UsageLogMutation) ResetGroupQosTier() {
+	m.group_qos_tier = nil
+	m.addgroup_qos_tier = nil
+	delete(m.clearedFields, usagelog.FieldGroupQosTier)
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (m *UsageLogMutation) SetGroupQosWindow(s string) {
+	m.group_qos_window = &s
+}
+
+// GroupQosWindow returns the value of the "group_qos_window" field in the mutation.
+func (m *UsageLogMutation) GroupQosWindow() (r string, exists bool) {
+	v := m.group_qos_window
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupQosWindow returns the old "group_qos_window" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldGroupQosWindow(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupQosWindow is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupQosWindow requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupQosWindow: %w", err)
+	}
+	return oldValue.GroupQosWindow, nil
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (m *UsageLogMutation) ClearGroupQosWindow() {
+	m.group_qos_window = nil
+	m.clearedFields[usagelog.FieldGroupQosWindow] = struct{}{}
+}
+
+// GroupQosWindowCleared returns if the "group_qos_window" field was cleared in this mutation.
+func (m *UsageLogMutation) GroupQosWindowCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldGroupQosWindow]
+	return ok
+}
+
+// ResetGroupQosWindow resets all changes to the "group_qos_window" field.
+func (m *UsageLogMutation) ResetGroupQosWindow() {
+	m.group_qos_window = nil
+	delete(m.clearedFields, usagelog.FieldGroupQosWindow)
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (m *UsageLogMutation) SetGroupQosEffectMask(i int16) {
+	m.group_qos_effect_mask = &i
+	m.addgroup_qos_effect_mask = nil
+}
+
+// GroupQosEffectMask returns the value of the "group_qos_effect_mask" field in the mutation.
+func (m *UsageLogMutation) GroupQosEffectMask() (r int16, exists bool) {
+	v := m.group_qos_effect_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupQosEffectMask returns the old "group_qos_effect_mask" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldGroupQosEffectMask(ctx context.Context) (v *int16, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupQosEffectMask is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupQosEffectMask requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupQosEffectMask: %w", err)
+	}
+	return oldValue.GroupQosEffectMask, nil
+}
+
+// AddGroupQosEffectMask adds i to the "group_qos_effect_mask" field.
+func (m *UsageLogMutation) AddGroupQosEffectMask(i int16) {
+	if m.addgroup_qos_effect_mask != nil {
+		*m.addgroup_qos_effect_mask += i
+	} else {
+		m.addgroup_qos_effect_mask = &i
+	}
+}
+
+// AddedGroupQosEffectMask returns the value that was added to the "group_qos_effect_mask" field in this mutation.
+func (m *UsageLogMutation) AddedGroupQosEffectMask() (r int16, exists bool) {
+	v := m.addgroup_qos_effect_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (m *UsageLogMutation) ClearGroupQosEffectMask() {
+	m.group_qos_effect_mask = nil
+	m.addgroup_qos_effect_mask = nil
+	m.clearedFields[usagelog.FieldGroupQosEffectMask] = struct{}{}
+}
+
+// GroupQosEffectMaskCleared returns if the "group_qos_effect_mask" field was cleared in this mutation.
+func (m *UsageLogMutation) GroupQosEffectMaskCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldGroupQosEffectMask]
+	return ok
+}
+
+// ResetGroupQosEffectMask resets all changes to the "group_qos_effect_mask" field.
+func (m *UsageLogMutation) ResetGroupQosEffectMask() {
+	m.group_qos_effect_mask = nil
+	m.addgroup_qos_effect_mask = nil
+	delete(m.clearedFields, usagelog.FieldGroupQosEffectMask)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *UsageLogMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -47783,7 +47977,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 47)
+	fields := make([]string, 0, 50)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -47922,6 +48116,15 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.cache_ttl_overridden != nil {
 		fields = append(fields, usagelog.FieldCacheTTLOverridden)
 	}
+	if m.group_qos_tier != nil {
+		fields = append(fields, usagelog.FieldGroupQosTier)
+	}
+	if m.group_qos_window != nil {
+		fields = append(fields, usagelog.FieldGroupQosWindow)
+	}
+	if m.group_qos_effect_mask != nil {
+		fields = append(fields, usagelog.FieldGroupQosEffectMask)
+	}
 	if m.created_at != nil {
 		fields = append(fields, usagelog.FieldCreatedAt)
 	}
@@ -48025,6 +48228,12 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.VideoDurationSeconds()
 	case usagelog.FieldCacheTTLOverridden:
 		return m.CacheTTLOverridden()
+	case usagelog.FieldGroupQosTier:
+		return m.GroupQosTier()
+	case usagelog.FieldGroupQosWindow:
+		return m.GroupQosWindow()
+	case usagelog.FieldGroupQosEffectMask:
+		return m.GroupQosEffectMask()
 	case usagelog.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -48128,6 +48337,12 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldVideoDurationSeconds(ctx)
 	case usagelog.FieldCacheTTLOverridden:
 		return m.OldCacheTTLOverridden(ctx)
+	case usagelog.FieldGroupQosTier:
+		return m.OldGroupQosTier(ctx)
+	case usagelog.FieldGroupQosWindow:
+		return m.OldGroupQosWindow(ctx)
+	case usagelog.FieldGroupQosEffectMask:
+		return m.OldGroupQosEffectMask(ctx)
 	case usagelog.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -48461,6 +48676,27 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCacheTTLOverridden(v)
 		return nil
+	case usagelog.FieldGroupQosTier:
+		v, ok := value.(int16)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupQosTier(v)
+		return nil
+	case usagelog.FieldGroupQosWindow:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupQosWindow(v)
+		return nil
+	case usagelog.FieldGroupQosEffectMask:
+		v, ok := value.(int16)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupQosEffectMask(v)
+		return nil
 	case usagelog.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -48539,6 +48775,12 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addvideo_duration_seconds != nil {
 		fields = append(fields, usagelog.FieldVideoDurationSeconds)
 	}
+	if m.addgroup_qos_tier != nil {
+		fields = append(fields, usagelog.FieldGroupQosTier)
+	}
+	if m.addgroup_qos_effect_mask != nil {
+		fields = append(fields, usagelog.FieldGroupQosEffectMask)
+	}
 	return fields
 }
 
@@ -48589,6 +48831,10 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedVideoCount()
 	case usagelog.FieldVideoDurationSeconds:
 		return m.AddedVideoDurationSeconds()
+	case usagelog.FieldGroupQosTier:
+		return m.AddedGroupQosTier()
+	case usagelog.FieldGroupQosEffectMask:
+		return m.AddedGroupQosEffectMask()
 	}
 	return nil, false
 }
@@ -48745,6 +48991,20 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddVideoDurationSeconds(v)
 		return nil
+	case usagelog.FieldGroupQosTier:
+		v, ok := value.(int16)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupQosTier(v)
+		return nil
+	case usagelog.FieldGroupQosEffectMask:
+		v, ok := value.(int16)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupQosEffectMask(v)
+		return nil
 	}
 	return fmt.Errorf("unknown UsageLog numeric field %s", name)
 }
@@ -48818,6 +49078,15 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldVideoDurationSeconds) {
 		fields = append(fields, usagelog.FieldVideoDurationSeconds)
+	}
+	if m.FieldCleared(usagelog.FieldGroupQosTier) {
+		fields = append(fields, usagelog.FieldGroupQosTier)
+	}
+	if m.FieldCleared(usagelog.FieldGroupQosWindow) {
+		fields = append(fields, usagelog.FieldGroupQosWindow)
+	}
+	if m.FieldCleared(usagelog.FieldGroupQosEffectMask) {
+		fields = append(fields, usagelog.FieldGroupQosEffectMask)
 	}
 	return fields
 }
@@ -48898,6 +49167,15 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldVideoDurationSeconds:
 		m.ClearVideoDurationSeconds()
+		return nil
+	case usagelog.FieldGroupQosTier:
+		m.ClearGroupQosTier()
+		return nil
+	case usagelog.FieldGroupQosWindow:
+		m.ClearGroupQosWindow()
+		return nil
+	case usagelog.FieldGroupQosEffectMask:
+		m.ClearGroupQosEffectMask()
 		return nil
 	}
 	return fmt.Errorf("unknown UsageLog nullable field %s", name)
@@ -49044,6 +49322,15 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldCacheTTLOverridden:
 		m.ResetCacheTTLOverridden()
+		return nil
+	case usagelog.FieldGroupQosTier:
+		m.ResetGroupQosTier()
+		return nil
+	case usagelog.FieldGroupQosWindow:
+		m.ResetGroupQosWindow()
+		return nil
+	case usagelog.FieldGroupQosEffectMask:
+		m.ResetGroupQosEffectMask()
 		return nil
 	case usagelog.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -137,4 +138,106 @@ func TestClientRequestedModelUsesCompositePublicModel(t *testing.T) {
 	require.Equal(t, "public-alias", fields.OriginalModel)
 	require.Equal(t, "public-alias", fields.ChannelMappedModel)
 	require.Equal(t, "public-alias\u2192gpt-5", fields.ModelMappingChain)
+}
+
+// clientRequestedUsageFields freezes the admission-time QoS snapshot into the
+// usage fields synchronously. The value survives the request lifecycle, so
+// async usage workers (web search, HTTP, WS turns) never need the gin context.
+func TestClientRequestedUsageFieldsFreezesGroupQoSRecord(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/web_search", nil)
+	reqCtx := service.BindGroupQoSRecordSnapshot(
+		c.Request.Context(),
+		&service.GroupQoSRecordSnapshot{Tier: 2, Window: "weekly"},
+		"high", nil,
+	)
+	reqCtx = service.WithGroupQoSDecision(reqCtx, &service.GroupQoSDecision{TierIndex: 1, MaxReasoningEffort: "low"})
+	service.MarkGroupQoSRecordEffect(reqCtx, service.GroupQoSEffectRPM)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	// No mapping on the web-search path: the requested model is used as-is.
+	fields := clientRequestedUsageFields(c, service.ChannelMappingResult{}, "grok-web-search", "grok-web-search")
+	require.NotNil(t, fields.GroupQoSRecord, "admission snapshot must be attached")
+	require.Equal(t, 2, fields.GroupQoSRecord.Tier)
+	require.Equal(t, "weekly", fields.GroupQoSRecord.Window)
+	require.Equal(t, service.GroupQoSEffectRPM, fields.GroupQoSRecord.Effects)
+
+	// The snapshot is frozen: later request-scoped marks must not leak into the
+	// already-captured value (this is what protects the async worker).
+	service.MarkGroupQoSRecordEffect(reqCtx, service.GroupQoSEffectReasoning)
+	require.Equal(t, service.GroupQoSEffectRPM, fields.GroupQoSRecord.Effects,
+		"the frozen usage fields must not observe later context mutations")
+
+	// No accumulator bound -> nil snapshot (undegraded / fail-open stays NULL).
+	plainCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	plainCtx.Request = httptest.NewRequest("POST", "/v1/web_search", nil)
+	plainFields := clientRequestedUsageFields(plainCtx, service.ChannelMappingResult{}, "grok-web-search", "grok-web-search")
+	require.Nil(t, plainFields.GroupQoSRecord)
+}
+
+// withGroupQoSRecordFromContext feeds the WS AfterTurn callback, which runs on
+// the passthrough relay goroutine and can outlive the Gin handler goroutine.
+//
+// Regression: once the handler returns, the gin pool recycles the *gin.Context
+// and repoints c.Request to an unrelated request. The QoS snapshot must be read
+// from the request-scoped context captured before the relay started — never
+// from the original *gin.Context / c.Request.
+func TestWithGroupQoSRecordFromContextAfterGinRequestRecycle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+
+	// Admission-time QoS binding mirrors the auth middleware.
+	reqCtx := service.BindGroupQoSRecordSnapshot(
+		c.Request.Context(),
+		&service.GroupQoSRecordSnapshot{Tier: 3, Window: "monthly"},
+		"high", nil,
+	)
+	reqCtx = service.WithGroupQoSDecision(reqCtx, &service.GroupQoSDecision{TierIndex: 2, MaxReasoningEffort: "low"})
+	service.MarkGroupQoSRecordEffect(reqCtx, service.GroupQoSEffectRPM)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	// The handler freezes the request-scoped context before starting the relay
+	// (openai_gateway_handler.go: wsRelayCtx := ctx at hooks construction).
+	wsRelayCtx := c.Request.Context()
+
+	// The request goroutine finishes while the relay is still alive: the gin
+	// pool repoints the recycled c.Request to an unrelated request that carries
+	// a *different* QoS tier. The buggy path (withGroupQoSRecord(c, ...)) would
+	// silently attach the recycled request's snapshot instead of the original.
+	recycledCtx := service.BindGroupQoSRecordSnapshot(
+		context.Background(),
+		&service.GroupQoSRecordSnapshot{Tier: 1, Window: "daily"},
+		"", nil,
+	)
+	service.MarkGroupQoSRecordEffect(recycledCtx, service.GroupQoSEffectReasoning)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(recycledCtx)
+
+	// AfterTurn (relay goroutine): freeze the snapshot from the captured context.
+	fields := withGroupQoSRecordFromContext(wsRelayCtx, service.ChannelMappingResult{
+		MappedModel:        "gpt-5",
+		BillingModelSource: service.BillingModelSourceRequested,
+	}.ToUsageFields("gpt-5", "gpt-5"))
+	require.NotNil(t, fields.GroupQoSRecord, "admission snapshot must be attached from the captured ctx")
+	require.Equal(t, 3, fields.GroupQoSRecord.Tier, "must come from the original request, not the recycled one")
+	require.Equal(t, "monthly", fields.GroupQoSRecord.Window)
+	require.Equal(t, service.GroupQoSEffectRPM, fields.GroupQoSRecord.Effects,
+		"effects marked on the recycled request must never be observed")
+
+	// Per-turn isolation: turn 2 starts clean — turn 1's effects do not leak,
+	// while tier/window keep the admission-time values.
+	service.BeginGroupQoSTurn(wsRelayCtx, 2)
+	turn2Fields := withGroupQoSRecordFromContext(wsRelayCtx, service.ChannelMappingResult{
+		MappedModel:        "gpt-5",
+		BillingModelSource: service.BillingModelSourceRequested,
+	}.ToUsageFields("gpt-5", "gpt-5"))
+	require.Equal(t, 3, turn2Fields.GroupQoSRecord.Tier, "admission tier/window retained")
+	require.Zero(t, turn2Fields.GroupQoSRecord.Effects, "no leakage from turn 1 into turn 2")
+
+	// The gin-based wrapper stays a no-op when the request is gone entirely.
+	recycled, _ := gin.CreateTestContext(httptest.NewRecorder())
+	recycled.Request = nil
+	noRequestFields := withGroupQoSRecord(recycled, service.ChannelUsageFields{OriginalModel: "gpt-5"})
+	require.Nil(t, noRequestFields.GroupQoSRecord, "nil request -> snapshot left untouched")
 }

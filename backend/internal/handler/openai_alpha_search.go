@@ -252,7 +252,10 @@ func (h *OpenAIGatewayHandler) recordAlphaSearchUsage(
 	inboundEndpoint := GetInboundEndpoint(c)
 	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 	quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+	usagePricingAt := service.OpenAIPricingAtFromContext(c.Request.Context())
 
+	// QoS 快照（含冻结的 GroupQoSRecord）必须在提交前同步拍成值。
+	channelUsageFields := withGroupQoSRecord(c, channelMapping.ToUsageFields(requestedModel, result.UpstreamModel))
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
@@ -268,8 +271,8 @@ func (h *OpenAIGatewayHandler) recordAlphaSearchUsage(
 			APIKeyService:      h.apiKeyService,
 			QuotaPlatform:      quotaPlatform,
 			SessionID:          sessionID,
-			ChannelUsageFields: channelMapping.ToUsageFields(requestedModel, result.UpstreamModel),
-			PricingAt:          service.OpenAIPricingAtFromContext(c.Request.Context()),
+			ChannelUsageFields: channelUsageFields,
+			PricingAt:          usagePricingAt,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.alpha_search"),

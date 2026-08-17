@@ -128,6 +128,37 @@
           </span>
         </template>
 
+        <template #cell-group_qos="{ row }">
+          <div
+            role="img"
+            class="inline-flex items-center"
+            :title="getQoSTitle(row)"
+            :aria-label="getQoSTitle(row)"
+          >
+            <span
+              v-if="getUsageQoSPresentation(row).state === 'affected'"
+              data-testid="qos-affected-marker"
+              class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold leading-tight bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40"
+            >
+              {{ t('usage.qosAffected') }}
+            </span>
+            <span
+              v-else-if="getUsageQoSPresentation(row).state === 'active'"
+              data-testid="qos-active-marker"
+              class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30"
+            >
+              {{ t('usage.qosActive') }}
+            </span>
+            <span
+              v-else
+              data-testid="qos-unknown-marker"
+              class="text-sm text-gray-400 dark:text-gray-500"
+            >
+              —
+            </span>
+          </div>
+        </template>
+
         <template #cell-tokens="{ row }">
           <!-- 图片生成请求（仅按次计费时显示图片格式） -->
           <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
@@ -486,6 +517,7 @@ import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
+import { getUsageQoSPresentation } from '@/utils/usageQoS'
 import {
   LATENCY_BAR_CLASSES,
   LATENCY_BAR_FROM_CLASSES,
@@ -637,6 +669,21 @@ const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   if (requestType === 'stream') return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
   if (requestType === 'sync') return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
   return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+}
+
+const getQoSTitle = (row: AdminUsageLog): string => {
+  const qos = getUsageQoSPresentation(row)
+  if (qos.state === 'unknown') return t('usage.qosUnknown')
+
+  const details = [
+    qos.tier != null ? t('usage.qosTier', { tier: qos.tier }) : null,
+    qos.window ? t(`usage.qosWindow.${qos.window}`) : null,
+    qos.effects.length > 0
+      ? t('usage.qosEffects', { effects: qos.effects.map((effect) => t(`usage.qosEffect.${effect}`)).join(', ') })
+      : null,
+  ].filter(Boolean).join(' · ')
+
+  return `${qos.state === 'affected' ? t('usage.qosAffected') : t('usage.qosActive')}${details ? `: ${details}` : ''}`
 }
 
 

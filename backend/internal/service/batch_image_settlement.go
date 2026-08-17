@@ -279,6 +279,9 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 		ImageSize:             &imageSize,
 		SessionID:             job.SessionID,
 		CreatedAt:             createdAt,
+		// 准入时刻冻结的快照原样随行持久化（batch image 无模型改写/推理改写，
+		// QoSApplied 恒 false，效果位仅可能来自准入时的 RPM 压制）。
+		GroupQoSRecord: job.GroupQoSRecord,
 	}
 	writeUsageLogBestEffort(ctx, s.UsageLogRepo, usageLog, "service.batch_image_settlement")
 }

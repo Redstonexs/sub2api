@@ -142,6 +142,11 @@ type UsageLog struct {
 	GroupID        *int64
 	SubscriptionID *int64
 
+	// GroupQoSRecord 是准入时刻冻结的分组 QoS 降级快照（档位/窗口/实际效果位）。
+	// nil = 无生效档位（未降级 / fail-open / 历史行），持久化列整体为 NULL；
+	// Effects 为 0 = 档位生效但未对本请求产生实质影响。
+	GroupQoSRecord *GroupQoSRecordSnapshot
+
 	InputTokens         int
 	OutputTokens        int
 	CacheCreationTokens int

@@ -1673,6 +1673,8 @@ export type RedeemCodeType = 'balance' | 'concurrency' | 'subscription' | 'invit
 export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
+export type UsageQoSWindow = 'daily' | 'weekly' | 'monthly'
+export type UsageQoSEffect = 'model' | 'reasoning' | 'rpm'
 
 export interface UsageLog {
   id: number
@@ -1688,6 +1690,10 @@ export interface UsageLog {
 
   group_id: number | null
   subscription_id: number | null
+  group_qos_tier: number | null
+  group_qos_window: UsageQoSWindow | null
+  group_qos_affected: boolean | null
+  group_qos_effects: UsageQoSEffect[] | null
 
   input_tokens: number
   output_tokens: number

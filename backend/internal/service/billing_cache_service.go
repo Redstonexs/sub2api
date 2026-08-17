@@ -830,9 +830,15 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 		}
 
 		// QoS 档位的 RPM 压制只能收紧、不能放宽：降级中的用户不应因为分组
-		// 或专属 override 给得宽就逃掉压制。
+		// 或专属 override 给得宽就逃掉压制。收紧后的上限是否真的构成效果，
+		// 在增量成功且请求被放行后再判定（见下），避免为被拒请求或
+		// fail-open 增量失败留下假的 rpm 效果位。
+		preQoSLimit := groupLayerLimit
+		var qosRPMLimit *int
 		if decision := GroupQoSDecisionFromContext(ctx); decision != nil && decision.RPMLimit != nil {
-			groupLayerLimit = tightenRPMLimit(groupLayerLimit, *decision.RPMLimit)
+			qosValue := *decision.RPMLimit
+			qosRPMLimit = &qosValue
+			groupLayerLimit = tightenRPMLimit(groupLayerLimit, qosValue)
 		}
 
 		if groupLayerLimit > 0 {
@@ -843,9 +849,14 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 					"Warning: rpm increment failed for user=%d group=%d: %v",
 					user.ID, group.ID, incErr,
 				)
-				// fail-open
+				// fail-open：增量失败即请求未被该限制实际约束，不记 rpm 效果。
 			} else if count > groupLayerLimit {
 				return ErrGroupRPMExceeded
+			} else if GroupQoSRPMMaterial(qosRPMLimit, preQoSLimit, user.RPMLimit) {
+				// 已放行的请求：QoS 的 RPM 上限为正、严格严于降级前的分组层
+				// 上限，且未被更严/相等的用户级全局上限遮蔽——QoS 上限才是
+				// 本请求的实际约束者。
+				MarkGroupQoSRecordEffect(ctx, GroupQoSEffectRPM)
 			}
 		}
 	}

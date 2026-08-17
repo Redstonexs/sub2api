@@ -692,10 +692,10 @@ func recordGrokMediaUsage(
 	// OriginalModel 记录客户端请求的模型：composite 分组下 body 已被改写为具体模型，
 	// 公开别名需从 context 取回，与其他端点的用量归因口径一致（计费不受影响：
 	// BillingModelSource 为空不会触发来源覆盖）。
-	channelUsageFields := service.ChannelUsageFields{
+	channelUsageFields := withGroupQoSRecord(c, service.ChannelUsageFields{
 		OriginalModel:      clientRequestedModel(c, requestModel),
 		ChannelMappedModel: requestModel,
-	}
+	})
 	// Async video: force durable task request id and release claim if billing fails.
 	videoTaskID := ""
 	if result != nil && result.VideoCount > 0 {

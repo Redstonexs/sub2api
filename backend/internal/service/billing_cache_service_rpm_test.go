@@ -251,3 +251,104 @@ func TestBillingCacheService_CheckRPM_NilUserIsNoop(t *testing.T) {
 	require.EqualValues(t, 0, atomic.LoadInt32(&cache.userCalls))
 	require.EqualValues(t, 0, atomic.LoadInt32(&repo.calls))
 }
+
+// qosRPMCheckContext 绑定一个 QoS 决策（RPMLimit 收紧）与请求级用量快照，
+// 返回 ctx 与 svc，供 checkRPM 的 QoS 效果断言使用。
+func qosRPMCheckContext(t *testing.T, cache UserRPMCache, groupRPMLimit int, qosRPMLimit, userRPMLimit int) (context.Context, *BillingCacheService) {
+	t.Helper()
+	svc := newBillingServiceForRPM(t, cache, &rpmOverrideRepoStub{})
+	qos := qosRPMLimit
+	ctx := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx = WithGroupQoSDecision(ctx, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos})
+	ctx = context.WithValue(ctx, struct{}{}, groupRPMLimit) // placeholder unused; kept for clarity
+	_ = ctx
+	return ctx, svc
+}
+
+// The QoS RPM effect is persisted only for a served request where the QoS
+// limit strictly tightens the effective limit and the Redis increment succeeds;
+// a stricter/equal user cap, a rejected request, or a fail-open increment
+// never marks.
+func TestBillingCacheService_CheckRPM_QoSTighteningMarksEffectOnlyWhenServedAndMaterial(t *testing.T) {
+	// 场景 1：QoS 上限 20 严格严于分组 50、无用户级上限、增量成功且未超限
+	// -> 已放行请求，效果标记。
+	qos := 20
+	cache := &userRPMCacheStub{userGroupCounts: []int{1}}
+	svc := newBillingServiceForRPM(t, cache, &rpmOverrideRepoStub{})
+	ctx := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx = WithGroupQoSDecision(ctx, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos})
+	user := &User{ID: 1, RPMLimit: 0}
+	group := &Group{ID: 10, RPMLimit: 50}
+
+	require.NoError(t, svc.checkRPM(ctx, user, group))
+	require.Equal(t, GroupQoSEffectRPM, GroupQoSRecordSnapshotFromContext(ctx).Effects,
+		"served request with material QoS tightening is marked")
+
+	// 场景 2：用户级全局上限 10 比 QoS 上限 20 更严 -> QoS 上限不是约束者。
+	qos2 := 20
+	cache2 := &userRPMCacheStub{userGroupCounts: []int{1}}
+	svc2 := newBillingServiceForRPM(t, cache2, &rpmOverrideRepoStub{})
+	ctx2 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx2 = WithGroupQoSDecision(ctx2, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos2})
+	user2 := &User{ID: 1, RPMLimit: 10}
+	require.NoError(t, svc2.checkRPM(ctx2, user2, &Group{ID: 10, RPMLimit: 50}))
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx2).Effects,
+		"stricter user cap shadows the QoS limit: no material effect")
+
+	// 场景 3：用户级全局上限等于 QoS 上限 -> 等值遮蔽。
+	qos3 := 20
+	cache3 := &userRPMCacheStub{userGroupCounts: []int{1}}
+	svc3 := newBillingServiceForRPM(t, cache3, &rpmOverrideRepoStub{})
+	ctx3 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx3 = WithGroupQoSDecision(ctx3, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos3})
+	require.NoError(t, svc3.checkRPM(ctx3, &User{ID: 1, RPMLimit: 20}, &Group{ID: 10, RPMLimit: 50}))
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx3).Effects)
+
+	// 场景 4：被拒请求（计数超过收紧后的上限）不落效果位。
+	qos4 := 2
+	cache4 := &userRPMCacheStub{userGroupCounts: []int{3}}
+	svc4 := newBillingServiceForRPM(t, cache4, &rpmOverrideRepoStub{})
+	ctx4 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx4 = WithGroupQoSDecision(ctx4, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos4})
+	require.ErrorIs(t, svc4.checkRPM(ctx4, &User{ID: 1, RPMLimit: 0}, &Group{ID: 10, RPMLimit: 50}), ErrGroupRPMExceeded)
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx4).Effects,
+		"rejected request must not persist an RPM effect")
+
+	// 场景 5：Redis 增量失败（fail-open）不落效果位。
+	qos5 := 20
+	cache5 := &userRPMCacheStub{userGroupErr: errors.New("redis unavailable")}
+	svc5 := newBillingServiceForRPM(t, cache5, &rpmOverrideRepoStub{})
+	ctx5 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx5 = WithGroupQoSDecision(ctx5, &GroupQoSDecision{TierIndex: 0, RPMLimit: &qos5})
+	require.NoError(t, svc5.checkRPM(ctx5, &User{ID: 1, RPMLimit: 0}, &Group{ID: 10, RPMLimit: 50}))
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx5).Effects,
+		"fail-open increment must not persist an RPM effect")
+
+	// 场景 6：QoS 上限 0（不限制）从不标记。
+	zeroQoS := 0
+	cache6 := &userRPMCacheStub{userGroupCounts: []int{1}}
+	svc6 := newBillingServiceForRPM(t, cache6, &rpmOverrideRepoStub{})
+	ctx6 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx6 = WithGroupQoSDecision(ctx6, &GroupQoSDecision{TierIndex: 0, RPMLimit: &zeroQoS})
+	require.NoError(t, svc6.checkRPM(ctx6, &User{ID: 1, RPMLimit: 0}, &Group{ID: 10, RPMLimit: 50}))
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx6).Effects,
+		"non-positive QoS rpm never counts")
+
+	// 场景 7：宽松的 QoS 上限（60 > 分组 50）从不标记。
+	looseQoS := 60
+	cache7 := &userRPMCacheStub{userGroupCounts: []int{1}}
+	svc7 := newBillingServiceForRPM(t, cache7, &rpmOverrideRepoStub{})
+	ctx7 := BindGroupQoSRecordSnapshot(context.Background(),
+		&GroupQoSRecordSnapshot{Tier: 1, Window: "daily"}, "", nil)
+	ctx7 = WithGroupQoSDecision(ctx7, &GroupQoSDecision{TierIndex: 0, RPMLimit: &looseQoS})
+	require.NoError(t, svc7.checkRPM(ctx7, &User{ID: 1, RPMLimit: 0}, &Group{ID: 10, RPMLimit: 50}))
+	require.Zero(t, GroupQoSRecordSnapshotFromContext(ctx7).Effects,
+		"looser cap never tightens")
+}

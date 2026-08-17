@@ -213,21 +213,24 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 			model = "gpt-live"
 		}
 		record := &LiveCallRecord{
-			CallID:                created.CallID,
-			CallHash:              hashLiveCallID(created.CallID),
-			AccountID:             account.ID,
-			APIKeyID:              identity.APIKeyID,
-			UserID:                identity.UserID,
-			GroupID:               liveGroupID(identity.GroupID),
-			SubscriptionID:        liveGroupID(identity.SubscriptionID),
-			LeaseID:               leaseID,
-			Model:                 model,
-			CreatedAt:             now,
-			ExpiresAt:             now.Add(s.liveMaxSessionDuration()),
-			Controller:            LiveControllerPending,
-			UserAgent:             identity.UserAgent,
-			IPAddress:             identity.IPAddress,
-			InboundEndpoint:       identity.InboundEndpoint,
+			CallID:          created.CallID,
+			CallHash:        hashLiveCallID(created.CallID),
+			AccountID:       account.ID,
+			APIKeyID:        identity.APIKeyID,
+			UserID:          identity.UserID,
+			GroupID:         liveGroupID(identity.GroupID),
+			SubscriptionID:  liveGroupID(identity.SubscriptionID),
+			LeaseID:         leaseID,
+			Model:           model,
+			CreatedAt:       now,
+			ExpiresAt:       now.Add(s.liveMaxSessionDuration()),
+			Controller:      LiveControllerPending,
+			UserAgent:       identity.UserAgent,
+			IPAddress:       identity.IPAddress,
+			InboundEndpoint: identity.InboundEndpoint,
+			// 冻结准入时刻的 QoS 快照：finalize 在请求生命周期之外运行，
+			// 只能从记录本身读取（见 LiveCallRecord.GroupQoSRecord 注释）。
+			GroupQoSRecord:        GroupQoSRecordSnapshotFromContext(ctx),
 			AttestationCiphertext: attestationCiphertext,
 		}
 		mappingTTL := s.liveMaxSessionDuration() + 5*time.Minute
@@ -850,5 +853,7 @@ func (s *OpenAIGatewayService) finalizeLiveCall(record *LiveCallRecord) {
 		InboundEndpoint:  &inboundEndpoint,
 		UpstreamEndpoint: &upstreamEndpoint,
 		CreatedAt:        record.CreatedAt,
+		// 准入时刻冻结的快照原样随行持久化（live 无 QoS 模型改写，QoSApplied 恒 false）。
+		GroupQoSRecord: record.GroupQoSRecord,
 	}, "service.openai_live")
 }

@@ -740,6 +740,7 @@ func (r *batchImageRepository) AppendBatchImageEvent(ctx context.Context, batchI
 }
 
 func createBatchImageJobWithSQL(ctx context.Context, sqlq batchImageSQLExecutor, params service.CreateBatchImageJobParams) (*service.BatchImageJob, error) {
+	groupQoSTier, groupQoSWindow, groupQoSEffectMask := groupQoSRecordInsertArgs(params.GroupQoSRecord)
 	return scanBatchImageJob(sqlq.QueryRowContext(ctx, `
 INSERT INTO batch_image_jobs (
     batch_id, user_id, api_key_id, account_id, provider, model, task_name, parent_batch_id, status,
@@ -750,7 +751,8 @@ INSERT INTO batch_image_jobs (
     batch_discount_multiplier, hold_multiplier, billable_unit_price, hold_unit_price,
     pricing_snapshot_version,
     currency, hold_id,
-    idempotency_key, request_hash, manifest_hash, retry_count, session_id, output_expires_at
+    idempotency_key, request_hash, manifest_hash, retry_count, session_id, output_expires_at,
+    group_qos_tier, group_qos_window, group_qos_effect_mask
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
@@ -760,7 +762,8 @@ INSERT INTO batch_image_jobs (
     $25, $26, $27, $28,
     $29,
     $30, $31,
-    $32, $33, $34, $35, $36, $37
+    $32, $33, $34, $35, $36, $37,
+    $38, $39, $40
 )
 RETURNING `+batchImageJobColumns,
 		params.BatchID, params.UserID, params.APIKeyID, params.AccountID, params.Provider, params.Model, params.TaskName, params.ParentBatchID, params.Status,
@@ -772,6 +775,7 @@ RETURNING `+batchImageJobColumns,
 		params.PricingSnapshotVersion,
 		params.Currency, params.HoldID,
 		params.IdempotencyKey, params.RequestHash, params.ManifestHash, params.RetryCount, params.SessionID, params.OutputExpiresAt,
+		groupQoSTier, groupQoSWindow, groupQoSEffectMask,
 	))
 }
 
@@ -827,6 +831,7 @@ currency, hold_id,
 idempotency_key, request_hash, manifest_hash,
 retry_count, version, session_id, output_expires_at, input_deleted_at, output_deleted_at, downloaded_at, user_deleted_at,
 last_error_code, last_error_message,
+group_qos_tier, group_qos_window, group_qos_effect_mask,
 created_at, updated_at, submitted_at, started_at, finished_at, settled_at`
 
 const batchImageJobSelectSQL = `SELECT ` + batchImageJobColumns + ` FROM batch_image_jobs`
@@ -842,6 +847,9 @@ func scanBatchImageJob(row rowScanner) (*service.BatchImageJob, error) {
 	var outputExpiresAt, inputDeletedAt, outputDeletedAt, downloadedAt, userDeletedAt sql.NullTime
 	var lastErrorCode, lastErrorMessage sql.NullString
 	var submittedAt, startedAt, finishedAt, settledAt sql.NullTime
+	var groupQoSTier sql.NullInt64
+	var groupQoSWindow sql.NullString
+	var groupQoSEffectMask sql.NullInt64
 
 	err := row.Scan(
 		&job.ID, &job.BatchID, &job.UserID, &apiKeyID, &accountID, &job.Provider, &job.Model, &job.TaskName, &parentBatchID, &job.Status,
@@ -855,6 +863,7 @@ func scanBatchImageJob(row rowScanner) (*service.BatchImageJob, error) {
 		&idempotencyKey, &requestHash, &manifestHash,
 		&job.RetryCount, &job.Version, &sessionID, &outputExpiresAt, &inputDeletedAt, &outputDeletedAt, &downloadedAt, &userDeletedAt,
 		&lastErrorCode, &lastErrorMessage,
+		&groupQoSTier, &groupQoSWindow, &groupQoSEffectMask,
 		&job.CreatedAt, &job.UpdatedAt, &submittedAt, &startedAt, &finishedAt, &settledAt,
 	)
 	if err != nil {
@@ -887,6 +896,22 @@ func scanBatchImageJob(row rowScanner) (*service.BatchImageJob, error) {
 	job.StartedAt = batchImageNullTimePtr(startedAt)
 	job.FinishedAt = batchImageNullTimePtr(finishedAt)
 	job.SettledAt = batchImageNullTimePtr(settledAt)
+	// 三列同时写入：tier 为 NULL 即表示无生效档位（未降级 / fail-open）。
+	if groupQoSTier.Valid {
+		window := ""
+		if groupQoSWindow.Valid {
+			window = groupQoSWindow.String
+		}
+		mask := service.GroupQoSEffectMask(0)
+		if groupQoSEffectMask.Valid {
+			mask = service.GroupQoSEffectMask(groupQoSEffectMask.Int64)
+		}
+		job.GroupQoSRecord = &service.GroupQoSRecordSnapshot{
+			Tier:    int(groupQoSTier.Int64),
+			Window:  window,
+			Effects: mask,
+		}
+	}
 	return &job, nil
 }
 

@@ -2167,8 +2167,12 @@ func init() {
 	usagelogDescCacheTTLOverridden := usagelogFields[45].Descriptor()
 	// usagelog.DefaultCacheTTLOverridden holds the default value on creation for the cache_ttl_overridden field.
 	usagelog.DefaultCacheTTLOverridden = usagelogDescCacheTTLOverridden.Default.(bool)
+	// usagelogDescGroupQosWindow is the schema descriptor for group_qos_window field.
+	usagelogDescGroupQosWindow := usagelogFields[47].Descriptor()
+	// usagelog.GroupQosWindowValidator is a validator for the "group_qos_window" field. It is called by the builders before save.
+	usagelog.GroupQosWindowValidator = usagelogDescGroupQosWindow.Validators[0].(func(string) error)
 	// usagelogDescCreatedAt is the schema descriptor for created_at field.
-	usagelogDescCreatedAt := usagelogFields[46].Descriptor()
+	usagelogDescCreatedAt := usagelogFields[49].Descriptor()
 	// usagelog.DefaultCreatedAt holds the default value on creation for the created_at field.
 	usagelog.DefaultCreatedAt = usagelogDescCreatedAt.Default.(func() time.Time)
 	userMixin := schema.User{}.Mixin()

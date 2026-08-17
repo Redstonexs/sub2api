@@ -221,6 +221,13 @@ func (c *gatewayCache) SaveLiveCall(ctx context.Context, record *service.LiveCal
 		"inbound_endpoint": record.InboundEndpoint,
 		"attestation":      record.AttestationCiphertext,
 	}
+	// 准入时刻冻结的 QoS 快照随记录持久化：observer 会从 store 重新读取记录，
+	// 若快照不落盘，会话结算（finalize）就取不到档位/效果。
+	if record.GroupQoSRecord != nil {
+		values["group_qos_tier"] = record.GroupQoSRecord.Tier
+		values["group_qos_window"] = record.GroupQoSRecord.Window
+		values["group_qos_effect_mask"] = int(record.GroupQoSRecord.Effects)
+	}
 	key := liveCallKey(record.CallHash)
 	pipe := c.rdb.TxPipeline()
 	pipe.HSet(ctx, key, values)
@@ -243,7 +250,7 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 	}
 	createdAt := time.UnixMilli(parseInt("created_at"))
 	expiresAt := time.UnixMilli(parseInt("expires_at"))
-	return &service.LiveCallRecord{
+	record := &service.LiveCallRecord{
 		CallID:                values["call_id"],
 		CallHash:              callHash,
 		AccountID:             parseInt("account_id"),
@@ -261,7 +268,17 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 		IPAddress:             values["ip_address"],
 		InboundEndpoint:       values["inbound_endpoint"],
 		AttestationCiphertext: values["attestation"],
-	}, nil
+	}
+	if tierRaw, ok := values["group_qos_tier"]; ok && tierRaw != "" {
+		if tier, err := strconv.Atoi(tierRaw); err == nil && tier > 0 {
+			record.GroupQoSRecord = &service.GroupQoSRecordSnapshot{
+				Tier:    tier,
+				Window:  values["group_qos_window"],
+				Effects: service.GroupQoSEffectMask(parseInt("group_qos_effect_mask")),
+			}
+		}
+	}
+	return record, nil
 }
 
 func (c *gatewayCache) ClaimLiveController(ctx context.Context, callHash, controller, owner string) (bool, error) {

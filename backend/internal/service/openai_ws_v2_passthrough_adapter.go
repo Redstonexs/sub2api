@@ -683,6 +683,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 	if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
 		if capped, changed := ApplyOpenAIReasoningEffortPolicy(firstClientMessage, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
+			// Turn 1 has no BeforeTurn in passthrough mode; effects marked so
+			// far (admission RPM etc.) stay with turn 1's snapshot.
+			MarkGroupQoSReasoningEffect(ctx, firstClientMessage)
 			firstClientMessage = capped
 		}
 	}
@@ -953,7 +956,15 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					}
 				}()
 			}
+			turnNo := int(completedTurns.Load()) + 1
+			if turnNo < 2 {
+				turnNo = 2
+			}
 			if isResponseCreate {
+				// Passthrough has no BeforeTurn hook; open a fresh per-turn
+				// effect window here so one turn's QoS effects cannot leak
+				// into a later unaffected turn.
+				BeginGroupQoSTurn(ctx, turnNo)
 				if account.IsOpenAIOAuth() && isOpenAIResponsesLiteWebSocketPayload(payload) {
 					litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(payload)
 					if liteErr != nil {
@@ -963,13 +974,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}
 				if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
 					if capped, changed := ApplyOpenAIReasoningEffortPolicy(payload, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
+						// Follow-up frames that actually apply a QoS reasoning
+						// rewrite must be marked against this turn's snapshot.
+						MarkGroupQoSReasoningEffect(ctx, payload)
 						payload = capped
 					}
 				}
-			}
-			turnNo := int(completedTurns.Load()) + 1
-			if turnNo < 2 {
-				turnNo = 2
 			}
 			requestModelForThisFrame := ""
 			if isResponseCreate {

@@ -589,6 +589,106 @@ func (s *UsageLogRepoSuite) TestGetByID_ReturnsRequestTypeAndLegacyFallback() {
 	s.Require().True(got.OpenAIWSMode)
 }
 
+// TestGetByID_ReturnsGroupQoSSnapshot proves the admission-time QoS snapshot
+// round-trips through the single-row INSERT + SELECT paths, including the
+// mask=0 (active tier, no material effect) case.
+func (s *UsageLogRepoSuite) TestGetByID_ReturnsGroupQoSSnapshot() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "getbyid-qos@test.com"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-getbyid-qos", Name: "k"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-getbyid-qos"})
+
+	log := &service.UsageLog{
+		UserID:       user.ID,
+		APIKeyID:     apiKey.ID,
+		AccountID:    account.ID,
+		RequestID:    uuid.New().String(),
+		Model:        "gpt-5.6-sol",
+		InputTokens:  10,
+		OutputTokens: 20,
+		TotalCost:    1.0,
+		ActualCost:   1.0,
+		GroupQoSRecord: &service.GroupQoSRecordSnapshot{
+			Tier:    2,
+			Window:  "weekly",
+			Effects: service.GroupQoSEffectModel | service.GroupQoSEffectReasoning,
+		},
+		CreatedAt: timezone.Today().Add(5 * time.Hour),
+	}
+	_, err := s.repo.Create(s.ctx, log)
+	s.Require().NoError(err)
+
+	got, err := s.repo.GetByID(s.ctx, log.ID)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.GroupQoSRecord)
+	s.Require().Equal(2, got.GroupQoSRecord.Tier)
+	s.Require().Equal("weekly", got.GroupQoSRecord.Window)
+	s.Require().Equal(service.GroupQoSEffectModel|service.GroupQoSEffectReasoning, got.GroupQoSRecord.Effects)
+	s.Require().True(got.GroupQoSRecord.Affected())
+}
+
+// TestGetByID_GroupQoSMaskZeroRoundTrips pins the mask=0 semantics: an active
+// tier that changed nothing material must persist as 0 and read back as a
+// known-unaffected snapshot — never NULL.
+func (s *UsageLogRepoSuite) TestGetByID_GroupQoSMaskZeroRoundTrips() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "getbyid-qos-zero@test.com"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-getbyid-qos-zero", Name: "k"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-getbyid-qos-zero"})
+
+	log := &service.UsageLog{
+		UserID:       user.ID,
+		APIKeyID:     apiKey.ID,
+		AccountID:    account.ID,
+		RequestID:    uuid.New().String(),
+		Model:        "gpt-5.6-sol",
+		InputTokens:  10,
+		OutputTokens: 20,
+		TotalCost:    1.0,
+		ActualCost:   1.0,
+		GroupQoSRecord: &service.GroupQoSRecordSnapshot{
+			Tier:    1,
+			Window:  "daily",
+			Effects: 0,
+		},
+		CreatedAt: timezone.Today().Add(6 * time.Hour),
+	}
+	_, err := s.repo.Create(s.ctx, log)
+	s.Require().NoError(err)
+
+	got, err := s.repo.GetByID(s.ctx, log.ID)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.GroupQoSRecord)
+	s.Require().Equal(1, got.GroupQoSRecord.Tier)
+	s.Require().Equal("daily", got.GroupQoSRecord.Window)
+	s.Require().Zero(got.GroupQoSRecord.Effects)
+	s.Require().False(got.GroupQoSRecord.Affected())
+}
+
+// TestGetByID_GroupQoSAllNullWithoutTier proves a request without an active
+// tier persists all three QoS columns as NULL and reads back as a nil snapshot
+// (legacy/unknown semantics).
+func (s *UsageLogRepoSuite) TestGetByID_GroupQoSAllNullWithoutTier() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "getbyid-qos-null@test.com"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-getbyid-qos-null", Name: "k"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-getbyid-qos-null"})
+
+	log := s.createUsageLog(user, apiKey, account, 10, 20, 0.5, time.Now())
+
+	got, err := s.repo.GetByID(s.ctx, log.ID)
+	s.Require().NoError(err)
+	s.Require().Nil(got.GroupQoSRecord, "no tier -> all QoS columns NULL -> nil snapshot")
+
+	var tier, window, mask any
+	rows, err := s.tx.QueryContext(s.ctx,
+		"SELECT group_qos_tier, group_qos_window, group_qos_effect_mask FROM usage_logs WHERE id = $1", log.ID)
+	s.Require().NoError(err)
+	defer rows.Close()
+	s.Require().True(rows.Next())
+	s.Require().NoError(rows.Scan(&tier, &window, &mask))
+	s.Require().Nil(tier, "group_qos_tier must be NULL")
+	s.Require().Nil(window, "group_qos_window must be NULL")
+	s.Require().Nil(mask, "group_qos_effect_mask must be NULL")
+}
+
 // --- Delete ---
 
 func (s *UsageLogRepoSuite) TestDelete() {

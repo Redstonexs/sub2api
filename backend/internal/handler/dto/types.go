@@ -552,6 +552,18 @@ type UsageLog struct {
 	// BillingMode 计费模式：token/image
 	BillingMode *string `json:"billing_mode,omitempty"`
 
+	// Group QoS 降级快照（用户安全字段：不含阈值/花费）。
+	// GroupQoSTier 为 nil 表示该请求无生效 QoS 档位（未降级 / fail-open / 历史行）。
+	// 四字段一律显式序列化：legacy/未知行必须出现 null，而不是被省略。
+	GroupQoSTier *int `json:"group_qos_tier"`
+	// GroupQoSWindow 触发档位的滚动窗口（daily/weekly/monthly）。
+	GroupQoSWindow *string `json:"group_qos_window"`
+	// GroupQoSAffected 三态：nil=未知（无生效档位/历史行）；false=档位生效但未
+	// 对本请求产生实质影响；true=至少一项 QoS 效果真实发生。
+	GroupQoSAffected *bool `json:"group_qos_affected"`
+	// GroupQoSEffects 实际发生的效果名（model/reasoning/rpm），仅在 affected 时列出。
+	GroupQoSEffects []string `json:"group_qos_effects"`
+
 	CreatedAt time.Time `json:"created_at"`
 
 	User         *User             `json:"user,omitempty"`

@@ -139,6 +139,11 @@ type BatchImageJob struct {
 	ManifestHash   *string
 	SessionID      *string
 
+	// GroupQoSRecord 是提交准入时刻冻结的分组 QoS 降级快照。结算运行在异步
+	// worker（请求生命周期之外），usage 行只能从 job 持久化的快照读取，绝不
+	// 能回头读已过期的请求 ctx。nil = 提交时无生效档位（未降级 / fail-open）。
+	GroupQoSRecord *GroupQoSRecordSnapshot
+
 	RetryCount int
 	Version    int
 
@@ -198,6 +203,9 @@ type CreateBatchImageJobParams struct {
 	RequestHash    *string
 	ManifestHash   *string
 	SessionID      *string
+
+	// GroupQoSRecord 是提交准入时刻冻结的分组 QoS 降级快照（见 BatchImageJob 同名字段）。
+	GroupQoSRecord *GroupQoSRecordSnapshot
 
 	RetryCount int
 

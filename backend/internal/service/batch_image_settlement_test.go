@@ -49,6 +49,53 @@ func TestBatchImageSettlementService_SettlesAndChargesSuccessfulImagesOnly(t *te
 	require.NotContains(t, fmt.Sprintf("%+v", billing.captures[0]), "prompt")
 }
 
+// The admission-time QoS snapshot frozen onto the job at Submit must reach the
+// settlement usage row untouched: settlement runs on an async worker with no
+// access to the original request context.
+func TestBatchImageSettlementService_GroupQoSRecordPropagatesToUsageLog(t *testing.T) {
+	repo := newFakeBatchImageRepository()
+	job := testSettlingBatchImageJob("imgbatch_qos")
+	job.GroupQoSRecord = &GroupQoSRecordSnapshot{
+		Tier:    2,
+		Window:  "weekly",
+		Effects: GroupQoSEffectRPM,
+	}
+	repo.jobs[job.BatchID] = job
+	billing := &fakeBatchImageBillingRepo{}
+	usageLogs := &openAIRecordUsageLogRepoStub{}
+	svc := &BatchImageSettlementService{
+		Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25},
+		UsageLogRepo: usageLogs,
+	}
+
+	_, err := svc.Settle(context.Background(), job.BatchID)
+	require.NoError(t, err)
+	require.NotNil(t, usageLogs.lastLog, "settlement must write a usage row")
+	require.NotNil(t, usageLogs.lastLog.GroupQoSRecord)
+	require.Equal(t, 2, usageLogs.lastLog.GroupQoSRecord.Tier)
+	require.Equal(t, "weekly", usageLogs.lastLog.GroupQoSRecord.Window)
+	require.Equal(t, GroupQoSEffectRPM, usageLogs.lastLog.GroupQoSRecord.Effects)
+	require.True(t, usageLogs.lastLog.GroupQoSRecord.Affected())
+}
+
+// A job submitted without an active tier (nil snapshot) stays all-NULL on the
+// usage row.
+func TestBatchImageSettlementService_GroupQoSRecordNilStaysNil(t *testing.T) {
+	repo := newFakeBatchImageRepository()
+	job := testSettlingBatchImageJob("imgbatch_noqos")
+	repo.jobs[job.BatchID] = job
+	billing := &fakeBatchImageBillingRepo{}
+	usageLogs := &openAIRecordUsageLogRepoStub{}
+	svc := &BatchImageSettlementService{
+		Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25},
+		UsageLogRepo: usageLogs,
+	}
+
+	_, err := svc.Settle(context.Background(), job.BatchID)
+	require.NoError(t, err)
+	require.Nil(t, usageLogs.lastLog.GroupQoSRecord, "no tier at submit -> NULL columns")
+}
+
 func TestBatchImageSettlementService_ZeroSuccessCanComplete(t *testing.T) {
 	repo := newFakeBatchImageRepository()
 	job := testSettlingBatchImageJob("imgbatch_zero")

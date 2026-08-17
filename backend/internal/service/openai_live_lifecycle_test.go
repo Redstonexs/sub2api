@@ -310,6 +310,86 @@ func TestFinalizeLiveCallIsIdempotentAndWritesZeroUsage(t *testing.T) {
 	require.Zero(t, log.ActualCost)
 }
 
+// The admission-time QoS snapshot frozen onto the LiveCallRecord must reach the
+// finalize usage row: finalize runs outside the request lifecycle and can only
+// read the record (never the expired request context).
+func TestFinalizeLiveCallCarriesAdmissionGroupQoSRecord(t *testing.T) {
+	record := &LiveCallRecord{
+		CallID:          "call_qos",
+		CallHash:        hashLiveCallID("call_qos"),
+		AccountID:       11,
+		APIKeyID:        22,
+		UserID:          33,
+		GroupID:         44,
+		LeaseID:         "lease-qos",
+		Model:           "gpt-live-qos",
+		CreatedAt:       time.Now().Add(-time.Second),
+		ExpiresAt:       time.Now().Add(time.Hour),
+		Controller:      LiveControllerPending,
+		InboundEndpoint: "/v1/live",
+		GroupQoSRecord: &GroupQoSRecordSnapshot{
+			Tier:    3,
+			Window:  "monthly",
+			Effects: GroupQoSEffectRPM | GroupQoSEffectReasoning,
+		},
+	}
+	store := &liveTestStore{}
+	require.NoError(t, store.SaveLiveCall(context.Background(), record, time.Hour))
+	concurrencyCache := &liveTestConcurrencyCache{}
+	usageRepo := &liveTestUsageRepo{}
+	service := &OpenAIGatewayService{
+		cache:              store,
+		concurrencyService: NewConcurrencyService(concurrencyCache),
+		usageLogRepo:       usageRepo,
+	}
+
+	service.finalizeLiveCall(record)
+
+	usageRepo.mu.Lock()
+	require.Len(t, usageRepo.logs, 1)
+	log := usageRepo.logs[0]
+	usageRepo.mu.Unlock()
+	require.NotNil(t, log.GroupQoSRecord, "usage row must carry the admission snapshot")
+	require.Equal(t, 3, log.GroupQoSRecord.Tier)
+	require.Equal(t, "monthly", log.GroupQoSRecord.Window)
+	require.Equal(t, GroupQoSEffectRPM|GroupQoSEffectReasoning, log.GroupQoSRecord.Effects)
+	require.True(t, log.GroupQoSRecord.Affected())
+}
+
+// A live session opened without an active tier keeps the usage row all-NULL.
+func TestFinalizeLiveCallWithoutGroupQoSTierStaysNil(t *testing.T) {
+	record := &LiveCallRecord{
+		CallID:          "call_no_qos",
+		CallHash:        hashLiveCallID("call_no_qos"),
+		AccountID:       11,
+		APIKeyID:        22,
+		UserID:          33,
+		GroupID:         44,
+		LeaseID:         "lease-no-qos",
+		Model:           "gpt-live-plain",
+		CreatedAt:       time.Now().Add(-time.Second),
+		ExpiresAt:       time.Now().Add(time.Hour),
+		Controller:      LiveControllerPending,
+		InboundEndpoint: "/v1/live",
+	}
+	store := &liveTestStore{}
+	require.NoError(t, store.SaveLiveCall(context.Background(), record, time.Hour))
+	concurrencyCache := &liveTestConcurrencyCache{}
+	usageRepo := &liveTestUsageRepo{}
+	service := &OpenAIGatewayService{
+		cache:              store,
+		concurrencyService: NewConcurrencyService(concurrencyCache),
+		usageLogRepo:       usageRepo,
+	}
+
+	service.finalizeLiveCall(record)
+
+	usageRepo.mu.Lock()
+	require.Len(t, usageRepo.logs, 1)
+	usageRepo.mu.Unlock()
+	require.Nil(t, usageRepo.logs[0].GroupQoSRecord)
+}
+
 func TestGetLiveCallForIdentityRejectsMismatchedCaller(t *testing.T) {
 	groupID := int64(44)
 	record := &LiveCallRecord{

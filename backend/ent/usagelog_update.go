@@ -947,6 +947,80 @@ func (_u *UsageLogUpdate) SetNillableCacheTTLOverridden(v *bool) *UsageLogUpdate
 	return _u
 }
 
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (_u *UsageLogUpdate) SetGroupQosTier(v int16) *UsageLogUpdate {
+	_u.mutation.ResetGroupQosTier()
+	_u.mutation.SetGroupQosTier(v)
+	return _u
+}
+
+// SetNillableGroupQosTier sets the "group_qos_tier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableGroupQosTier(v *int16) *UsageLogUpdate {
+	if v != nil {
+		_u.SetGroupQosTier(*v)
+	}
+	return _u
+}
+
+// AddGroupQosTier adds value to the "group_qos_tier" field.
+func (_u *UsageLogUpdate) AddGroupQosTier(v int16) *UsageLogUpdate {
+	_u.mutation.AddGroupQosTier(v)
+	return _u
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (_u *UsageLogUpdate) ClearGroupQosTier() *UsageLogUpdate {
+	_u.mutation.ClearGroupQosTier()
+	return _u
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (_u *UsageLogUpdate) SetGroupQosWindow(v string) *UsageLogUpdate {
+	_u.mutation.SetGroupQosWindow(v)
+	return _u
+}
+
+// SetNillableGroupQosWindow sets the "group_qos_window" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableGroupQosWindow(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetGroupQosWindow(*v)
+	}
+	return _u
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (_u *UsageLogUpdate) ClearGroupQosWindow() *UsageLogUpdate {
+	_u.mutation.ClearGroupQosWindow()
+	return _u
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdate) SetGroupQosEffectMask(v int16) *UsageLogUpdate {
+	_u.mutation.ResetGroupQosEffectMask()
+	_u.mutation.SetGroupQosEffectMask(v)
+	return _u
+}
+
+// SetNillableGroupQosEffectMask sets the "group_qos_effect_mask" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableGroupQosEffectMask(v *int16) *UsageLogUpdate {
+	if v != nil {
+		_u.SetGroupQosEffectMask(*v)
+	}
+	return _u
+}
+
+// AddGroupQosEffectMask adds value to the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdate) AddGroupQosEffectMask(v int16) *UsageLogUpdate {
+	_u.mutation.AddGroupQosEffectMask(v)
+	return _u
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdate) ClearGroupQosEffectMask() *UsageLogUpdate {
+	_u.mutation.ClearGroupQosEffectMask()
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UsageLogUpdate) SetUser(v *User) *UsageLogUpdate {
 	return _u.SetUserID(v.ID)
@@ -1109,6 +1183,11 @@ func (_u *UsageLogUpdate) check() error {
 	if v, ok := _u.mutation.VideoResolution(); ok {
 		if err := usagelog.VideoResolutionValidator(v); err != nil {
 			return &ValidationError{Name: "video_resolution", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_resolution": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.GroupQosWindow(); ok {
+		if err := usagelog.GroupQosWindowValidator(v); err != nil {
+			return &ValidationError{Name: "group_qos_window", err: fmt.Errorf(`ent: validator failed for field "UsageLog.group_qos_window": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -1380,6 +1459,30 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.GroupQosTier(); ok {
+		_spec.SetField(usagelog.FieldGroupQosTier, field.TypeInt16, value)
+	}
+	if value, ok := _u.mutation.AddedGroupQosTier(); ok {
+		_spec.AddField(usagelog.FieldGroupQosTier, field.TypeInt16, value)
+	}
+	if _u.mutation.GroupQosTierCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosTier, field.TypeInt16)
+	}
+	if value, ok := _u.mutation.GroupQosWindow(); ok {
+		_spec.SetField(usagelog.FieldGroupQosWindow, field.TypeString, value)
+	}
+	if _u.mutation.GroupQosWindowCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosWindow, field.TypeString)
+	}
+	if value, ok := _u.mutation.GroupQosEffectMask(); ok {
+		_spec.SetField(usagelog.FieldGroupQosEffectMask, field.TypeInt16, value)
+	}
+	if value, ok := _u.mutation.AddedGroupQosEffectMask(); ok {
+		_spec.AddField(usagelog.FieldGroupQosEffectMask, field.TypeInt16, value)
+	}
+	if _u.mutation.GroupQosEffectMaskCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosEffectMask, field.TypeInt16)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2461,6 +2564,80 @@ func (_u *UsageLogUpdateOne) SetNillableCacheTTLOverridden(v *bool) *UsageLogUpd
 	return _u
 }
 
+// SetGroupQosTier sets the "group_qos_tier" field.
+func (_u *UsageLogUpdateOne) SetGroupQosTier(v int16) *UsageLogUpdateOne {
+	_u.mutation.ResetGroupQosTier()
+	_u.mutation.SetGroupQosTier(v)
+	return _u
+}
+
+// SetNillableGroupQosTier sets the "group_qos_tier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableGroupQosTier(v *int16) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetGroupQosTier(*v)
+	}
+	return _u
+}
+
+// AddGroupQosTier adds value to the "group_qos_tier" field.
+func (_u *UsageLogUpdateOne) AddGroupQosTier(v int16) *UsageLogUpdateOne {
+	_u.mutation.AddGroupQosTier(v)
+	return _u
+}
+
+// ClearGroupQosTier clears the value of the "group_qos_tier" field.
+func (_u *UsageLogUpdateOne) ClearGroupQosTier() *UsageLogUpdateOne {
+	_u.mutation.ClearGroupQosTier()
+	return _u
+}
+
+// SetGroupQosWindow sets the "group_qos_window" field.
+func (_u *UsageLogUpdateOne) SetGroupQosWindow(v string) *UsageLogUpdateOne {
+	_u.mutation.SetGroupQosWindow(v)
+	return _u
+}
+
+// SetNillableGroupQosWindow sets the "group_qos_window" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableGroupQosWindow(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetGroupQosWindow(*v)
+	}
+	return _u
+}
+
+// ClearGroupQosWindow clears the value of the "group_qos_window" field.
+func (_u *UsageLogUpdateOne) ClearGroupQosWindow() *UsageLogUpdateOne {
+	_u.mutation.ClearGroupQosWindow()
+	return _u
+}
+
+// SetGroupQosEffectMask sets the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdateOne) SetGroupQosEffectMask(v int16) *UsageLogUpdateOne {
+	_u.mutation.ResetGroupQosEffectMask()
+	_u.mutation.SetGroupQosEffectMask(v)
+	return _u
+}
+
+// SetNillableGroupQosEffectMask sets the "group_qos_effect_mask" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableGroupQosEffectMask(v *int16) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetGroupQosEffectMask(*v)
+	}
+	return _u
+}
+
+// AddGroupQosEffectMask adds value to the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdateOne) AddGroupQosEffectMask(v int16) *UsageLogUpdateOne {
+	_u.mutation.AddGroupQosEffectMask(v)
+	return _u
+}
+
+// ClearGroupQosEffectMask clears the value of the "group_qos_effect_mask" field.
+func (_u *UsageLogUpdateOne) ClearGroupQosEffectMask() *UsageLogUpdateOne {
+	_u.mutation.ClearGroupQosEffectMask()
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UsageLogUpdateOne) SetUser(v *User) *UsageLogUpdateOne {
 	return _u.SetUserID(v.ID)
@@ -2636,6 +2813,11 @@ func (_u *UsageLogUpdateOne) check() error {
 	if v, ok := _u.mutation.VideoResolution(); ok {
 		if err := usagelog.VideoResolutionValidator(v); err != nil {
 			return &ValidationError{Name: "video_resolution", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_resolution": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.GroupQosWindow(); ok {
+		if err := usagelog.GroupQosWindowValidator(v); err != nil {
+			return &ValidationError{Name: "group_qos_window", err: fmt.Errorf(`ent: validator failed for field "UsageLog.group_qos_window": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -2924,6 +3106,30 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.GroupQosTier(); ok {
+		_spec.SetField(usagelog.FieldGroupQosTier, field.TypeInt16, value)
+	}
+	if value, ok := _u.mutation.AddedGroupQosTier(); ok {
+		_spec.AddField(usagelog.FieldGroupQosTier, field.TypeInt16, value)
+	}
+	if _u.mutation.GroupQosTierCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosTier, field.TypeInt16)
+	}
+	if value, ok := _u.mutation.GroupQosWindow(); ok {
+		_spec.SetField(usagelog.FieldGroupQosWindow, field.TypeString, value)
+	}
+	if _u.mutation.GroupQosWindowCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosWindow, field.TypeString)
+	}
+	if value, ok := _u.mutation.GroupQosEffectMask(); ok {
+		_spec.SetField(usagelog.FieldGroupQosEffectMask, field.TypeInt16, value)
+	}
+	if value, ok := _u.mutation.AddedGroupQosEffectMask(); ok {
+		_spec.AddField(usagelog.FieldGroupQosEffectMask, field.TypeInt16, value)
+	}
+	if _u.mutation.GroupQosEffectMaskCleared() {
+		_spec.ClearField(usagelog.FieldGroupQosEffectMask, field.TypeInt16)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{

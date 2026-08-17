@@ -394,6 +394,11 @@ type ChannelUsageFields struct {
 	// 计费据此忽略 BillingModelSource="requested"，避免按用户「请求的」
 	// 高价模型给已降级的便宜输出计费。
 	QoSApplied bool
+	// GroupQoSRecord 是准入时刻冻结的 QoS 降级快照，随用量行持久化。
+	// nil = 无生效档位（未降级 / fail-open），对应列整体写 NULL；
+	// Effects 位仅记录真实改变了本请求的行为（model/reasoning/rpm）。
+	// 与 QoSApplied 相互独立：后者只服务于「按请求模型计费」的判定。
+	GroupQoSRecord *GroupQoSRecordSnapshot
 }
 
 // shouldBillAtRequestedModel 判断计费是否应回落到「用户请求的」模型。

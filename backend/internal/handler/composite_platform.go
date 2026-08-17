@@ -83,7 +83,13 @@ func applyOpenAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.
 	if !ok {
 		return body, false
 	}
-	return service.ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings)
+	capped, changed := service.ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings)
+	// QoS 推理上限真正把本请求压到分组常设上限之下时，记入用量快照；
+	// 仅档位生效但未改写的请求不计。body 是改写前的原始请求体。
+	if changed {
+		service.MarkGroupQoSReasoningEffect(c.Request.Context(), body)
+	}
+	return capped, changed
 }
 
 func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *service.APIKey, body []byte) {
@@ -102,4 +108,9 @@ func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *s
 		return
 	}
 	c.Request = c.Request.WithContext(service.WithOpenAIReasoningEffortPolicy(c.Request.Context(), maxEffort, mappings))
+	// 绑定即评估：客户端显式携带的 effort 若会被生效上限改写，说明 QoS 推理
+	// 上限真正改变了本请求，把效果记入请求级用量快照。
+	if _, changed := service.ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings); changed {
+		service.MarkGroupQoSReasoningEffect(c.Request.Context(), body)
+	}
 }

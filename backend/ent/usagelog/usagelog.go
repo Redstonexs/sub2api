@@ -106,6 +106,12 @@ const (
 	FieldVideoDurationSeconds = "video_duration_seconds"
 	// FieldCacheTTLOverridden holds the string denoting the cache_ttl_overridden field in the database.
 	FieldCacheTTLOverridden = "cache_ttl_overridden"
+	// FieldGroupQosTier holds the string denoting the group_qos_tier field in the database.
+	FieldGroupQosTier = "group_qos_tier"
+	// FieldGroupQosWindow holds the string denoting the group_qos_window field in the database.
+	FieldGroupQosWindow = "group_qos_window"
+	// FieldGroupQosEffectMask holds the string denoting the group_qos_effect_mask field in the database.
+	FieldGroupQosEffectMask = "group_qos_effect_mask"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// EdgeUser holds the string denoting the user edge name in mutations.
@@ -206,6 +212,9 @@ var Columns = []string{
 	FieldVideoResolution,
 	FieldVideoDurationSeconds,
 	FieldCacheTTLOverridden,
+	FieldGroupQosTier,
+	FieldGroupQosWindow,
+	FieldGroupQosEffectMask,
 	FieldCreatedAt,
 }
 
@@ -288,6 +297,8 @@ var (
 	VideoResolutionValidator func(string) error
 	// DefaultCacheTTLOverridden holds the default value on creation for the "cache_ttl_overridden" field.
 	DefaultCacheTTLOverridden bool
+	// GroupQosWindowValidator is a validator for the "group_qos_window" field. It is called by the builders before save.
+	GroupQosWindowValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -523,6 +534,21 @@ func ByVideoDurationSeconds(opts ...sql.OrderTermOption) OrderOption {
 // ByCacheTTLOverridden orders the results by the cache_ttl_overridden field.
 func ByCacheTTLOverridden(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCacheTTLOverridden, opts...).ToFunc()
+}
+
+// ByGroupQosTier orders the results by the group_qos_tier field.
+func ByGroupQosTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGroupQosTier, opts...).ToFunc()
+}
+
+// ByGroupQosWindow orders the results by the group_qos_window field.
+func ByGroupQosWindow(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGroupQosWindow, opts...).ToFunc()
+}
+
+// ByGroupQosEffectMask orders the results by the group_qos_effect_mask field.
+func ByGroupQosEffectMask(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGroupQosEffectMask, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

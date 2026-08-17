@@ -207,6 +207,8 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 			).Info("gateway.web_search.search_price_per_1k_explicit_free")
 		}
 	}
+	// QoS 快照（含冻结的 GroupQoSRecord）必须在提交前同步拍成值。
+	channelUsageFields := clientRequestedUsageFields(c, service.ChannelMappingResult{}, "grok-web-search", "grok-web-search")
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 			Result: &service.ForwardResult{
@@ -226,6 +228,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 			RequestPayloadHash: requestPayloadHash,
 			APIKeyService:      h.apiKeyService,
 			QuotaPlatform:      quotaPlatform,
+			ChannelUsageFields: channelUsageFields,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.gateway.web_search"),

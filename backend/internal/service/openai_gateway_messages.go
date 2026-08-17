@@ -252,6 +252,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	if account.Platform == PlatformOpenAI {
 		if policyBody, changed := ApplyOpenAIReasoningEffortPolicyFromContext(ctx, responsesBody); changed {
+			// Mark with the pre-policy body: the effect test re-derives the
+			// final outcome and must compare against the original request.
+			MarkGroupQoSReasoningEffect(ctx, responsesBody)
 			responsesBody = policyBody
 			if responsesReq.Reasoning != nil {
 				responsesReq.Reasoning.Effort = gjson.GetBytes(responsesBody, "reasoning.effort").String()

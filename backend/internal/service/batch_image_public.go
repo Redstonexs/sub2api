@@ -283,6 +283,9 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 		IdempotencyKey:          batchImageOptionalStringPtr(idempotencyKey),
 		RequestHash:             batchImageStringPtr(requestHash),
 		SessionID:               normalized.SessionID,
+		// 冻结准入时刻的 QoS 快照：结算 worker 在请求生命周期之外运行，
+		// usage 行只能从持久化的 job 快照读取（见 BatchImageJob 注释）。
+		GroupQoSRecord: GroupQoSRecordSnapshotFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
