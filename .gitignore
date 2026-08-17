@@ -162,6 +162,7 @@ output/
 *.bundle
 *.patch
 .omo/
+.opencode/
 
 # Vitest / Vite cache at repo root
 .vite/
