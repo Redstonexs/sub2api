@@ -177,11 +177,19 @@ jobs:
         id: lowercase
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Run GoReleaser
+      - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
-          args: release --clean ${{ env.SIMPLE_RELEASE == 'true' && '--config=.goreleaser.simple.yaml' || '' }}
+          install-only: true
+
+      # GoReleaser 只重试它自己识别的瞬时错误（internal/pipe/docker/v2 的
+      # IsRetriableBuild + retryx.IsNetworkError）。GHCR 触发二级速率限制时
+      # buildx 输出的是 `denied: permission_denied` + HTTP 403，不在这些名单内，
+      # 因此一次 push 被拒就会中断整轮 release（二进制与 GitHub Release 一并作废）。
+      # 这里按输出特征识别瞬时故障并整轮重跑；非瞬时错误立即失败，不浪费构建时间。
+      - name: Run GoReleaser
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
@@ -190,6 +198,47 @@ jobs:
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
           GOCACHE: ${{ runner.temp }}/goreleaser-go-build
+        run: |
+          # 关闭 errexit：失败要由下面的重试逻辑决定是重跑还是退出。
+          set +e
+          set -uo pipefail
+
+          ARGS=(release --clean)
+          if [ "${SIMPLE_RELEASE}" = "true" ]; then
+            ARGS+=(--config=.goreleaser.simple.yaml)
+          fi
+
+          # 仅匹配到这些特征才重跑；编译失败、模板错误、认证失败等立即退出。
+          TRANSIENT='secondary rate limit|toomanyrequests|too many requests|HTTP status code 5[0-9][0-9]|internal server error|bad gateway|service unavailable|gateway time-?out|unexpected EOF|connection reset by peer|TLS handshake timeout|i/o timeout'
+
+          LOG="${RUNNER_TEMP}/goreleaser.log"
+          MAX_ATTEMPTS=3
+          DELAY=180
+
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            echo "::group::GoReleaser attempt ${attempt}/${MAX_ATTEMPTS}"
+            goreleaser "${ARGS[@]}" 2>&1 | tee "${LOG}"
+            status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+
+            if [ "${status}" -eq 0 ]; then
+              exit 0
+            fi
+
+            if [ "${attempt}" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "::error::GoReleaser failed after ${MAX_ATTEMPTS} attempt(s) (exit ${status})"
+              exit "${status}"
+            fi
+
+            if ! grep -Eiq "${TRANSIENT}" "${LOG}"; then
+              echo "::error::GoReleaser failed with a non-transient error (exit ${status}); not retrying"
+              exit "${status}"
+            fi
+
+            echo "::warning::Transient registry/API failure detected, retrying in ${DELAY}s"
+            sleep "${DELAY}"
+            DELAY=$(( DELAY * 2 ))
+          done
 
       # Update DockerHub description
       - name: Update DockerHub description

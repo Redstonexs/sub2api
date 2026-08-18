@@ -55,6 +55,16 @@ changelog:
   # 禁用自动 changelog，完全使用 tag 消息
   disable: true
 
+# 瞬时故障重试。未显式配置时 attempts 取 max(0,1)=1，即完全不重试。
+# 覆盖 GitHub API（含二级速率限制返回的 Retry-After）以及 docker build 阶段
+# GoReleaser 能识别的瞬时错误（基础镜像 toomanyrequests、5xx、DNS 抖动等）。
+# 注意：GHCR push 被拒时返回的是 403 `denied: permission_denied`，不在 GoReleaser
+# 的可重试名单内，那一层由 .github/workflows/release.yml 的整轮重跑兜底。
+retry:
+  attempts: 5
+  delay: 15s
+  max_delay: 2m
+
 dockers_v2:
   - id: sub2api
     ids:
@@ -81,6 +91,11 @@ dockers_v2:
       org.opencontainers.image.revision: '{{ .Commit }}'
       org.opencontainers.image.source: 'https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}'
     sbom: false
+    # 关闭 buildx 默认的 provenance attestation：每个 tag 少推 2 个 attestation
+    # manifest 及其 blob，降低单次 push 打到 GHCR 的请求量（二级速率限制按
+    # "短时间内创建内容" 计算，8 个 tag 一起推很容易触发）。
+    flags:
+      - --provenance=false
 
 release:
   github:
@@ -88,6 +103,8 @@ release:
     name: "{{ .Env.GITHUB_REPO_NAME }}"
   draft: false
   prerelease: auto
+  # 同一个 tag 重跑时覆盖已上传的产物，否则第二次会因 "asset already exists" 失败。
+  replace_existing_artifacts: true
   name_template: "Sub2API {{.Version}}"
   # 完全使用 tag 消息作为 release 内容（通过环境变量传入）
   header: |
