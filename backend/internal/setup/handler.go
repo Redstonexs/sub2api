@@ -2,9 +2,13 @@ package setup
 
 import (
 	"fmt"
+	"mime"
+	"net"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,26 +17,321 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/sysutil"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 // installMutex prevents concurrent installation attempts (TOCTOU protection)
 var installMutex sync.Mutex
 
+// bootstrapTokenState holds the installation-scoped credential for the HTTP setup wizard.
+// It is set by runSetupServer before registering routes and never by CLI/AUTO_SETUP.
+var bootstrapTokenState struct {
+	sync.RWMutex
+	value string
+}
+
+const (
+	setupMutationMaxBodyBytes = 64 << 10
+	setupMutationRequests     = 20
+)
+
+// SetBootstrapToken sets the global bootstrap token for the HTTP setup wizard.
+// Called only from runSetupServer; never from CLI or AUTO_SETUP.
+func SetBootstrapToken(token string) {
+	bootstrapTokenState.Lock()
+	bootstrapTokenState.value = token
+	bootstrapTokenState.Unlock()
+}
+
+func currentBootstrapToken() string {
+	bootstrapTokenState.RLock()
+	defer bootstrapTokenState.RUnlock()
+	return bootstrapTokenState.value
+}
+
 // RegisterRoutes registers setup wizard routes
 func RegisterRoutes(r *gin.Engine) {
+	registerRoutes(r, rate.NewLimiter(rate.Every(time.Minute/setupMutationRequests), setupMutationRequests), setupMutationMaxBodyBytes)
+}
+
+func registerRoutes(r *gin.Engine, limiter *rate.Limiter, maxBodyBytes int64) {
 	setup := r.Group("/setup")
+	// Peer/Host checks apply to ALL /setup routes (including GET /status).
+	// POST-only checks (Origin, Sec-Fetch-Site, Content-Type) are inside
+	// setupRequestGate and only activate on POST.
+	setup.Use(setupRequestGate())
 	{
-		// Status endpoint is always accessible (read-only)
+		// Status endpoint: read-only, peer/Host checked but no token required.
 		setup.GET("/status", getStatus)
 
-		// All modification endpoints are protected by setupGuard
+		// All modification endpoints are protected by:
+		//   1. setupGuard — system is in setup mode
+		//   2. setupBootstrapToken — token verification (before rate limiter)
+		//   3. setupRequestBodyLimit — body size limit
+		//   4. setupMutationRateLimit — rate limiter
 		protected := setup.Group("")
-		protected.Use(setupGuard())
+		protected.Use(setupGuard(), setupBootstrapToken(), setupRequestBodyLimit(maxBodyBytes), setupMutationRateLimit(limiter))
 		{
 			protected.POST("/test-db", testDatabase)
 			protected.POST("/test-redis", testRedis)
 			protected.POST("/install", install)
 		}
+	}
+}
+
+// setupRequestGate applies peer/Host checks to all setup-server routes, and
+// Origin/fetch-site/Content-Type checks to every setup POST. It does not rely
+// on the generic CORS middleware or trust forwarded headers.
+func setupRequestGate() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// ====== Peer (RemoteAddr) check ======
+		// Require the TCP peer to be an IP loopback after IPv4 unmapping.
+		host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		if err != nil {
+			abortRequestGate(c)
+			return
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			abortRequestGate(c)
+			return
+		}
+		// Unmap IPv4-in-IPv6 to get the underlying IPv4.
+		ip = ip.To16()
+		if ip == nil {
+			abortRequestGate(c)
+			return
+		}
+		// Check if it is any loopback address.
+		if !ip.IsLoopback() {
+			abortRequestGate(c)
+			return
+		}
+
+		// ====== Host check ======
+		// Host must be exactly "localhost" (case-insensitive) or a literal
+		// loopback IP, with an optional valid port. Reject suffixes, userinfo,
+		// zones, or malformed authority.
+		if !isValidLoopbackHost(c.Request.Host) {
+			abortRequestGate(c)
+			return
+		}
+
+		// ====== POST-only checks ======
+		if c.Request.Method == http.MethodPost {
+			// Origin check: must be present and exactly one, with http/https
+			// scheme, no credentials/path/query/fragment, and loopback authority
+			// that canonicalizes to the same as Host.
+			origins := c.Request.Header.Values("Origin")
+			if len(origins) != 1 {
+				abortRequestGate(c)
+				return
+			}
+			if !isValidLoopbackOrigin(origins[0], c.Request.Host) {
+				abortRequestGate(c)
+				return
+			}
+
+			// Sec-Fetch-Site check: if present, must be "same-origin".
+			if fetchSite := c.Request.Header.Get("Sec-Fetch-Site"); fetchSite != "" {
+				if strings.ToLower(strings.TrimSpace(fetchSite)) != "same-origin" {
+					abortRequestGate(c)
+					return
+				}
+			}
+
+			// Content-Type check: must parse as application/json (parameters permitted).
+			ct := c.Request.Header.Get("Content-Type")
+			if ct == "" || !isJSONContentType(ct) {
+				c.Abort()
+				response.Error(c, http.StatusUnsupportedMediaType, "Unsupported Media Type")
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+// abortRequestGate aborts with a generic 403 to avoid leaking information.
+func abortRequestGate(c *gin.Context) {
+	c.Abort()
+	response.Error(c, http.StatusForbidden, "Forbidden")
+}
+
+// isJSONContentType checks whether the Content-Type header parses as application/json.
+func isJSONContentType(rawCT string) bool {
+	mediaType, _, err := mime.ParseMediaType(rawCT)
+	return err == nil && mediaType == "application/json"
+}
+
+// parseLoopbackAuthority parses a strictly formed loopback Host/Origin authority.
+// It returns canonical host and optional port values for safe equality comparison.
+func parseLoopbackAuthority(authority string) (host, port string, ok bool) {
+	if authority == "" || strings.ContainsAny(authority, "@%/?#") {
+		return "", "", false
+	}
+
+	switch {
+	case strings.HasPrefix(authority, "[") || strings.Contains(authority, "]"):
+		if !strings.HasPrefix(authority, "[") || strings.Count(authority, "[") != 1 || strings.Count(authority, "]") != 1 {
+			return "", "", false
+		}
+		end := strings.IndexByte(authority, ']')
+		if end <= 1 {
+			return "", "", false
+		}
+		host = authority[1:end]
+		suffix := authority[end+1:]
+		if suffix != "" {
+			if !strings.HasPrefix(suffix, ":") || len(suffix) == 1 {
+				return "", "", false
+			}
+			port = suffix[1:]
+		}
+		if net.ParseIP(host) == nil {
+			return "", "", false
+		}
+	case strings.Count(authority, ":") == 1:
+		var err error
+		host, port, err = net.SplitHostPort(authority)
+		if err != nil || host == "" || port == "" {
+			return "", "", false
+		}
+	default:
+		host = authority
+	}
+
+	if port != "" {
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber < 1 || portNumber > 65535 {
+			return "", "", false
+		}
+	}
+
+	if strings.EqualFold(host, "localhost") {
+		return "localhost", port, true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return "", "", false
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4.String(), port, true
+	}
+	return ip.String(), port, true
+}
+
+// isValidLoopbackHost checks whether hostPort is a strictly formed loopback authority.
+func isValidLoopbackHost(hostPort string) bool {
+	_, _, ok := parseLoopbackAuthority(hostPort)
+	return ok
+}
+
+// isValidLoopbackOrigin checks whether the origin is a valid http/https URL
+// with a loopback authority that canonicalizes to the same as hostPort.
+// Accepts "[::1]" syntax even though the listener is IPv4-only.
+func isValidLoopbackOrigin(origin, hostPort string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	// Must be http or https.
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+
+	// No credentials, path, query, or fragment allowed.
+	if u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+
+	// The origin authority must be a loopback host.
+	if !isValidLoopbackHost(u.Host) {
+		return false
+	}
+
+	// Normalize: strip the scheme-default port so that:
+	//   http://localhost:80  → localhost (default port for http)
+	//   https://localhost:443 → localhost (default port for https)
+	//   http://localhost:443 → localhost:443 (non-default — still kept)
+	// Then compare to the Host header, applying the same default-port stripping.
+	// Both sides are bracket-normalized so [::1] vs ::1 comparisons work.
+	defaultPort := "80"
+	if u.Scheme == "https" {
+		defaultPort = "443"
+	}
+	originNorm := stripDefaultPort(u.Host, defaultPort)
+	requestNorm := stripDefaultPort(hostPort, defaultPort)
+	return originNorm == requestNorm
+}
+
+// stripDefaultPort removes the given defaultPort from an authority for comparison.
+// It also normalizes brackets on IPv6 addresses so that "[::1]:80" compares
+// equal to "::1" (after default port stripping).
+func stripDefaultPort(authority, defaultPort string) string {
+	host, port, ok := parseLoopbackAuthority(authority)
+	if !ok {
+		return ""
+	}
+	if port == "" || port == defaultPort {
+		return host
+	}
+	return host + ":" + port
+}
+
+// setupBootstrapToken verifies the X-Bootstrap-Token header on POST mutations.
+// It returns a generic 403 on missing or invalid token.
+// This runs before the rate limiter so attackers cannot consume the operator quota.
+func setupBootstrapToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		expectedToken := currentBootstrapToken()
+		// If no token is set (CLI/AUTO_SETUP path), skip this middleware.
+		// This should not happen because the HTTP setup path always sets the token,
+		// but guard defensively.
+		if expectedToken == "" {
+			response.Error(c, http.StatusForbidden, "Forbidden")
+			c.Abort()
+			return
+		}
+
+		// Exactly one token header is required.
+		tokens := c.Request.Header.Values(BootstrapTokenHeader)
+		if len(tokens) != 1 {
+			response.Error(c, http.StatusForbidden, "Forbidden")
+			c.Abort()
+			return
+		}
+
+		// Constant-time comparison to prevent timing side channels.
+		if !constantTimeCompare(tokens[0], expectedToken) {
+			response.Error(c, http.StatusForbidden, "Forbidden")
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func setupRequestBodyLimit(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if maxBytes > 0 && c.Request != nil && c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		}
+		c.Next()
+	}
+}
+
+func setupMutationRateLimit(limiter *rate.Limiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if limiter == nil || limiter.Allow() {
+			c.Next()
+			return
+		}
+		response.Error(c, http.StatusTooManyRequests, "Too many setup requests")
+		c.Abort()
 	}
 }
 
@@ -323,7 +622,7 @@ func install(c *gin.Context) {
 		return
 	}
 	if req.Server.Host == "" {
-		req.Server.Host = "0.0.0.0"
+		req.Server.Host = "127.0.0.1"
 	}
 	if req.Server.Port == 0 {
 		req.Server.Port = 8080

@@ -139,6 +139,13 @@ func (s *AntigravityGatewayService) upstreamErrorBodyReadLimit() int64 {
 	return limit
 }
 
+func (s *AntigravityGatewayService) bufferedUpstreamResponseReadLimit() int64 {
+	if s != nil && s.settingService != nil {
+		return resolveUpstreamResponseReadLimit(s.settingService.cfg)
+	}
+	return resolveUpstreamResponseReadLimit(nil)
+}
+
 func (s *AntigravityGatewayService) readUpstreamErrorBody(resp *http.Response) []byte {
 	if resp == nil || resp.Body == nil {
 		return nil

@@ -110,13 +110,24 @@ sudo systemctl start sub2api
 sudo systemctl enable sub2api
 
 # 3. Open Setup Wizard in browser
-# http://YOUR_SERVER_IP:8080
+# http://127.0.0.1:8080
 ```
 
 The Setup Wizard will guide you through:
 - Database configuration
 - Redis configuration
 - Admin account creation
+
+**First-install security:** The service listens on loopback (127.0.0.1) only by default.
+- Access the wizard locally or via an SSH tunnel: `ssh -L 8080:localhost:8080 user@your-server`
+- The wizard requires a **bootstrap token** for API mutations. Read it from the server (never paste it into URLs, logs, or shared text):
+  ```bash
+  # On the server (or over SSH):
+  sudo cat /opt/sub2api/data/.bootstrap_token
+  ```
+- Copy the 64-character hex token and paste it into the wizard's **X-Bootstrap-Token** field when prompted.
+- The token is automatically removed after setup completes.
+- **Reverse proxy** (TLS termination, non-loopback access) should be configured only **after** setup completes.
 
 #### Upgrade
 
@@ -174,10 +185,9 @@ docker compose logs -f sub2api
 
 **What the script does:**
 - Downloads `docker-compose.local.yml` (saved as `docker-compose.yml`) and `.env.example`
-- Generates secure credentials (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
-- Creates `.env` file with auto-generated secrets
+- Generates secure secrets (`ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`)
+- Creates a mode-600 `.env` file with the generated secrets — nothing is printed to the terminal
 - Creates data directories (uses local directories for easy backup/migration)
-- Displays generated credentials for your reference
 
 #### Manual Deployment
 
@@ -199,21 +209,18 @@ nano .env
 **Required configuration in `.env`:**
 
 ```bash
-# PostgreSQL password (REQUIRED)
-POSTGRES_PASSWORD=your_secure_password_here
+# PostgreSQL password (REQUIRED — paste a generated value; do not leave empty)
+POSTGRES_PASSWORD=
 
-# JWT Secret (RECOMMENDED - keeps users logged in after restart)
-JWT_SECRET=your_jwt_secret_here
+# JWT Secret (REQUIRED - keeps users logged in after restart)
+JWT_SECRET=
 
-# TOTP Encryption Key (RECOMMENDED - preserves 2FA after restart)
-TOTP_ENCRYPTION_KEY=your_totp_key_here
+# TOTP Encryption Key (REQUIRED - preserves 2FA after restart)
+TOTP_ENCRYPTION_KEY=
 
-# Optional: Admin account
+# Admin account (REQUIRED — paste a generated value; do not leave empty)
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
-
-# Optional: Custom port
-SERVER_PORT=8080
+ADMIN_PASSWORD=
 ```
 
 **Generate secure secrets:**
@@ -226,7 +233,12 @@ openssl rand -hex 32
 
 # Generate POSTGRES_PASSWORD
 openssl rand -hex 32
+
+# Generate a strong ADMIN_PASSWORD
+openssl rand -hex 12  # 24-character hex password
 ```
+
+**Important:** Set `ADMIN_PASSWORD` in `.env` to a strong, unique value. The `docker-deploy.sh` script generates one automatically. For manual setup, use `openssl rand -hex 12` (or a password manager) to create a strong password and paste its output into the empty assignment above.
 
 ```bash
 # 4. Create data directories (for local version)
@@ -257,12 +269,11 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 
 #### Access
 
-Open `http://YOUR_SERVER_IP:8080` in your browser.
+Docker Compose deployments auto-initialize on first run (`AUTO_SETUP=true`): database migrations are applied and the admin account is created from `ADMIN_PASSWORD` in `.env`. There is no setup wizard — open `http://127.0.0.1:8080` and sign in with `ADMIN_EMAIL` and the `ADMIN_PASSWORD` from your `.env` file.
 
-If admin password was auto-generated, find it in logs:
-```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
-```
+The port is published on the loopback interface (`127.0.0.1`) by default. For remote access, use an SSH tunnel (`ssh -L 8080:localhost:8080 user@your-server`) or configure a TLS reverse proxy **after** the stack is up.
+
+> **Note:** The admin password is set via `ADMIN_PASSWORD` in `.env`. If you are upgrading from a previous version, adding or changing `ADMIN_PASSWORD` in `.env` **does not reset** an existing administrator account — the password is only used when creating the initial admin on first run. To change an existing admin password, use the admin dashboard or the password reset flow.
 
 #### Upgrade
 
@@ -534,7 +545,7 @@ or mitigating upstream WebSocket issues.
 
 #### ⚠️ Important: Creating the Admin Account
 
-The initial admin account is **only created via the setup wizard** (served at `http://<host>:8080` on first run). The `default.admin_email` / `default.admin_password` fields in `config.yaml` are **not used** to create it — they exist in the template for historical reasons.
+For standalone binary installs (not Docker Compose), the initial admin account is created through the bootstrap-token-protected setup wizard on loopback. Docker Compose uses `AUTO_SETUP` and creates the initial admin from `ADMIN_PASSWORD` before the login page is exposed. The `default.admin_email` / `default.admin_password` fields in `config.yaml` are **not used** to create either account — they exist in the template for historical reasons.
 
 Because step 5 above pre-creates `config.yaml`, the setup wizard will be **skipped on first run**: the server detects an existing config and boots straight into normal mode with an empty `users` table, so the first login attempt fails with `invalid email or password`.
 
@@ -550,6 +561,8 @@ Because step 5 above pre-creates `config.yaml`, the setup wizard will be **skipp
    mv config.yaml.bak config.yaml
    ./sub2api        # restart in normal mode and log in with the admin you just created
    ```
+
+> **Upgrade note:** If you are upgrading an existing deployment, setting `ADMIN_PASSWORD` in your environment or `.env` **does not reset** the existing administrator password. The password is only consumed during initial account creation. To change an existing admin password, use the admin dashboard settings or the password reset flow.
 
 ```bash
 # 6. Run the application

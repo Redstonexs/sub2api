@@ -16,6 +16,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+const maxChecksumFileBytes int64 = 1 << 20
+
 type githubReleaseClient struct {
 	httpClient         *http.Client
 	downloadHTTPClient *http.Client
@@ -61,6 +63,7 @@ func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) servi
 		downloadClient = &http.Client{Timeout: 10 * time.Minute}
 	}
 	downloadClient = cloneHTTPClient(downloadClient)
+	downloadClient.CheckRedirect = githubDownloadCheckRedirect(downloadClient.CheckRedirect)
 
 	return &githubReleaseClient{
 		httpClient:         apiClient,
@@ -79,10 +82,31 @@ func isGitHubAPIURL(url *url.URL) bool {
 		strings.EqualFold(url.Host, "api.github.com")
 }
 
+func isGitHubDownloadURL(rawURL *url.URL) bool {
+	if rawURL == nil || !strings.EqualFold(rawURL.Scheme, "https") || rawURL.User != nil || rawURL.Port() != "" {
+		return false
+	}
+	host := strings.ToLower(rawURL.Hostname())
+	return host == "github.com" || strings.HasSuffix(host, ".github.com") ||
+		host == "githubusercontent.com" || strings.HasSuffix(host, ".githubusercontent.com")
+}
+
 func githubAPICheckRedirect(previous func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if !isGitHubAPIURL(req.URL) {
 			req.Header.Del("Authorization")
+		}
+		if previous != nil {
+			return previous(req, via)
+		}
+		return nil
+	}
+}
+
+func githubDownloadCheckRedirect(previous func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if !isGitHubDownloadURL(req.URL) {
+			return fmt.Errorf("refusing redirect to untrusted GitHub download host")
 		}
 		if previous != nil {
 			return previous(req, via)
@@ -232,7 +256,8 @@ func (c *githubReleaseClient) FetchChecksumFile(ctx context.Context, url string)
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// 使用下载客户端（已包含 GitHub download 域名的重定向白名单 / HTTPS 保证）
+	resp, err := c.downloadHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -242,5 +267,12 @@ func (c *githubReleaseClient) FetchChecksumFile(ctx context.Context, url string)
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxChecksumFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxChecksumFileBytes {
+		return nil, fmt.Errorf("checksum file exceeds maximum size of %d bytes", maxChecksumFileBytes)
+	}
+	return body, nil
 }

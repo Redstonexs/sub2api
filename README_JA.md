@@ -109,13 +109,24 @@ sudo systemctl start sub2api
 sudo systemctl enable sub2api
 
 # 3. ブラウザでセットアップウィザードを開く
-# http://YOUR_SERVER_IP:8080
+# http://127.0.0.1:8080
 ```
 
 セットアップウィザードでは以下の設定を行います:
 - データベース設定
 - Redis 設定
 - 管理者アカウントの作成
+
+**初回インストールのセキュリティ:** サービスはデフォルトでループバック（127.0.0.1）のみをリッスンします。
+- ローカルでウィザードにアクセスするか、SSH トンネルを使用してください: `ssh -L 8080:localhost:8080 user@your-server`
+- ウィザードの API 変更には **bootstrap token** が必要です。サーバー上でトークンを読み取ってください（URL、ログ、共有テキストに絶対に貼り付けないでください）:
+  ```bash
+  # サーバー上（または SSH 経由）で:
+  sudo cat /opt/sub2api/data/.bootstrap_token
+  ```
+- 64 文字の 16 進トークンをコピーし、ウィザードの **X-Bootstrap-Token** フィールドに貼り付けてください。
+- セットアップ完了後、トークンは自動的に削除されます。
+- **リバースプロキシ**（TLS 終端、非ループバックアクセス）は**セットアップ完了後**にのみ構成してください。
 
 #### アップグレード
 
@@ -173,10 +184,9 @@ docker compose logs -f sub2api
 
 **スクリプトの動作内容:**
 - `docker-compose.local.yml`（`docker-compose.yml` として保存）と `.env.example` をダウンロード
-- セキュアな認証情報（JWT_SECRET、TOTP_ENCRYPTION_KEY、POSTGRES_PASSWORD）を自動生成
-- 自動生成されたシークレットで `.env` ファイルを作成
+- セキュアなシークレット（`ADMIN_PASSWORD`、`POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY`）を自動生成
+- パーミッション 600 の `.env` ファイルに生成したシークレットを書き込み（ターミナルには一切表示されません）
 - データディレクトリを作成（バックアップ・移行が容易なローカルディレクトリを使用）
-- 生成された認証情報を参照用に表示
 
 #### 手動デプロイ
 
@@ -198,18 +208,18 @@ nano .env
 **`.env` の必須設定:**
 
 ```bash
-# PostgreSQL パスワード（必須）
-POSTGRES_PASSWORD=your_secure_password_here
+# PostgreSQL パスワード（必須 — 生成した値を貼り付け、空欄にしないでください）
+POSTGRES_PASSWORD=
 
-# JWT シークレット（推奨 - 再起動後もユーザーのログイン状態を保持）
-JWT_SECRET=your_jwt_secret_here
+# JWT シークレット（必須 - 再起動後もユーザーのログイン状態を保持）
+JWT_SECRET=
 
-# TOTP 暗号化キー（推奨 - 再起動後も二要素認証を維持）
-TOTP_ENCRYPTION_KEY=your_totp_key_here
+# TOTP 暗号化キー（必須 - 再起動後も二要素認証を維持）
+TOTP_ENCRYPTION_KEY=
 
-# オプション: 管理者アカウント
+# 管理者アカウント（必須 — 生成した値を貼り付け、空欄にしないでください）
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
+ADMIN_PASSWORD=
 
 # オプション: カスタムポート
 SERVER_PORT=8080
@@ -225,7 +235,12 @@ openssl rand -hex 32
 
 # POSTGRES_PASSWORD を生成
 openssl rand -hex 32
+
+# 強力な ADMIN_PASSWORD を生成
+openssl rand -hex 12  # 24 文字の 16 進数パスワード
 ```
+
+**重要:** `ADMIN_PASSWORD` は `.env` で強力で一意な値に設定してください。`docker-deploy.sh` スクリプトが自動生成します。手動セットアップの場合は、`openssl rand -hex 12`（またはパスワードマネージャー）を使用して強力なパスワードを生成し、その出力を上記の空の代入に貼り付けてください。
 
 ```bash
 # 4. データディレクトリを作成（ローカルバージョンの場合）
@@ -256,12 +271,11 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 
 #### アクセス
 
-ブラウザで `http://YOUR_SERVER_IP:8080` を開いてください。
+Docker Compose デプロイは初回起動時に自動初期化されます（`AUTO_SETUP=true`）：データベースマイグレーションが適用され、`.env` の `ADMIN_PASSWORD` から管理者アカウントが作成されます。セットアップウィザードは不要です。`http://127.0.0.1:8080` を開き、`ADMIN_EMAIL` と `.env` の `ADMIN_PASSWORD` でログインしてください。
 
-管理者パスワードが自動生成された場合は、ログで確認できます:
-```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
-```
+ポートはデフォルトでループバック（`127.0.0.1`）にのみ公開されます。リモートアクセスには SSH トンネル（`ssh -L 8080:localhost:8080 user@your-server`）を使用するか、スタック起動後に TLS リバースプロキシを構成してください。
+
+> **注意:** 管理者パスワードは `.env` の `ADMIN_PASSWORD` で設定します。以前のバージョンからアップグレードする場合、`.env` で `ADMIN_PASSWORD` を追加または変更しても、既存の管理者アカウントは**リセットされません**。パスワードは初回実行時に初期管理者を作成するときのみ使用されます。既存の管理者パスワードを変更するには、管理ダッシュボードまたはパスワードリセットフローを使用してください。
 
 #### アップグレード
 
@@ -499,7 +513,7 @@ URL バリデーションまたはレスポンスヘッダーフィルタリン�
 
 #### ⚠️ 重要：管理者アカウントの作成
 
-初期管理者アカウントは**セットアップウィザード経由でのみ作成**されます（初回起動時に `http://<host>:8080` にアクセス）。`config.yaml` の `default.admin_email` / `default.admin_password` フィールドは**管理者作成には使われません**。テンプレートに残っているのは歴史的経緯によるものです。
+スタンドアロンのバイナリ配布（Docker Compose 以外）では、初期管理者アカウントはループバック上で bootstrap token により保護されたセットアップウィザードを通じて作成されます。Docker Compose では `AUTO_SETUP` を使用し、ログイン画面を公開する前に `ADMIN_PASSWORD` で初期管理者を作成します。`config.yaml` の `default.admin_email` / `default.admin_password` フィールドは**どちらの管理者アカウント作成にも使われません**。テンプレートに残っているのは歴史的経緯によるものです。
 
 上記ステップ 5 で事前に `config.yaml` を作成しているため、**初回起動時にセットアップウィザードはスキップされます**。サーバーは既存の config を検出して通常モードで直接起動し、この時点では `users` テーブルが空のため、初回ログインは `invalid email or password` を返します。
 
@@ -507,14 +521,16 @@ URL バリデーションまたはレスポンスヘッダーフィルタリン�
 
 1. **推奨 — ウィザードに `config.yaml` を自動生成させる:** 上記ステップ 5 をスキップします（`cp` を実行しない）。`./sub2api` を直接起動し、`http://localhost:8080` にアクセスすると、セットアップウィザードがデータベース・Redis・管理者アカウントの設定を案内し、`config.yaml` を自動生成します。
 
-2. **すでに `config.yaml` を作成してしまった場合:** 初回起動前に一時的に退避してウィザードを発生させ、完了後に戻します:
+2. **既に `config.yaml` を作成している場合:** 初回起動前に一時的に退避させてウィザードを起動させ、完了後に元に戻します:
    ```bash
    mv config.yaml config.yaml.bak
-   ./sub2api        # ウィザードが http://localhost:8080 で起動し、新しい config.yaml を生成します
-   # ウィザード完了後、Ctrl+C でサーバーを停止し、設定を復元します:
+   ./sub2api        # ウィザードが http://localhost:8080 で起動し、新しい config.yaml を生成
+   # ウィザード完了後、サーバーを停止 (Ctrl+C) し、設定を戻します:
    mv config.yaml.bak config.yaml
-   ./sub2api        # 通常モードで再起動し、作成した管理者でログインします
+   ./sub2api        # 通常モードで再起動し、作成した管理者でログイン
    ```
+
+> **アップグレードに関する注意:** 既存のデプロイをアップグレードする場合、環境変数や `.env` で `ADMIN_PASSWORD` を設定しても、既存の管理者パスワードは**リセットされません**。パスワードは初回のアカウント作成時のみ使用されます。既存の管理者パスワードを変更するには、管理ダッシュボードの設定またはパスワードリセットフローを使用してください。
 
 ```bash
 # 6. アプリケーションを実行

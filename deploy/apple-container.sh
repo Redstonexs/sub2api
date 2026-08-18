@@ -28,6 +28,7 @@ HOST_PORT=""
 ACCESS_HOST=""
 POSTGRES_USER=""
 POSTGRES_PASSWORD=""
+ADMIN_PASSWORD=""
 POSTGRES_DB=""
 REDIS_PASSWORD=""
 TZ_VALUE=""
@@ -333,7 +334,7 @@ generate_secret() {
 }
 
 cmd_init() {
-    local env_dir temp_file postgres_secret jwt_secret totp_secret
+    local env_dir temp_file postgres_secret admin_secret jwt_secret totp_secret
 
     require_command openssl
 
@@ -342,9 +343,10 @@ cmd_init() {
     fi
 
     postgres_secret="$(generate_secret)" || die "Failed to generate PostgreSQL password."
+    admin_secret="$(generate_secret)" || die "Failed to generate admin password."
     jwt_secret="$(generate_secret)" || die "Failed to generate JWT secret."
     totp_secret="$(generate_secret)" || die "Failed to generate TOTP encryption key."
-    [[ -n "${postgres_secret}" && -n "${jwt_secret}" && -n "${totp_secret}" ]] || \
+    [[ -n "${postgres_secret}" && -n "${admin_secret}" && -n "${jwt_secret}" && -n "${totp_secret}" ]] || \
         die "Secret generation returned an empty value."
 
     env_dir="$(dirname "${ENV_FILE}")"
@@ -353,6 +355,7 @@ cmd_init() {
     cp "${SCRIPT_DIR}/.env.example" "${temp_file}"
     chmod 600 "${temp_file}"
     replace_env_value POSTGRES_PASSWORD "${postgres_secret}" "${temp_file}"
+    replace_env_value ADMIN_PASSWORD "${admin_secret}" "${temp_file}"
     replace_env_value JWT_SECRET "${jwt_secret}" "${temp_file}"
     replace_env_value TOTP_ENCRYPTION_KEY "${totp_secret}" "${temp_file}"
     mv "${temp_file}" "${ENV_FILE}"
@@ -388,8 +391,13 @@ validate_env_file_security() {
     local owner mode permissions
 
     [[ -f "${ENV_FILE}" ]] || die "Environment file not found: ${ENV_FILE}. Run '$0 init' first."
-    owner="$(stat -f '%u' "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
-    mode="$(stat -f '%Lp' "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
+    if stat -f '%u' "${ENV_FILE}" >/dev/null 2>&1; then
+        owner="$(stat -f '%u' "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
+        mode="$(stat -f '%Lp' "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
+    else
+        owner="$(stat -c '%u' "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
+        mode="$(stat -c '%a' "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
+    fi
     [[ "${owner}" == "${EUID}" ]] || die "Environment file must be owned by the current user: ${ENV_FILE}"
     [[ "${mode}" =~ ^[0-7]+$ ]] || die "Unable to parse permissions for ${ENV_FILE}: ${mode}"
     permissions=$((8#${mode}))
@@ -403,10 +411,11 @@ prepare_environment() {
     APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE ghcr.io/redstonexs/sub2api:latest)"
     POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE postgres:18-alpine)"
     REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE redis:8-alpine)"
-    BIND_HOST="$(read_env_value BIND_HOST 0.0.0.0)"
+    BIND_HOST="$(read_env_value BIND_HOST 127.0.0.1)"
     HOST_PORT="$(read_env_value SERVER_PORT 8080)"
     POSTGRES_USER="$(read_env_value POSTGRES_USER sub2api)"
     POSTGRES_PASSWORD="$(read_env_value POSTGRES_PASSWORD)"
+    ADMIN_PASSWORD="$(read_env_value ADMIN_PASSWORD)"
     POSTGRES_DB="$(read_env_value POSTGRES_DB sub2api)"
     REDIS_PASSWORD="$(read_env_value REDIS_PASSWORD)"
     TZ_VALUE="$(read_env_value TZ Asia/Shanghai)"
@@ -423,6 +432,9 @@ prepare_environment() {
     [[ -n "${POSTGRES_DB}" ]] || die "POSTGRES_DB must not be empty."
     if [[ -z "${POSTGRES_PASSWORD}" || "${POSTGRES_PASSWORD}" == "change_this_secure_password" ]]; then
         die "Set a secure POSTGRES_PASSWORD in ${ENV_FILE}."
+    fi
+    if [[ -z "${ADMIN_PASSWORD}" ]]; then
+        die "Set a secure ADMIN_PASSWORD in ${ENV_FILE}."
     fi
 
     TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sub2api-apple.XXXXXX")"

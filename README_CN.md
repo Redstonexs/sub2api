@@ -110,13 +110,24 @@ sudo systemctl start sub2api
 sudo systemctl enable sub2api
 
 # 3. 在浏览器中打开设置向导
-# http://你的服务器IP:8080
+# http://127.0.0.1:8080
 ```
 
 设置向导将引导你完成：
 - 数据库配置
 - Redis 配置
 - 管理员账号创建
+
+**首次安装安全说明：** 服务默认仅监听本地回环地址（127.0.0.1）。
+- 在服务器本地访问向导，或通过 SSH 隧道访问：`ssh -L 8080:localhost:8080 user@your-server`
+- 向导的 API 修改操作需要 **bootstrap token**。在服务器上读取该令牌（切勿将其放入 URL、日志或共享文本中）：
+  ```bash
+  # 在服务器上（或通过 SSH）：
+  sudo cat /opt/sub2api/data/.bootstrap_token
+  ```
+- 复制 64 位十六进制令牌，在向导提示时粘贴到 **X-Bootstrap-Token** 字段中。
+- 设置完成后，该令牌会自动删除。
+- **反向代理**（TLS 终止、非回环访问）应仅在**设置完成后**配置。
 
 #### 升级
 
@@ -174,10 +185,9 @@ docker compose logs -f sub2api
 
 **脚本功能：**
 - 下载 `docker-compose.local.yml`（本地保存为 `docker-compose.yml`）和 `.env.example`
-- 自动生成安全凭证（JWT_SECRET、TOTP_ENCRYPTION_KEY、POSTGRES_PASSWORD）
-- 创建 `.env` 文件并填充自动生成的密钥
+- 自动生成安全密钥（`ADMIN_PASSWORD`、`POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY`）
+- 创建权限为 600 的 `.env` 文件并写入生成的密钥——终端不会打印任何密钥
 - 创建数据目录（使用本地目录，便于备份和迁移）
-- 显示生成的凭证供你记录
 
 #### 手动部署
 
@@ -199,21 +209,18 @@ nano .env
 **`.env` 必须配置项：**
 
 ```bash
-# PostgreSQL 密码（必需）
-POSTGRES_PASSWORD=your_secure_password_here
+# PostgreSQL 密码（必需 — 粘贴生成的值，勿留空）
+POSTGRES_PASSWORD=
 
-# JWT 密钥（推荐 - 重启后保持用户登录状态）
-JWT_SECRET=your_jwt_secret_here
+# JWT 密钥（必需 - 重启后保持用户登录状态）
+JWT_SECRET=
 
-# TOTP 加密密钥（推荐 - 重启后保留双因素认证）
-TOTP_ENCRYPTION_KEY=your_totp_key_here
+# TOTP 加密密钥（必需 - 重启后保留双因素认证）
+TOTP_ENCRYPTION_KEY=
 
-# 可选：管理员账号
+# 管理员账号（必需 — 粘贴生成的值，勿留空）
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
-
-# 可选：自定义端口
-SERVER_PORT=8080
+ADMIN_PASSWORD=
 ```
 
 **生成安全密钥：**
@@ -226,7 +233,12 @@ openssl rand -hex 32
 
 # 生成 POSTGRES_PASSWORD
 openssl rand -hex 32
+
+# 生成强 ADMIN_PASSWORD
+openssl rand -hex 12  # 24 字符十六进制密码
 ```
+
+**重要：** 在 `.env` 中设置 `ADMIN_PASSWORD` 为强密码。`docker-deploy.sh` 脚本会自动生成。手动部署时，使用 `openssl rand -hex 12`（或密码管理器）生成强密码，并将输出粘贴到上面的空赋值中。
 
 ```bash
 # 4. 创建数据目录（本地版）
@@ -269,12 +281,11 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 
 #### 访问
 
-在浏览器中打开 `http://你的服务器IP:8080`
+Docker Compose 部署在首次运行时自动初始化（`AUTO_SETUP=true`）：自动执行数据库迁移，并根据 `.env` 中的 `ADMIN_PASSWORD` 创建管理员账号。无需设置向导——打开 `http://127.0.0.1:8080`，使用 `ADMIN_EMAIL` 和 `.env` 中的 `ADMIN_PASSWORD` 登录即可。
 
-如果管理员密码是自动生成的，在日志中查找：
-```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
-```
+端口默认只发布到回环地址（`127.0.0.1`）。远程访问请使用 SSH 隧道（`ssh -L 8080:localhost:8080 user@your-server`），或在服务启动后配置 TLS 反向代理。
+
+> **注意：** 管理员密码通过 `.env` 中的 `ADMIN_PASSWORD` 设置。如果是从旧版本升级，在 `.env` 中添加或修改 `ADMIN_PASSWORD` **不会重置**已有管理员账户的密码——该密码仅在首次运行时创建初始管理员时使用。如需修改已有管理员密码，请使用管理后台或密码重置流程。
 
 #### 升级
 
@@ -541,22 +552,24 @@ Invalid base URL: invalid url scheme: http
 
 #### ⚠️ 重要：创建管理员账号
 
-初始管理员账号**只能通过 setup 向导创建**（首次启动时访问 `http://<host>:8080`）。`config.yaml` 中的 `default.admin_email` / `default.admin_password` 字段**不会被用来创建管理员**——它们只是出于历史原因保留在模板里。
+对于独立二进制部署（非 Docker Compose），初始管理员账号通过仅绑定回环地址、受 bootstrap token 保护的 setup 向导创建。Docker Compose 使用 `AUTO_SETUP`，并在开放登录页前通过 `ADMIN_PASSWORD` 创建初始管理员。`config.yaml` 中的 `default.admin_email` / `default.admin_password` 字段**不会被用来创建任一管理员账号**——它们只是出于历史原因保留在模板里。
 
 由于上面第 5 步预先创建了 `config.yaml`，**setup 向导在首次启动时会被跳过**：服务检测到 config 已存在，会直接进入正常模式，此时 `users` 表为空，首次登录会返回 `invalid email or password`。
 
-**创建管理员的两种方式：**
+**两种创建管理员账号的方法：**
 
-1. **推荐——让向导自动生成 `config.yaml`：** 跳过上面的第 5 步（不要执行 `cp`）。直接运行 `./sub2api`，访问 `http://localhost:8080`，向导会引导你完成数据库、Redis 和管理员账号配置，并自动写出 `config.yaml`。
+1. **推荐 — 让向导生成 `config.yaml`：** 跳过上面的第 5 步（不执行 `cp`）。直接启动 `./sub2api`，通过 `http://localhost:8080` 的 setup 向导完成数据库、Redis 和管理员账号的配置，并自动生成 `config.yaml`。
 
 2. **如果你已经创建了 `config.yaml`：** 首次启动前先把它临时移走以触发向导，完成后再恢复：
    ```bash
    mv config.yaml config.yaml.bak
-   ./sub2api        # 向导在 http://localhost:8080 启动，并生成新的 config.yaml
-   # 向导完成后 Ctrl+C 停服，再恢复你的配置：
+   ./sub2api        # 向导在 http://localhost:8080 运行并生成新的 config.yaml
+   # 向导完成后停止服务器 (Ctrl+C)，然后恢复配置：
    mv config.yaml.bak config.yaml
-   ./sub2api        # 重启进入正常模式，用刚创建的管理员登录
+   ./sub2api        # 以正常模式重启，使用刚创建的管理员登录
    ```
+
+> **升级注意事项：** 如果你是在升级已有部署，在环境变量或 `.env` 中设置 `ADMIN_PASSWORD` **不会重置**已有管理员密码。该密码仅在首次创建账户时使用。如需修改已有管理员密码，请使用管理后台设置或密码重置流程。
 
 ```bash
 # 6. 运行应用

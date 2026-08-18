@@ -30,6 +30,20 @@ func RegisterAuthRoutes(
 	auth.Use(servermiddleware.BackendModeAuthGuard(settingService))
 	// 认证事件（登录/注册/2FA/token 刷新失败）入审计
 	auth.Use(gin.HandlerFunc(auditLog))
+	oauthStart := func(path string, handlers ...gin.HandlerFunc) {
+		auth.GET(path, append([]gin.HandlerFunc{
+			rateLimiter.LimitWithOptions("oauth-start", 20, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+		}, handlers...)...)
+	}
+	oauthCallback := func(path string, handlers ...gin.HandlerFunc) {
+		auth.GET(path, append([]gin.HandlerFunc{
+			rateLimiter.LimitWithOptions("oauth-callback", 60, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+		}, handlers...)...)
+	}
 	{
 		// 注册/登录/2FA/验证码发送均属于高风险入口，增加服务端兜底限流（Redis 故障时 fail-close）
 		auth.POST("/register", rateLimiter.LimitWithOptions("auth-register", 5, time.Minute, middleware.RateLimitOptions{
@@ -72,52 +86,52 @@ func RegisterAuthRoutes(
 		auth.POST("/reset-password", rateLimiter.LimitWithOptions("reset-password", 10, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.ResetPassword)
-		auth.GET("/oauth/linuxdo/start", h.Auth.LinuxDoOAuthStart)
+		oauthStart("/oauth/linuxdo/start", h.Auth.LinuxDoOAuthStart)
 		auth.POST("/oauth/linuxdo/start", rateLimiter.LimitWithOptions("oauth-linuxdo-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.LinuxDoOAuthStart)
-		auth.GET("/oauth/github/start", h.Auth.GitHubOAuthStart)
+		oauthStart("/oauth/github/start", h.Auth.GitHubOAuthStart)
 		auth.POST("/oauth/github/start", rateLimiter.LimitWithOptions("oauth-github-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.GitHubOAuthStart)
-		auth.GET("/oauth/github/callback", h.Auth.GitHubOAuthCallback)
+		oauthCallback("/oauth/github/callback", h.Auth.GitHubOAuthCallback)
 		auth.POST("/oauth/github/complete-registration",
 			rateLimiter.LimitWithOptions("oauth-github-complete", 10, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,
 			}),
 			h.Auth.CompleteGitHubOAuthRegistration,
 		)
-		auth.GET("/oauth/google/start", h.Auth.GoogleOAuthStart)
+		oauthStart("/oauth/google/start", h.Auth.GoogleOAuthStart)
 		auth.POST("/oauth/google/start", rateLimiter.LimitWithOptions("oauth-google-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.GoogleOAuthStart)
-		auth.GET("/oauth/google/callback", h.Auth.GoogleOAuthCallback)
+		oauthCallback("/oauth/google/callback", h.Auth.GoogleOAuthCallback)
 		auth.POST("/oauth/google/complete-registration",
 			rateLimiter.LimitWithOptions("oauth-google-complete", 10, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,
 			}),
 			h.Auth.CompleteGoogleOAuthRegistration,
 		)
-		auth.GET("/oauth/linuxdo/bind/start", func(c *gin.Context) {
+		oauthStart("/oauth/linuxdo/bind/start", func(c *gin.Context) {
 			query := c.Request.URL.Query()
 			query.Set("intent", "bind_current_user")
 			c.Request.URL.RawQuery = query.Encode()
 			h.Auth.LinuxDoOAuthStart(c)
 		})
-		auth.GET("/oauth/linuxdo/callback", h.Auth.LinuxDoOAuthCallback)
-		auth.GET("/oauth/wechat/start", h.Auth.WeChatOAuthStart)
+		oauthCallback("/oauth/linuxdo/callback", h.Auth.LinuxDoOAuthCallback)
+		oauthStart("/oauth/wechat/start", h.Auth.WeChatOAuthStart)
 		auth.POST("/oauth/wechat/start", rateLimiter.LimitWithOptions("oauth-wechat-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.WeChatOAuthStart)
-		auth.GET("/oauth/wechat/bind/start", func(c *gin.Context) {
+		oauthStart("/oauth/wechat/bind/start", func(c *gin.Context) {
 			query := c.Request.URL.Query()
 			query.Set("intent", "bind_current_user")
 			c.Request.URL.RawQuery = query.Encode()
 			h.Auth.WeChatOAuthStart(c)
 		})
-		auth.GET("/oauth/wechat/callback", h.Auth.WeChatOAuthCallback)
-		auth.GET("/oauth/wechat/payment/start", h.Auth.WeChatPaymentOAuthStart)
-		auth.GET("/oauth/wechat/payment/callback", h.Auth.WeChatPaymentOAuthCallback)
+		oauthCallback("/oauth/wechat/callback", h.Auth.WeChatOAuthCallback)
+		oauthStart("/oauth/wechat/payment/start", h.Auth.WeChatPaymentOAuthStart)
+		oauthCallback("/oauth/wechat/payment/callback", h.Auth.WeChatPaymentOAuthCallback)
 		auth.POST("/oauth/pending/exchange",
 			rateLimiter.LimitWithOptions("oauth-pending-exchange", 20, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,
@@ -178,17 +192,17 @@ func RegisterAuthRoutes(
 			}),
 			h.Auth.CreateWeChatOAuthAccount,
 		)
-		auth.GET("/oauth/oidc/start", h.Auth.OIDCOAuthStart)
+		oauthStart("/oauth/oidc/start", h.Auth.OIDCOAuthStart)
 		auth.POST("/oauth/oidc/start", rateLimiter.LimitWithOptions("oauth-oidc-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.OIDCOAuthStart)
-		auth.GET("/oauth/oidc/bind/start", func(c *gin.Context) {
+		oauthStart("/oauth/oidc/bind/start", func(c *gin.Context) {
 			query := c.Request.URL.Query()
 			query.Set("intent", "bind_current_user")
 			c.Request.URL.RawQuery = query.Encode()
 			h.Auth.OIDCOAuthStart(c)
 		})
-		auth.GET("/oauth/oidc/callback", h.Auth.OIDCOAuthCallback)
+		oauthCallback("/oauth/oidc/callback", h.Auth.OIDCOAuthCallback)
 		auth.POST("/oauth/oidc/complete-registration",
 			rateLimiter.LimitWithOptions("oauth-oidc-complete", 10, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,
@@ -207,17 +221,17 @@ func RegisterAuthRoutes(
 			}),
 			h.Auth.CreateOIDCOAuthAccount,
 		)
-		auth.GET("/oauth/dingtalk/start", h.Auth.DingTalkOAuthStart)
+		oauthStart("/oauth/dingtalk/start", h.Auth.DingTalkOAuthStart)
 		auth.POST("/oauth/dingtalk/start", rateLimiter.LimitWithOptions("oauth-dingtalk-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.DingTalkOAuthStart)
-		auth.GET("/oauth/dingtalk/bind/start", func(c *gin.Context) {
+		oauthStart("/oauth/dingtalk/bind/start", func(c *gin.Context) {
 			query := c.Request.URL.Query()
 			query.Set("intent", "bind_current_user")
 			c.Request.URL.RawQuery = query.Encode()
 			h.Auth.DingTalkOAuthStart(c)
 		})
-		auth.GET("/oauth/dingtalk/callback", h.Auth.DingTalkOAuthCallback)
+		oauthCallback("/oauth/dingtalk/callback", h.Auth.DingTalkOAuthCallback)
 		auth.POST("/oauth/dingtalk/complete-registration",
 			rateLimiter.LimitWithOptions("oauth-dingtalk-complete", 10, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,

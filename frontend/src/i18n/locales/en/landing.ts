@@ -193,6 +193,11 @@ export default {
   setup: {
     title: 'Sub2API Setup',
     description: 'Configure your Sub2API instance',
+    bootstrapToken: {
+      label: 'Bootstrap token',
+      description: 'Read the token locally or over SSH from the bootstrap-token file in DATA_DIR, then paste it here. It stays in memory for this tab only.',
+      placeholder: 'Paste the bootstrap token',
+    },
     database: {
       title: 'Database Configuration',
       description: 'Connect to your PostgreSQL database',

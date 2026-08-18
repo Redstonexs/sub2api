@@ -59,6 +59,23 @@
 
       <!-- Step Content -->
       <div class="rounded-2xl bg-white p-8 shadow-xl dark:bg-dark-800">
+        <!-- Bootstrap unlock -->
+        <div class="mb-8 rounded-xl border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-900/60 dark:bg-primary-950/20">
+          <label for="bootstrap-token" class="input-label">{{ t('setup.bootstrapToken.label') }}</label>
+          <p class="mb-3 text-sm text-gray-600 dark:text-dark-300">
+            {{ t('setup.bootstrapToken.description') }}
+          </p>
+          <input
+            id="bootstrap-token"
+            v-model="bootstrapTokenInput"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            class="input"
+            :placeholder="t('setup.bootstrapToken.placeholder')"
+          />
+        </div>
+
         <!-- Step 1: Database -->
         <div v-if="currentStep === 0" class="space-y-6">
           <div class="mb-6 text-center">
@@ -150,7 +167,7 @@
 
           <button
             @click="testDatabaseConnection"
-            :disabled="testingDb"
+            :disabled="testingDb || !hasBootstrapToken"
             class="btn btn-secondary w-full"
           >
             <svg
@@ -260,7 +277,7 @@
 
           <button
             @click="testRedisConnection"
-            :disabled="testingRedis"
+            :disabled="testingRedis || !hasBootstrapToken"
             class="btn btn-secondary w-full"
           >
             <svg
@@ -467,7 +484,7 @@
           <button
             v-else-if="!installSuccess"
             @click="performInstall"
-            :disabled="installing"
+            :disabled="installing || !hasBootstrapToken"
             class="btn btn-primary"
           >
             <svg
@@ -499,9 +516,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { testDatabase, testRedis, install, type InstallRequest } from '@/api/setup'
+import {
+  testDatabase,
+  testRedis,
+  install,
+  setBootstrapToken,
+  clearBootstrapToken,
+  type InstallRequest
+} from '@/api/setup'
 import { buildGatewayUrl } from '@/api/client'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
@@ -519,6 +543,11 @@ const steps = computed(() => [
 const currentStep = ref(0)
 const errorMessage = ref('')
 const installSuccess = ref(false)
+const bootstrapTokenInput = ref('')
+const hasBootstrapToken = computed(() => bootstrapTokenInput.value.trim().length > 0)
+
+watch(bootstrapTokenInput, (token) => setBootstrapToken(token))
+onBeforeUnmount(clearBootstrapToken)
 
 // Connection test states
 const testingDb = ref(false)
@@ -561,7 +590,7 @@ const formData = reactive<InstallRequest>({
     password: ''
   },
   server: {
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: getCurrentPort(), // Use current port from browser
     mode: 'release'
   }
@@ -570,9 +599,9 @@ const formData = reactive<InstallRequest>({
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 0:
-      return dbConnected.value
+      return hasBootstrapToken.value && dbConnected.value
     case 1:
-      return redisConnected.value
+      return hasBootstrapToken.value && redisConnected.value
     case 2:
       return (
         formData.admin.email &&
@@ -585,6 +614,7 @@ const canProceed = computed(() => {
 })
 
 async function testDatabaseConnection() {
+  if (!hasBootstrapToken.value) return
   testingDb.value = true
   errorMessage.value = ''
   dbConnected.value = false
@@ -602,6 +632,7 @@ async function testDatabaseConnection() {
 }
 
 async function testRedisConnection() {
+  if (!hasBootstrapToken.value) return
   testingRedis.value = true
   errorMessage.value = ''
   redisConnected.value = false
@@ -626,6 +657,7 @@ function nextStep() {
 }
 
 async function performInstall() {
+  if (!hasBootstrapToken.value) return
   installing.value = true
   errorMessage.value = ''
 

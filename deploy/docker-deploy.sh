@@ -4,7 +4,7 @@
 # =============================================================================
 # This script prepares deployment files for Sub2API:
 #   - Downloads docker-compose.local.yml and .env.example
-#   - Generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
+#   - Generates secure secrets (ADMIN_PASSWORD, JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
@@ -112,22 +112,34 @@ main() {
     JWT_SECRET=$(generate_secret)
     TOTP_ENCRYPTION_KEY=$(generate_secret)
     POSTGRES_PASSWORD=$(generate_secret)
+    ADMIN_PASSWORD=$(generate_secret)
 
-    # Create .env from .env.example
+    # Create .env from .env.example with restricted permissions
+    # umask 077 prevents other users from reading the file during creation
+    umask 077
     cp .env.example .env
+    chmod 600 .env
 
-    # Update .env with generated secrets (cross-platform compatible)
+    # Update .env with generated secrets using a temp sed script file.
+    # This avoids exposing secrets in the process list (visible via ps).
+    local sed_script
+    sed_script=$(mktemp)
+    chmod 600 "$sed_script"
+    cat > "$sed_script" <<-SEDEOF
+	s/^JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/
+	s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY/
+	s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$POSTGRES_PASSWORD/
+	s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=$ADMIN_PASSWORD/
+	SEDEOF
+
     if sed --version >/dev/null 2>&1; then
         # GNU sed (Linux)
-        sed -i "s/^JWT_SECRET=.*/JWT_SECRET=${JWT_SECRET}/" .env
-        sed -i "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}/" .env
-        sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+        sed -i -f "$sed_script" .env
     else
         # BSD sed (macOS)
-        sed -i '' "s/^JWT_SECRET=.*/JWT_SECRET=${JWT_SECRET}/" .env
-        sed -i '' "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}/" .env
-        sed -i '' "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+        sed -i '' -f "$sed_script" .env
     fi
+    rm -f "$sed_script"
 
     # Create data directories
     print_info "Creating data directories..."
@@ -143,13 +155,8 @@ main() {
     echo "  Preparation Complete!"
     echo "=========================================="
     echo ""
-    echo "Generated secure credentials:"
-    echo "  POSTGRES_PASSWORD:     ${POSTGRES_PASSWORD}"
-    echo "  JWT_SECRET:            ${JWT_SECRET}"
-    echo "  TOTP_ENCRYPTION_KEY:   ${TOTP_ENCRYPTION_KEY}"
-    echo ""
-    print_warning "These credentials have been saved to .env file."
-    print_warning "Please keep them secure and do not share publicly!"
+    print_warning "Secure credentials have been saved to the mode-600 .env file."
+    print_warning "Do not print, commit, or share that file."
     echo ""
     echo "Directory structure:"
     echo "  docker-compose.yml        - Docker Compose configuration"
@@ -171,9 +178,6 @@ main() {
     echo ""
     echo "  4. Access Web UI:"
     echo "     http://localhost:8080"
-    echo ""
-    print_info "If admin password is not set in .env, it will be auto-generated."
-    print_info "Check logs for the generated admin password on first startup."
     echo ""
 }
 

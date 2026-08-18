@@ -248,3 +248,41 @@ func TestBuildDatabaseConnectionDSNsUsesPostgresForBootstrap(t *testing.T) {
 		t.Fatalf("target DSN = %q, want configured database", targetDSN)
 	}
 }
+
+func TestGetSetupServerAddressAlwaysUsesLoopback(t *testing.T) {
+	t.Setenv("SERVER_HOST", "0.0.0.0")
+	t.Setenv("SERVER_PORT", "9080")
+	t.Setenv("SETUP_PORT", "")
+
+	if got, want := GetSetupServerAddress(), "127.0.0.1:9080"; got != want {
+		t.Fatalf("GetSetupServerAddress() = %q, want %q", got, want)
+	}
+}
+
+func TestGetSetupServerAddressUsesSafePortFallback(t *testing.T) {
+	t.Setenv("SERVER_PORT", "not-a-port")
+	t.Setenv("SETUP_PORT", "70000")
+
+	if got, want := GetSetupServerAddress(), "127.0.0.1:8080"; got != want {
+		t.Fatalf("GetSetupServerAddress() = %q, want %q", got, want)
+	}
+}
+
+func TestInstallRejectsMissingAdminPasswordBeforeSideEffects(t *testing.T) {
+	t.Setenv("DATA_DIR", t.TempDir())
+
+	err := Install(&SetupConfig{})
+	if err == nil || !strings.Contains(err.Error(), "invalid admin password") {
+		t.Fatalf("Install() error = %v, want invalid admin password", err)
+	}
+}
+
+func TestAutoSetupFromEnvRejectsMissingAdminPasswordBeforeSideEffects(t *testing.T) {
+	t.Setenv("DATA_DIR", t.TempDir())
+	t.Setenv("ADMIN_PASSWORD", "")
+
+	err := AutoSetupFromEnv()
+	if err == nil || !strings.Contains(err.Error(), "ADMIN_PASSWORD") {
+		t.Fatalf("AutoSetupFromEnv() error = %v, want ADMIN_PASSWORD validation error", err)
+	}
+}

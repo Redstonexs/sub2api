@@ -32,6 +32,28 @@ check_application_security_opt() {
   fi
 }
 
+check_required_admin_password() {
+  file=$1
+  expected='      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}'
+  count=$(grep -Fxc "$expected" "$file" || true)
+
+  if [ "$count" -ne 1 ]; then
+    printf '%s must require ADMIN_PASSWORD exactly once for the sub2api service\n' "$file" >&2
+    exit 1
+  fi
+}
+
+check_loopback_bind_default() {
+  file=$1
+  expected='      - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"'
+  count=$(grep -Fxc -- "$expected" "$file" || true)
+
+  if [ "$count" -ne 1 ]; then
+    printf '%s must default BIND_HOST to 127.0.0.1 (loopback)\n' "$file" >&2
+    exit 1
+  fi
+}
+
 for compose_file in \
   deploy/docker-compose.yml \
   deploy/docker-compose.local.yml \
@@ -39,6 +61,10 @@ for compose_file in \
   deploy/docker-compose.dev.yml
 do
   check_application_security_opt "$compose_file"
+  check_required_admin_password "$compose_file"
+  if [ "$compose_file" != "deploy/docker-compose.dev.yml" ]; then
+    check_loopback_bind_default "$compose_file"
+  fi
 done
 
 printf 'docker compose security test passed\n'

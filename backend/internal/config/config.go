@@ -1656,8 +1656,6 @@ type TurnstileConfig struct {
 }
 
 type DefaultConfig struct {
-	AdminEmail      string  `mapstructure:"admin_email"`
-	AdminPassword   string  `mapstructure:"admin_password"`
 	UserConcurrency int     `mapstructure:"user_concurrency"`
 	UserBalance     float64 `mapstructure:"user_balance"`
 	APIKeyPrefix    string  `mapstructure:"api_key_prefix"`
@@ -2003,7 +2001,9 @@ func setDefaults() {
 	viper.SetDefault("run_mode", RunModeStandard)
 
 	// Server
-	viper.SetDefault("server.host", "0.0.0.0")
+	// Production binaries listen on loopback by default. Container deployments
+	// explicitly override this so their published port remains reachable.
+	viper.SetDefault("server.host", "127.0.0.1")
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "release")
 	viper.SetDefault("server.enable_server_timing", false)
@@ -2287,10 +2287,6 @@ func setDefaults() {
 	viper.SetDefault("totp.encryption_key", "")
 
 	// Default
-	// Admin credentials are created via the setup flow (web wizard / CLI / AUTO_SETUP).
-	// Do not ship fixed defaults here to avoid insecure "known credentials" in production.
-	viper.SetDefault("default.admin_email", "")
-	viper.SetDefault("default.admin_password", "")
 	viper.SetDefault("default.user_concurrency", 5)
 	viper.SetDefault("default.user_balance", 0)
 	viper.SetDefault("default.api_key_prefix", "sk-")
@@ -3759,7 +3755,7 @@ func GetServerAddress() string {
 	// Support SERVER_HOST and SERVER_PORT environment variables
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.SetDefault("server.host", "0.0.0.0")
+	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.port", 8080)
 
 	// Try to read config file (ignore errors if not found)

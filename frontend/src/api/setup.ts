@@ -13,6 +13,21 @@ const setupClient = axios.create({
   }
 })
 
+// Keep the bootstrap token in memory only; never put it in browser storage or URLs.
+let bootstrapToken = ''
+
+export function setBootstrapToken(token: string): void {
+  bootstrapToken = token.trim()
+}
+
+export function clearBootstrapToken(): void {
+  bootstrapToken = ''
+}
+
+export function hasBootstrapToken(): boolean {
+  return bootstrapToken.length > 0
+}
+
 export interface SetupStatus {
   needs_setup: boolean
   step: string
@@ -71,20 +86,20 @@ export async function getSetupStatus(): Promise<SetupStatus> {
  * Test database connection
  */
 export async function testDatabase(config: DatabaseConfig): Promise<void> {
-  await setupClient.post('/setup/test-db', config)
+  await setupClient.post('/setup/test-db', config, { headers: { 'X-Bootstrap-Token': bootstrapToken } })
 }
 
 /**
  * Test Redis connection
  */
 export async function testRedis(config: RedisConfig): Promise<void> {
-  await setupClient.post('/setup/test-redis', config)
+  await setupClient.post('/setup/test-redis', config, { headers: { 'X-Bootstrap-Token': bootstrapToken } })
 }
 
 /**
  * Perform installation
  */
 export async function install(config: InstallRequest): Promise<InstallResponse> {
-  const response = await setupClient.post('/setup/install', config)
+  const response = await setupClient.post('/setup/install', config, { headers: { 'X-Bootstrap-Token': bootstrapToken } })
   return response.data.data
 }

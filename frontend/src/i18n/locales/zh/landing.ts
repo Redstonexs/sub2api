@@ -193,6 +193,11 @@ export default {
   setup: {
     title: 'Sub2API 安装向导',
     description: '配置您的 Sub2API 实例',
+    bootstrapToken: {
+      label: '引导令牌',
+      description: '请在本机或通过 SSH 从 DATA_DIR 中的 bootstrap-token 文件读取令牌并粘贴到这里。令牌仅在当前标签页内存中保留。',
+      placeholder: '粘贴引导令牌',
+    },
     database: {
       title: '数据库配置',
       description: '连接到您的 PostgreSQL 数据库',

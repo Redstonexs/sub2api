@@ -28,7 +28,7 @@ container --version
 git clone https://github.com/Redstonexs/sub2api.git
 cd sub2api/deploy
 
-# Creates .env with random PostgreSQL, JWT, and TOTP secrets.
+# Creates a mode-600 .env with random admin, PostgreSQL, JWT, and TOTP secrets.
 ./apple-container.sh init
 
 # Review optional settings before startup.
@@ -41,11 +41,7 @@ nano .env
 ./apple-container.sh status
 ```
 
-Open `http://localhost:8080`. If `ADMIN_PASSWORD` is empty, retrieve the generated password with:
-
-```bash
-./apple-container.sh logs app
-```
+Open `http://localhost:8080`. The initial administrator password is generated into the mode-600 `.env` file during `init`; keep that file private and do not retrieve credentials from logs.
 
 The env file uses literal `KEY=value` syntax. Do not use Compose expressions such as `${VALUE:-default}`, and do not quote values unless the quote characters are part of the intended value. `BIND_HOST` must be an IPv4 address, and `SERVER_PORT` must be between 1025 and 65535.
 
@@ -119,6 +115,16 @@ Apple-specific handling of shared settings:
 | `REDIS_PASSWORD` | Applied to Redis and Sub2API |
 | `DATABASE_PORT`, `REDIS_PORT` | Internal ports are fixed to 5432 and 6379 |
 | `POSTGRES_MAX_*`, `REDIS_MAXCLIENTS` | Not currently applied to the database/cache server |
+
+### Host Port Binding
+
+`BIND_HOST` controls the macOS-side interface the published port listens on. It defaults to `127.0.0.1` (loopback-only), matching Docker Compose and the standalone binary's security default.
+
+- **Keep `BIND_HOST=127.0.0.1`** for a same-host TLS reverse proxy (Caddy, Nginx) or an SSH tunnel — both connect over loopback and do not need a public bind.
+- **`BIND_HOST=0.0.0.0` is an explicit direct-LAN exception.** Set it only after local auto-setup/login succeeds, and only when the Mac is firewalled or otherwise protected. With `0.0.0.0`, the script reports `http://127.0.0.1:<port>` for local access; use the Mac's LAN IP for remote clients.
+- The first-run auto-setup (`AUTO_SETUP=true`) always completes inside the container regardless of `BIND_HOST`; the published port is only reachable after the stack is up.
+
+The `up` command prints the resulting access URL: `Sub2API is available at http://<ACCESS_HOST>:<SERVER_PORT>`.
 
 ## Managed Resources
 

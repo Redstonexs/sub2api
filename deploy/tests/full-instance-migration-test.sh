@@ -393,7 +393,7 @@ test_compose_gates_sub2api_after_migration() {
     local rendered
 
     for compose_file in docker-compose.yml docker-compose.local.yml docker-compose.dev.yml; do
-        rendered="$(POSTGRES_PASSWORD=test-password docker compose -f "${DEPLOY_DIR}/${compose_file}" config)"
+        rendered="$(ADMIN_PASSWORD=test-admin-password POSTGRES_PASSWORD=test-password docker compose -f "${DEPLOY_DIR}/${compose_file}" config)"
         grep -q '^  migration:$' <<<"${rendered}" || fail "${compose_file} does not define migration"
         grep -q '^        condition: service_completed_successfully$' <<<"${rendered}" || fail "${compose_file} does not gate startup on migration completion"
         grep -q 'MIGRATION_FORCE' <<<"${rendered}" || fail "${compose_file} does not pass MIGRATION_FORCE to migration"
@@ -429,7 +429,7 @@ case "${url}" in
         printf '%s\n' 'services: {}' >"${output}"
         ;;
     */.env.example)
-        printf '%s\n' 'JWT_SECRET=' 'TOTP_ENCRYPTION_KEY=' 'POSTGRES_PASSWORD=change_this_secure_password' >"${output}"
+        printf '%s\n' 'ADMIN_PASSWORD=' 'JWT_SECRET=' 'TOTP_ENCRYPTION_KEY=' 'POSTGRES_PASSWORD=change_this_secure_password' >"${output}"
         ;;
     */full-instance-migration.sh)
         printf '%s\n' '#!/bin/sh' 'exit 0' >"${output}"

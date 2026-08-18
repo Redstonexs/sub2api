@@ -37,7 +37,7 @@ const (
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
-	allowedAssetHost    = "objects.githubusercontent.com"
+	allowedAssetHost    = "githubusercontent.com"
 
 	// Security: max download size (500MB)
 	maxDownloadSize = 500 * 1024 * 1024
@@ -461,7 +461,10 @@ func validateDownloadURL(rawURL string) error {
 	}
 
 	// Check against allowed hosts
-	host := parsedURL.Host
+	if parsedURL.User != nil || parsedURL.Port() != "" {
+		return fmt.Errorf("download URL must not contain userinfo or a custom port")
+	}
+	host := strings.ToLower(parsedURL.Hostname())
 	// GitHub release URLs can be from github.com or objects.githubusercontent.com
 	if host != allowedDownloadHost &&
 		!strings.HasSuffix(host, "."+allowedDownloadHost) &&

@@ -11,9 +11,14 @@
 # 服务器配置
 # =============================================================================
 server:
-  # Bind address (0.0.0.0 for all interfaces)
-  # 绑定地址（0.0.0.0 表示监听所有网络接口）
-  host: "0.0.0.0"
+  # Bind address. Default is loopback-only (127.0.0.1). The first-run setup
+  # wizard always listens on loopback regardless of this value. To publish the
+  # service, terminate TLS at a reverse proxy that connects over loopback, or
+  # set an explicit public/LAN address only after local setup/login succeeds.
+  # 绑定地址。默认仅监听回环地址（127.0.0.1）。首次运行的设置向导始终只监听
+  # 回环地址，与本值无关。对外提供服务时，请让 TLS 反向代理通过回环连接本服务；
+  # 仅在本地设置/登录完成后，才可显式设置为公网/局域网地址。
+  host: "127.0.0.1"
   # Port to listen on
   # 监听端口
   port: 8080
@@ -1112,11 +1117,6 @@ oidc_connect:
 # 默认设置
 # =============================================================================
 default:
-  # Initial admin account (created on first run)
-  # 初始管理员账户（首次运行时创建）
-  admin_email: "admin@example.com"
-  admin_password: "admin123"
-
   # Default settings for new users
   # 新用户默认设置
   # Max concurrent requests per user

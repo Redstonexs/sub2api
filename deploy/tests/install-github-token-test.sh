@@ -23,7 +23,7 @@ EOF
 run_api_curl() {
     CURL_ARGS_LOG="$1" HOME="$TEMP_DIR/home" PATH="$TEMP_DIR:$PATH" UPDATE_GITHUB_TOKEN="${2:-}" \
         GITHUB_TOKEN="github-fallback" GH_TOKEN="gh-fallback" \
-        bash -c 'source <(head -n -1 "$1"); github_api_curl -s "$2"' bash \
+        bash -c 'source "$1"; github_api_curl -s "$2"' bash \
         "$ROOT_DIR/deploy/install.sh" "https://api.github.com/repos/Redstonexs/sub2api/releases/latest"
 }
 
@@ -70,7 +70,7 @@ assert_unsafe_invocation_rejected() {
     shift
     rm -f "$TEMP_DIR/$name" "$TEMP_DIR/$name.stdin"
     if CURL_ARGS_LOG="$TEMP_DIR/$name" PATH="$TEMP_DIR:$PATH" UPDATE_GITHUB_TOKEN="update-secret" \
-        bash -c 'source <(head -n -1 "$1"); shift; github_api_curl "$@"' bash \
+        bash -c 'source "$1"; shift; github_api_curl "$@"' bash \
         "$ROOT_DIR/deploy/install.sh" "$@" 2>/dev/null; then
         echo "installer accepted unsafe curl invocation: $name" >&2
         exit 1
@@ -96,8 +96,133 @@ assert_unsafe_invocation_rejected url-option -s --url \
 # Every installer release API request must use the scoped helper.
 test "$(grep -c 'github_api_curl .*https://api.github.com/' "$ROOT_DIR/deploy/install.sh")" -eq 3
 
-# Asset and checksum downloads must continue to call curl directly.
-grep -Fq 'curl -sL "$download_url"' "$ROOT_DIR/deploy/install.sh"
-grep -Fq 'curl -sL "$checksum_url"' "$ROOT_DIR/deploy/install.sh"
+# Asset and checksum downloads must use the secure download helper.
+grep -Fq 'github_download_curl "$download_url" -o "$TEMP_DIR/$archive_name"' "$ROOT_DIR/deploy/install.sh"
+grep -Fq 'github_download_curl --max-size 1048576 "$checksum_url" -o "$TEMP_DIR/checksums.txt"' "$ROOT_DIR/deploy/install.sh"
+grep -Fq 'print_error "$(msg '\''checksum_not_found'\'')"' "$ROOT_DIR/deploy/install.sh"
+# `--max-filesize` only protects known Content-Length. Unknown-length streams
+# must also be bounded before the temporary file can grow without limit.
+grep -Fq 'ulimit -f "$file_blocks"' "$ROOT_DIR/deploy/install.sh"
+grep -Fq 'actual_size=$(wc -c < "$tmpfile" 2>/dev/null || printf '\''0'\'')' "$ROOT_DIR/deploy/install.sh"
+
+# ---------------------------------------------------------------------------
+# github_download_curl contract tests
+# ---------------------------------------------------------------------------
+
+# Create a mock curl that supports redirect simulation and transfer-time
+# size enforcement for the download helper.
+# Uses a counter file to only return the redirect once (avoid infinite loop).
+cat > "$TEMP_DIR/curl" <<'CURLSCRIPT'
+#!/bin/bash
+output_file=""
+max_filesize=""
+fmt_redirect=""
+fmt_http_code=""
+counter_file="$HOME/.curl_mock_count"
+expecting_output=0
+expecting_format=0
+expecting_maxsize=0
+for arg do
+    case "$arg" in
+        -o) expecting_output=1 ;;
+        -w) expecting_format=1 ;;
+        --max-filesize) expecting_maxsize=1 ;;
+        -q|-sS|--connect-timeout|--max-time) ;;
+        --) ;;
+        *)
+            if [ "${expecting_maxsize:-0}" -eq 1 ]; then
+                max_filesize="$arg"
+                expecting_maxsize=0
+            elif [ "${expecting_output:-0}" -eq 1 ]; then
+                output_file="$arg"
+                expecting_output=0
+            elif [ "${expecting_format:-0}" -eq 1 ]; then
+                fmt_format="$arg"
+                expecting_format=0
+            fi
+            ;;
+    esac
+done
+# Read and increment counter
+count=0
+[ -f "$counter_file" ] && count=$(cat "$counter_file" 2>/dev/null || echo 0)
+echo "$((count + 1))" > "$counter_file"
+
+# Determine what to write for the -w format
+case "${fmt_format:-}" in
+    *redirect_url*)
+        # Only emit redirect on the first call
+        if [ "$count" -eq 0 ] && [ -n "${CURL_REDIRECT:-}" ]; then
+            printf '%s' "$CURL_REDIRECT"
+        fi
+        ;;
+    *http_code*)
+        printf '%s' '200'
+        ;;
+esac
+
+# Handle body output
+if [ -n "${CURL_LARGE_OUTPUT:-}" ]; then
+    # Check if --max-filesize would be exceeded
+    if [ -n "$max_filesize" ] && [ "$max_filesize" -le 2097152 ]; then
+        # Simulate curl --max-filesize: exit 63, don't write partial file
+        if [ -n "$output_file" ] && [ "$output_file" != "/dev/null" ]; then
+            rm -f "$output_file"
+        fi
+        exit 63
+    fi
+    dd if=/dev/zero bs=1048576 count=2 of="$output_file" 2>/dev/null
+else
+    printf 'ok' > "$output_file"
+fi
+CURLSCRIPT
+chmod +x "$TEMP_DIR/curl"
+
+# Clean any previous counter file
+rm -f "$HOME/.curl_mock_count"
+
+# Helper to run github_download_curl in a clean environment
+run_download_curl() {
+    local outfile="$TEMP_DIR/dl_out"
+    rm -f "$outfile" "$HOME/.curl_mock_count"
+    PATH="$TEMP_DIR:$PATH" UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= \
+        bash -c 'source "$1"; github_download_curl "$2" -o "$3" ${4:+--max-size "$4"}' bash \
+        "$ROOT_DIR/deploy/install.sh" "$1" "$outfile" "${2:-}" >/dev/null 2>&1
+}
+
+# 1. Foreign redirect is rejected
+export CURL_REDIRECT="https://evil.example.com/trojan"
+if run_download_curl "https://github.com/Redstonexs/sub2api/releases/download/v1/asset.tar.gz" 2>/dev/null; then
+    echo "installer accepted forbidden redirect to evil.example.com" >&2
+    exit 1
+fi
+
+# 2. Allowed redirect (githubusercontent.com) is accepted
+export CURL_REDIRECT="https://objects.githubusercontent.com/release-asset/12345"
+if ! run_download_curl "https://github.com/Redstonexs/sub2api/releases/download/v1/asset.tar.gz" 2>/dev/null; then
+    echo "installer rejected legitimate GitHub redirect" >&2
+    exit 1
+fi
+
+# 3. No redirect — normal download succeeds
+export CURL_REDIRECT=""
+if ! run_download_curl "https://github.com/Redstonexs/sub2api/releases/download/v1/asset.tar.gz" 2>/dev/null; then
+    echo "installer rejected direct download" >&2
+    exit 1
+fi
+
+# 4. Size cap: oversize download is rejected (1 MiB max)
+export CURL_LARGE_OUTPUT=1 CURL_REDIRECT=""
+if run_download_curl "https://github.com/Redstonexs/sub2api/releases/download/v1/checksums.txt" 1048576 2>/dev/null; then
+    echo "installer accepted oversized download (2 MiB > 1 MiB cap)" >&2
+    exit 1
+fi
+
+# 5. Size cap: small download is accepted
+export CURL_LARGE_OUTPUT= CURL_REDIRECT=""
+if ! run_download_curl "https://github.com/Redstonexs/sub2api/releases/download/v1/checksums.txt" 1048576 2>/dev/null; then
+    echo "installer rejected small download under cap" >&2
+    exit 1
+fi
 
 echo "install GitHub token checks passed"

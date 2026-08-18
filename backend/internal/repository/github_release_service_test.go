@@ -106,6 +106,34 @@ func TestGitHubReleaseClientRedirectAuthorization(t *testing.T) {
 	}
 }
 
+func TestGitHubReleaseClientDownloadRedirectPolicy(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		allowed bool
+	}{
+		{name: "github release", url: "https://github.com/Redstonexs/sub2api/releases/download/v1.0.0/sub2api.tar.gz", allowed: true},
+		{name: "github assets", url: "https://objects.githubusercontent.com/asset", allowed: true},
+		{name: "github release assets", url: "https://release-assets.githubusercontent.com/asset", allowed: true},
+		{name: "insecure scheme", url: "http://github.com/asset"},
+		{name: "untrusted host", url: "https://example.com/asset"},
+		{name: "custom port", url: "https://github.com:8443/asset"},
+	}
+
+	checkRedirect := githubDownloadCheckRedirect(nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, tt.url, nil)
+			require.NoError(t, err)
+			if tt.allowed {
+				require.NoError(t, checkRedirect(req, nil))
+				return
+			}
+			require.Error(t, checkRedirect(req, nil))
+		})
+	}
+}
+
 func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
 	client := newTestGitHubReleaseClient()
 	client.updateGitHubToken = "update-secret"
@@ -131,6 +159,53 @@ func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
 	for _, header := range headers {
 		require.Empty(t, header.Get("Authorization"))
 	}
+}
+
+func TestFetchChecksumFileUsesDownloadClientRedirectPolicy(t *testing.T) {
+	// Proves FetchChecksumFile uses downloadHTTPClient (with githubDownloadCheckRedirect)
+	// rather than httpClient (with githubAPICheckRedirect, which never rejects redirects).
+	redirectLocation := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if redirectLocation != "" {
+			http.Redirect(w, r, redirectLocation, http.StatusFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("sum"))
+	}))
+	t.Cleanup(srv.Close)
+
+	transport := &testTransport{testServerURL: srv.URL}
+
+	// API client allows any redirect (permissive)
+	apiClient := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return nil // allow all
+		},
+	}
+	// Download client uses the production redirect policy
+	downloadClient := &http.Client{
+		Transport:     transport,
+		CheckRedirect: githubDownloadCheckRedirect(nil),
+	}
+
+	client := &githubReleaseClient{
+		httpClient:         apiClient,
+		downloadHTTPClient: downloadClient,
+	}
+
+	// Phase 1: no redirect — FetchChecksumFile succeeds (no regression)
+	redirectLocation = ""
+	body, err := client.FetchChecksumFile(context.Background(), "https://github.com/owner/repo/releases/download/v1/checksums.txt")
+	require.NoError(t, err)
+	require.Equal(t, "sum", string(body))
+
+	// Phase 2: redirect to an untrusted host — FetchChecksumFile must reject
+	redirectLocation = "https://evil.example.com/payload"
+	_, err = client.FetchChecksumFile(context.Background(), "https://github.com/owner/repo/releases/download/v1/checksums.txt")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "refusing redirect to untrusted GitHub download host")
 }
 
 type githubReleaseRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -255,6 +330,19 @@ func (s *GitHubReleaseServiceSuite) TestFetchChecksumFile_Non200() {
 
 	_, err := s.client.FetchChecksumFile(context.Background(), s.srv.URL)
 	require.Error(s.T(), err, "expected error for non-200")
+}
+
+func (s *GitHubReleaseServiceSuite) TestFetchChecksumFile_TooLarge() {
+	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bytes.Repeat([]byte("x"), int(maxChecksumFileBytes+1)))
+	}))
+
+	s.client = newTestGitHubReleaseClient()
+
+	_, err := s.client.FetchChecksumFile(context.Background(), s.srv.URL)
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "checksum file exceeds")
 }
 
 func (s *GitHubReleaseServiceSuite) TestDownloadFile_ContextCancel() {

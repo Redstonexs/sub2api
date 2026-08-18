@@ -174,7 +174,8 @@ export default defineConfig(({ mode }) => {
         },
         '/setup': {
           target: backendUrl,
-          changeOrigin: true
+          // Preserve the browser's loopback Host/Origin for strict local setup validation.
+          changeOrigin: false
         }
       }
     }

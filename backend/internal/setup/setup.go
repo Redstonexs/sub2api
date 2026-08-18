@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -71,6 +72,17 @@ func GetConfigFilePath() string {
 // GetInstallLockPath returns the full path to .installed lock file
 func GetInstallLockPath() string {
 	return GetDataDir() + "/" + InstallLockFile
+}
+
+// GetSetupServerAddress returns the loopback-only address used before initial
+// installation completes. It deliberately ignores SERVER_HOST so a normal
+// production bind setting cannot expose the unauthenticated setup wizard.
+func GetSetupServerAddress() string {
+	port := getEnvIntOrDefault("SETUP_PORT", getEnvIntOrDefault("SERVER_PORT", 8080))
+	if port <= 0 || port > 65535 {
+		port = 8080
+	}
+	return fmt.Sprintf("127.0.0.1:%d", port)
 }
 
 // SetupConfig holds the setup configuration
@@ -298,6 +310,13 @@ func TestRedisConnection(cfg *RedisConfig) error {
 
 // Install performs the installation with the given configuration
 func Install(cfg *SetupConfig) error {
+	if cfg == nil {
+		return errors.New("setup config is required")
+	}
+	if err := validatePassword(cfg.Admin.Password); err != nil {
+		return fmt.Errorf("invalid admin password: %w", err)
+	}
+
 	// Security check: prevent re-installation if already installed
 	if !NeedsSetup() {
 		return fmt.Errorf("system is already installed, re-installation is not allowed")
@@ -341,6 +360,11 @@ func Install(cfg *SetupConfig) error {
 	if err := createInstallLock(); err != nil {
 		return fmt.Errorf("failed to create install lock: %w", err)
 	}
+
+	// Retire any web-setup credential only after the shared installation
+	// lifecycle is committed. This also covers a token left by a prior web
+	// attempt when CLI or AUTO_SETUP completes the installation.
+	RemoveBootstrapToken()
 
 	return nil
 }
@@ -414,16 +438,6 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 	decision := decideAdminBootstrap(totalUsers, adminUsers)
 	if !decision.shouldCreate {
 		return false, decision.reason, nil
-	}
-
-	if strings.TrimSpace(cfg.Admin.Password) == "" {
-		password, genErr := generateSecret(16)
-		if genErr != nil {
-			return false, "", fmt.Errorf("failed to generate admin password: %w", genErr)
-		}
-		cfg.Admin.Password = password
-		fmt.Printf("Generated admin password (one-time): %s\n", cfg.Admin.Password)
-		fmt.Println("IMPORTANT: Save this password! It will not be shown again.")
 	}
 
 	admin := &service.User{
@@ -597,7 +611,7 @@ func AutoSetupFromEnv() error {
 			Password: getEnvOrDefault("ADMIN_PASSWORD", ""),
 		},
 		Server: ServerConfig{
-			Host: getEnvOrDefault("SERVER_HOST", "0.0.0.0"),
+			Host: getEnvOrDefault("SERVER_HOST", "127.0.0.1"),
 			Port: getEnvIntOrDefault("SERVER_PORT", 8080),
 			Mode: getEnvOrDefault("SERVER_MODE", "release"),
 		},
@@ -607,6 +621,9 @@ func AutoSetupFromEnv() error {
 		},
 		Timezone:                tz,
 		MigrationTimeoutSeconds: getEnvIntOrDefault("SETUP_MIGRATION_TIMEOUT_SECONDS", 0),
+	}
+	if err := validatePassword(cfg.Admin.Password); err != nil {
+		return fmt.Errorf("AUTO_SETUP requires a valid ADMIN_PASSWORD: %w", err)
 	}
 
 	// Generate JWT secret if not provided

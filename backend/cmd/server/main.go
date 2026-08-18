@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -90,11 +91,33 @@ func main() {
 		}
 	}
 
+	// Clean up any leftover bootstrap token from a previous installation.
+	// This is best-effort and never fails or delays startup.
+	// A completed installation is never undone by a deletion failure.
+	setup.RemoveBootstrapToken()
+
 	// Normal server mode
 	runMainServer()
 }
 
 func runSetupServer() {
+	// Windows cannot enforce owner-only POSIX mode on the bootstrap token file,
+	// so disable the HTTP setup wizard with a clear instruction to use --setup CLI.
+	if runtime.GOOS == "windows" {
+		log.Println("HTTP setup wizard is not available on Windows.")
+		log.Println("Use the CLI setup wizard instead:  sub2api --setup")
+		return
+	}
+
+	// Create or load the installation-scoped bootstrap credential.
+	// Only the HTTP setup wizard path creates/loads this token.
+	// CLI and AUTO_SETUP never need or generate a token.
+	token, err := setup.LoadOrCreateBootstrapToken()
+	if err != nil {
+		log.Fatalf("Failed to initialize bootstrap token: %v", err)
+	}
+	setup.SetBootstrapToken(token)
+
 	r := gin.New()
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS(config.CORSConfig{}))
@@ -108,11 +131,9 @@ func runSetupServer() {
 		r.Use(web.ServeEmbeddedFrontend())
 	}
 
-	// Get server address from config.yaml or environment variables (SERVER_HOST, SERVER_PORT)
-	// This allows users to run setup on a different address if needed
-	addr := config.GetServerAddress()
-	log.Printf("Setup wizard available at http://%s", addr)
-	log.Println("Complete the setup wizard to configure Sub2API")
+	addr := setup.GetSetupServerAddress()
+	log.Printf("Setup wizard available only on http://%s", addr)
+	log.Println("Complete setup locally or through an SSH tunnel before exposing the main server")
 
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)

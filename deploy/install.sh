@@ -38,7 +38,7 @@ SERVICE_USER="sub2api"
 CONFIG_DIR="/etc/sub2api"
 
 # Server configuration (will be set by user)
-SERVER_HOST="0.0.0.0"
+SERVER_HOST="127.0.0.1"
 SERVER_PORT="8080"
 
 # Language (default: zh = Chinese)
@@ -98,6 +98,12 @@ declare -A MSG_ZH=(
     ["step2_start_service"]="启动 Sub2API 服务："
     ["step3_enable_autostart"]="设置开机自启："
     ["step4_open_wizard"]="在浏览器中打开设置向导："
+    ["wizard_loopback"]="设置向导在设置完成前始终只监听回环地址（127.0.0.1），与 SERVER_HOST 设置无关。"
+    ["wizard_tunnel"]="远程访问请使用 SSH 隧道："
+    ["wizard_token_read"]="读取设置令牌（切勿将其放入 URL、日志或共享文本中）："
+    ["wizard_token_paste"]="将其粘贴到向导的 X-Bootstrap-Token 字段中。"
+    ["wizard_token_removed"]="设置完成后，该令牌会自动删除。"
+    ["wizard_proxy_after"]="仅在设置完成后配置 TLS 反向代理。"
     ["wizard_guide"]="设置向导将引导您完成："
     ["wizard_db"]="数据库配置"
     ["wizard_redis"]="Redis 配置"
@@ -169,8 +175,6 @@ declare -A MSG_ZH=(
     ["service_start_failed"]="服务启动失败，请检查日志"
     ["enabling_autostart"]="正在设置开机自启..."
     ["autostart_enabled"]="开机自启已启用"
-    ["getting_public_ip"]="正在获取公网 IP..."
-    ["public_ip_failed"]="无法获取公网 IP，使用本地 IP"
 )
 
 # English strings
@@ -223,6 +227,12 @@ declare -A MSG_EN=(
     ["step2_start_service"]="Start Sub2API service:"
     ["step3_enable_autostart"]="Enable auto-start on boot:"
     ["step4_open_wizard"]="Open the Setup Wizard in your browser:"
+    ["wizard_loopback"]="The setup wizard always listens on loopback (127.0.0.1) until setup completes, regardless of the SERVER_HOST setting."
+    ["wizard_tunnel"]="For remote access, use an SSH tunnel:"
+    ["wizard_token_read"]="Read the setup token (never paste it into URLs, logs, or shared text):"
+    ["wizard_token_paste"]="Paste it into the wizard's X-Bootstrap-Token field."
+    ["wizard_token_removed"]="The token is removed automatically after setup completes."
+    ["wizard_proxy_after"]="Configure a TLS reverse proxy only AFTER setup completes."
     ["wizard_guide"]="The Setup Wizard will guide you through:"
     ["wizard_db"]="Database configuration"
     ["wizard_redis"]="Redis configuration"
@@ -294,8 +304,6 @@ declare -A MSG_EN=(
     ["service_start_failed"]="Service failed to start, please check logs"
     ["enabling_autostart"]="Enabling auto-start on boot..."
     ["autostart_enabled"]="Auto-start enabled"
-    ["getting_public_ip"]="Getting public IP..."
-    ["public_ip_failed"]="Failed to get public IP, using local IP"
 )
 
 # Get message based on current language
@@ -363,6 +371,31 @@ select_language() {
     echo ""
 }
 
+print_usage() {
+    echo "$(msg 'usage'): $0 [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  $(msg 'cmd_none')            $(msg 'cmd_install')"
+    echo "  install              $(msg 'cmd_install')"
+    echo "  upgrade              $(msg 'cmd_upgrade')"
+    echo "  rollback <version>   $(msg 'cmd_install_version')"
+    echo "  list-versions        $(msg 'cmd_list_versions')"
+    echo "  uninstall            $(msg 'cmd_uninstall')"
+    echo ""
+    echo "Options:"
+    echo "  -v, --version <ver>  $(msg 'opt_version')"
+    echo "  -y, --yes            Skip confirmation prompts (for uninstall)"
+    echo ""
+    echo "Examples:"
+    echo "  $0                        # Install latest version"
+    echo "  $0 install -v v0.1.0      # Install specific version"
+    echo "  $0 upgrade                # Upgrade to latest"
+    echo "  $0 upgrade -v v0.2.0      # Upgrade to specific version"
+    echo "  $0 rollback v0.1.0        # Rollback to v0.1.0"
+    echo "  $0 list-versions          # List available versions"
+    echo ""
+}
+
 # Validate port number
 validate_port() {
     local port="$1"
@@ -393,6 +426,10 @@ configure_server() {
     read -p "$(msg 'server_host_prompt') [${SERVER_HOST}]: " input_host < /dev/tty
     if [ -n "$input_host" ]; then
         SERVER_HOST="$input_host"
+    fi
+
+    if [ "$SERVER_HOST" != "127.0.0.1" ] && [ "$SERVER_HOST" != "localhost" ]; then
+        print_warning "Direct public HTTP is not recommended. Put Sub2API behind a TLS reverse proxy."
     fi
 
     echo ""
@@ -528,6 +565,162 @@ github_api_curl() {
     fi
 }
 
+# Secure download helper for GitHub release assets.
+# Permits only HTTPS to github.com, *.github.com, and *.githubusercontent.com
+# at every redirect hop. Strips credential env vars and ignores .curlrc (-q).
+# Usage: github_download_curl <url> -o <output_file> [--max-size N]
+#   --max-size N: maximum bytes to accept (0 = unlimited, default: 0)
+#
+# Size caps are enforced while writing the temporary file. HTTP non-success
+# status codes are rejected. Partial files are cleaned up on any failure.
+github_download_curl() {
+    local url=""
+    local output_file=""
+    local max_size=0
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --max-size)
+                max_size="$2"
+                shift 2
+                ;;
+            -o)
+                output_file="$2"
+                shift 2
+                ;;
+            *)
+                if [ -z "$url" ]; then
+                    url="$1"
+                else
+                    echo "github_download_curl: unexpected argument: $1" >&2
+                    return 2
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$url" ] || [ -z "$output_file" ]; then
+        echo "github_download_curl: usage: <url> -o <output_file> [--max-size N]" >&2
+        return 2
+    fi
+    if ! [[ "$max_size" =~ ^[0-9]+$ ]]; then
+        echo "github_download_curl: --max-size must be a non-negative integer" >&2
+        return 2
+    fi
+
+    # Validate initial URL scheme and host
+    case "$url" in
+        https://github.com/*|https://*.github.com/*|https://*.githubusercontent.com/*) ;;
+        *)
+            echo "github_download_curl: only HTTPS GitHub URLs are allowed" >&2
+            return 2
+            ;;
+    esac
+
+    local current="$url"
+    local redirects=0
+    local tmpfile
+    tmpfile=$(mktemp)
+    local cleanup=1
+
+    # Phase 1: Follow redirects, validate each hop, discard bodies.
+    # Uses -o /dev/null so no body data is written during redirect following.
+    while [ "$redirects" -lt 20 ]; do
+        local redirect_target
+        redirect_target=$(UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= curl -q -sS \
+            --connect-timeout 10 --max-time 30 \
+            -w '%{redirect_url}' \
+            -o /dev/null \
+            "$current" 2>/dev/null) || {
+            local rc=$?
+            rm -f "$tmpfile"
+            return "$rc"
+        }
+
+        if [ -z "$redirect_target" ]; then
+            # No redirect — this is the final URL
+            break
+        fi
+
+        # Validate redirect target
+        case "$redirect_target" in
+            https://github.com/*|https://*.github.com/*|https://*.githubusercontent.com/*) ;;
+            *)
+                echo "github_download_curl: forbidden redirect: $redirect_target" >&2
+                rm -f "$tmpfile"
+                return 2
+                ;;
+        esac
+
+        current="$redirect_target"
+        redirects=$((redirects + 1))
+    done
+
+    if [ "$redirects" -ge 20 ]; then
+        echo "github_download_curl: too many redirects" >&2
+        rm -f "$tmpfile"
+        return 2
+    fi
+
+    # Phase 2: Download the final response with a transfer-time size cap and
+    # HTTP status validation. curl's --max-filesize rejects known oversized
+    # Content-Length values; a subshell file-size limit also bounds unknown or
+    # chunked responses before the temporary file can grow without limit.
+    local curl_args=(-q -sS --connect-timeout 10 --max-time 30 -w '%{http_code}')
+    local file_blocks=0
+    if [ "$max_size" -gt 0 ]; then
+        curl_args+=(--max-filesize "$max_size")
+        # Bash ulimit -f is measured in 512-byte blocks. Round up so the
+        # post-check can distinguish an exact-size valid file from a bounded
+        # oversize write; the temporary file can exceed max_size by <512 bytes.
+        file_blocks=$(( (max_size + 511) / 512 ))
+    fi
+
+    local http_code rc actual_size
+    if [ "$max_size" -gt 0 ]; then
+        http_code=$( (
+            ulimit -f "$file_blocks"
+            UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= curl "${curl_args[@]}" \
+                -o "$tmpfile" \
+                "$current" 2>/dev/null
+        ) )
+        rc=$?
+    else
+        http_code=$(UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= curl "${curl_args[@]}" \
+            -o "$tmpfile" \
+            "$current" 2>/dev/null)
+        rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+        actual_size=$(wc -c < "$tmpfile" 2>/dev/null || printf '0')
+        rm -f "$tmpfile"
+        if [ "$max_size" -gt 0 ] && { [ "$rc" -eq 63 ] || [ "$actual_size" -ge "$max_size" ]; }; then
+            echo "github_download_curl: download exceeded ${max_size} bytes" >&2
+        fi
+        return "$rc"
+    fi
+
+    if [ "$max_size" -gt 0 ]; then
+        actual_size=$(wc -c < "$tmpfile" 2>/dev/null || printf '0')
+        if [ "$actual_size" -gt "$max_size" ]; then
+            echo "github_download_curl: download exceeded ${max_size} bytes" >&2
+            rm -f "$tmpfile"
+            return 2
+        fi
+    fi
+
+    # Validate HTTP status code (must be 2xx)
+    if [ -z "$http_code" ] || ! [[ "$http_code" =~ ^[0-9]+$ ]] || [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+        echo "github_download_curl: server returned HTTP status $http_code" >&2
+        rm -f "$tmpfile"
+        return 2
+    fi
+
+    mv "$tmpfile" "$output_file"
+}
+
 # Get latest release version
 get_latest_version() {
     print_info "$(msg 'fetching_version')"
@@ -627,14 +820,14 @@ download_and_extract() {
     trap "rm -rf $TEMP_DIR" EXIT
 
     # Download archive
-    if ! curl -sL "$download_url" -o "$TEMP_DIR/$archive_name"; then
+    if ! github_download_curl "$download_url" -o "$TEMP_DIR/$archive_name"; then
         print_error "$(msg 'download_failed')"
         exit 1
     fi
 
     # Download and verify checksum
     print_info "$(msg 'verifying_checksum')"
-    if curl -sL "$checksum_url" -o "$TEMP_DIR/checksums.txt" 2>/dev/null; then
+    if github_download_curl --max-size 1048576 "$checksum_url" -o "$TEMP_DIR/checksums.txt" 2>/dev/null; then
         local expected_checksum=$(grep "$archive_name" "$TEMP_DIR/checksums.txt" | awk '{print $1}')
         local actual_checksum=$(sha256sum "$TEMP_DIR/$archive_name" | awk '{print $1}')
 
@@ -646,7 +839,8 @@ download_and_extract() {
         fi
         print_success "$(msg 'checksum_verified')"
     else
-        print_warning "$(msg 'checksum_not_found')"
+        print_error "$(msg 'checksum_not_found')"
+        exit 1
     fi
 
     # Extract
@@ -761,29 +955,6 @@ prepare_for_setup() {
     print_success "$(msg 'ready_for_setup')"
 }
 
-# Get public IP address
-get_public_ip() {
-    print_info "$(msg 'getting_public_ip')"
-
-    # Try to get public IP from ipinfo.io
-    local response
-    response=$(curl -s --connect-timeout 5 --max-time 10 "https://ipinfo.io/json" 2>/dev/null)
-
-    if [ -n "$response" ]; then
-        # Extract IP from JSON response using grep and sed (no jq dependency)
-        PUBLIC_IP=$(echo "$response" | grep -o '"ip": *"[^"]*"' | sed 's/"ip": *"\([^"]*\)"/\1/')
-        if [ -n "$PUBLIC_IP" ]; then
-            print_success "Public IP: $PUBLIC_IP"
-            return 0
-        fi
-    fi
-
-    # Fallback to local IP
-    print_warning "$(msg 'public_ip_failed')"
-    PUBLIC_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_SERVER_IP")
-    return 1
-}
-
 # Start service
 start_service() {
     print_info "$(msg 'starting_service')"
@@ -813,13 +984,6 @@ enable_autostart() {
 
 # Print completion message
 print_completion() {
-    # Use PUBLIC_IP which was set by get_public_ip()
-    # Determine display address
-    local display_host="${PUBLIC_IP:-YOUR_SERVER_IP}"
-    if [ "$SERVER_HOST" = "127.0.0.1" ]; then
-        display_host="127.0.0.1"
-    fi
-
     echo ""
     echo "=============================================="
     print_success "$(msg 'install_complete')"
@@ -832,7 +996,16 @@ print_completion() {
     echo "  $(msg 'step4_open_wizard')"
     echo "=============================================="
     echo ""
-    print_info "     http://${display_host}:${SERVER_PORT}"
+    print_info "     http://127.0.0.1:${SERVER_PORT}"
+    echo ""
+    print_info "$(msg 'wizard_loopback')"
+    print_info "$(msg 'wizard_tunnel')"
+    echo "       ssh -L ${SERVER_PORT}:localhost:${SERVER_PORT} user@host"
+    print_info "$(msg 'wizard_token_read')"
+    echo "       sudo cat ${INSTALL_DIR}/data/.bootstrap_token"
+    print_info "$(msg 'wizard_token_paste')"
+    print_info "$(msg 'wizard_token_removed')"
+    print_info "$(msg 'wizard_proxy_after')"
     echo ""
     echo "     $(msg 'wizard_guide')"
     echo "     - $(msg 'wizard_db')"
@@ -1071,6 +1244,14 @@ main() {
     # Restore positional arguments
     set -- "${positional_args[@]}"
 
+    # Help must work in non-interactive automation without opening /dev/tty.
+    case "${1:-}" in
+        --help|-h)
+            print_usage
+            return 0
+            ;;
+    esac
+
     # Select language first
     select_language
 
@@ -1114,7 +1295,6 @@ main() {
                     setup_directories
                     install_service
                     prepare_for_setup
-                    get_public_ip
                     start_service
                     enable_autostart
                     print_completion
@@ -1128,7 +1308,6 @@ main() {
                 setup_directories
                 install_service
                 prepare_for_setup
-                get_public_ip
                 start_service
                 enable_autostart
                 print_completion
@@ -1165,29 +1344,8 @@ main() {
             exit 0
             ;;
         --help|-h)
-            echo "$(msg 'usage'): $0 [command] [options]"
-            echo ""
-            echo "Commands:"
-            echo "  $(msg 'cmd_none')            $(msg 'cmd_install')"
-            echo "  install              $(msg 'cmd_install')"
-            echo "  upgrade              $(msg 'cmd_upgrade')"
-            echo "  rollback <version>   $(msg 'cmd_install_version')"
-            echo "  list-versions        $(msg 'cmd_list_versions')"
-            echo "  uninstall            $(msg 'cmd_uninstall')"
-            echo ""
-            echo "Options:"
-            echo "  -v, --version <ver>  $(msg 'opt_version')"
-            echo "  -y, --yes            Skip confirmation prompts (for uninstall)"
-            echo ""
-            echo "Examples:"
-            echo "  $0                        # Install latest version"
-            echo "  $0 install -v v0.1.0      # Install specific version"
-            echo "  $0 upgrade                # Upgrade to latest"
-            echo "  $0 upgrade -v v0.2.0      # Upgrade to specific version"
-            echo "  $0 rollback v0.1.0        # Rollback to v0.1.0"
-            echo "  $0 list-versions          # List available versions"
-            echo ""
-            exit 0
+            print_usage
+            return 0
             ;;
     esac
 
@@ -1208,7 +1366,6 @@ main() {
             setup_directories
             install_service
             prepare_for_setup
-            get_public_ip
             start_service
             enable_autostart
             print_completion
@@ -1222,11 +1379,12 @@ main() {
         setup_directories
         install_service
         prepare_for_setup
-        get_public_ip
         start_service
         enable_autostart
         print_completion
     fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

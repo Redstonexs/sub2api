@@ -51,23 +51,30 @@ func TestAuthRoutesRateLimitFailCloseWhenRedisUnavailable(t *testing.T) {
 	})
 
 	router := newAuthRoutesTestRouter(rdb)
-	paths := []string{
-		"/api/v1/auth/register",
-		"/api/v1/auth/login",
-		"/api/v1/auth/login/2fa",
-		"/api/v1/auth/send-verify-code",
-		"/api/v1/auth/oauth/pending/send-verify-code",
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/auth/register"},
+		{method: http.MethodPost, path: "/api/v1/auth/login"},
+		{method: http.MethodPost, path: "/api/v1/auth/login/2fa"},
+		{method: http.MethodPost, path: "/api/v1/auth/send-verify-code"},
+		{method: http.MethodPost, path: "/api/v1/auth/oauth/pending/send-verify-code"},
+		{method: http.MethodGet, path: "/api/v1/auth/oauth/github/start"},
+		{method: http.MethodGet, path: "/api/v1/auth/oauth/linuxdo/bind/start"},
+		{method: http.MethodGet, path: "/api/v1/auth/oauth/github/callback"},
+		{method: http.MethodGet, path: "/api/v1/auth/oauth/wechat/payment/callback"},
 	}
 
-	for _, path := range paths {
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+	for _, tc := range tests {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.RemoteAddr = "203.0.113.10:12345"
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusTooManyRequests, w.Code, "path=%s", path)
-		require.Contains(t, w.Body.String(), "rate limit exceeded", "path=%s", path)
+		require.Equal(t, http.StatusTooManyRequests, w.Code, "method=%s path=%s", tc.method, tc.path)
+		require.Contains(t, w.Body.String(), "rate limit exceeded", "method=%s path=%s", tc.method, tc.path)
 	}
 }

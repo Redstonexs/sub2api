@@ -66,10 +66,10 @@ chmod +x docker-deploy.sh
 
 **What the script does:**
 - Downloads `docker-compose.local.yml` and `.env.example`
-- Automatically generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
+- Automatically generates secure secrets (ADMIN_PASSWORD, JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
 - Creates `.env` file with generated secrets
 - Creates necessary data directories (data/, postgres_data/, redis_data/)
-- **Displays generated credentials** (POSTGRES_PASSWORD, JWT_SECRET, etc.)
+- Stores generated credentials only in the mode-600 `.env` file
 
 **After running the script:**
 ```bash
@@ -78,9 +78,6 @@ docker compose -f docker-compose.local.yml up -d
 
 # View logs
 docker compose -f docker-compose.local.yml logs -f sub2api
-
-# If admin password was auto-generated, find it in logs:
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
 
 # Access Web UI
 # http://localhost:8080
@@ -98,7 +95,7 @@ cd sub2api/deploy
 # Configure environment
 cp .env.example .env
 chmod 600 .env
-nano .env  # Set POSTGRES_PASSWORD and other required variables
+nano .env  # Set ADMIN_PASSWORD, POSTGRES_PASSWORD, and other required variables
 
 # Generate secure secrets (recommended)
 JWT_SECRET=$(openssl rand -hex 32)
@@ -112,7 +109,7 @@ mkdir -p data postgres_data redis_data migration_artifacts
 # Start all services using local directory version
 docker compose -f docker-compose.local.yml up -d
 
-# View logs (check for auto-generated admin password)
+# View logs
 docker compose -f docker-compose.local.yml logs -f sub2api
 
 # Access Web UI
@@ -136,15 +133,10 @@ When using Docker Compose with `AUTO_SETUP=true`:
    - Connects to PostgreSQL and Redis
    - Applies database migrations (SQL files in `backend/migrations/*.sql`) and records them in `schema_migrations`
    - Generates JWT secret (if not provided)
-   - Creates admin account (password auto-generated if not provided)
+   - Creates the admin account using the required `ADMIN_PASSWORD`
    - Writes config.yaml
 
 2. No manual Setup Wizard needed - just configure `.env` and start
-
-3. If `ADMIN_PASSWORD` is not set, check logs for the generated password:
-   ```bash
-   docker compose logs sub2api | grep "admin password"
-   ```
 
 ### Database Migration Notes (PostgreSQL)
 
@@ -236,7 +228,7 @@ docker compose down -v
 | `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
 | `SERVER_PORT` | No | `8080` | Server port |
 | `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
-| `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
+| `ADMIN_PASSWORD` | **Yes** | - | Initial admin password |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
@@ -246,7 +238,7 @@ docker compose down -v
 
 See `.env.example` for all available options.
 
-> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you.
+> **Note:** The `docker-deploy.sh` script automatically generates `ADMIN_PASSWORD`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` into the mode-600 `.env` file for you.
 
 ### Easy Migration (Local Directory Version)
 
@@ -463,7 +455,7 @@ sudo systemctl enable sub2api
 
 #### Server Address and Port
 
-During installation, you will be prompted to configure the server listen address and port. These settings are stored in the systemd service file as environment variables.
+During installation, the service defaults to loopback-only access. The first-run Setup Wizard always listens on loopback (`127.0.0.1`) regardless of the `SERVER_HOST` setting, so use an SSH tunnel for initial setup (`ssh -L 8080:localhost:8080 user@host`). Configure a TLS reverse proxy to publish the service to a network **only after the Setup Wizard completes** — the wizard requires the bootstrap token, which is removed at the end of setup. These settings are stored in the systemd service file as environment variables.
 
 To change after installation:
 
@@ -475,9 +467,11 @@ To change after installation:
 2. Add or modify:
    ```ini
    [Service]
-   Environment=SERVER_HOST=0.0.0.0
-   Environment=SERVER_PORT=3000
+   Environment=SERVER_HOST=127.0.0.1
+   Environment=SERVER_PORT=8080
    ```
+
+   The wizard remains loopback-only during first-run setup even if you set a public `SERVER_HOST` here; that setting only takes effect for the normal application after setup completes.
 
 3. Reload and restart:
    ```bash
