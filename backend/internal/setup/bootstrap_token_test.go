@@ -339,7 +339,11 @@ func TestWriteBootstrapTokenTemp(t *testing.T) {
 		if err != nil {
 			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
 		}
-		defer os.Remove(tempPath)
+		t.Cleanup(func() {
+			if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+				t.Errorf("Remove temp file: %v", err)
+			}
+		})
 
 		// The temp file must live in the data directory (same filesystem) so
 		// the later hard-link publication is atomic.
@@ -376,12 +380,20 @@ func TestWriteBootstrapTokenTemp(t *testing.T) {
 		if err != nil {
 			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
 		}
-		defer os.Remove(p1)
+		t.Cleanup(func() {
+			if err := os.Remove(p1); err != nil && !os.IsNotExist(err) {
+				t.Errorf("Remove first temp file: %v", err)
+			}
+		})
 		p2, err := writeBootstrapTokenTemp(strings.Repeat("cd", 32))
 		if err != nil {
 			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
 		}
-		defer os.Remove(p2)
+		t.Cleanup(func() {
+			if err := os.Remove(p2); err != nil && !os.IsNotExist(err) {
+				t.Errorf("Remove second temp file: %v", err)
+			}
+		})
 
 		if p1 == p2 {
 			t.Fatal("two temp files have the same path")
