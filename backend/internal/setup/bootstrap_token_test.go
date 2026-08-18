@@ -269,10 +269,13 @@ func TestLoadOrCreateBootstrapToken(t *testing.T) {
 		}
 	})
 
-	t.Run("concurrent creation does not overwrite", func(t *testing.T) {
-		// Verify that O_EXCL prevents two concurrent calls from overwriting
-		// each other's token. Both will succeed (one creates, one loads),
-		// and the file will contain exactly one token.
+	t.Run("concurrent creation publishes exactly one token", func(t *testing.T) {
+		// Publish invariant: a token is fully written, synced, and closed in a
+		// unique private temp file before being atomically published at the
+		// final pathname via a no-replace hard link. A concurrent reader can
+		// therefore never observe a partial or empty final file. Both callers
+		// succeed (one creates, the other wins the ErrExist race and loads the
+		// already-published file), and the file contains exactly one token.
 		dir := t.TempDir()
 		t.Setenv("DATA_DIR", dir)
 
@@ -298,9 +301,9 @@ func TestLoadOrCreateBootstrapToken(t *testing.T) {
 		if len(tokens) != 2 {
 			t.Fatalf("expected 2 successful token loads, got %d", len(tokens))
 		}
-		// Both tokens must be the same (the file was created once, loaded once).
+		// Both tokens must be the same (the file was published once, loaded once).
 		if tokens[0] != tokens[1] {
-			t.Fatal("concurrent calls returned different tokens — O_EXCL or load-after-race failed")
+			t.Fatal("concurrent calls returned different tokens — no-replace publication or load-after-race failed")
 		}
 		// Verify the file exists and contains exactly one token.
 		data, err := os.ReadFile(GetBootstrapTokenPath())
@@ -315,6 +318,192 @@ func TestLoadOrCreateBootstrapToken(t *testing.T) {
 			t.Fatalf("file content = %q, want %q", lines[0], tokens[0])
 		}
 	})
+}
+
+func countBootstrapTokenTempFiles(t *testing.T) int {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(GetDataDir(), BootstrapTokenFile+".tmp.*"))
+	if err != nil {
+		t.Fatalf("Glob error = %v", err)
+	}
+	return len(matches)
+}
+
+func TestWriteBootstrapTokenTemp(t *testing.T) {
+	t.Run("writes mode 0400 temp file with full token", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("DATA_DIR", dir)
+
+		token := strings.Repeat("ab", 32) // 64 hex chars
+		tempPath, err := writeBootstrapTokenTemp(token)
+		if err != nil {
+			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
+		}
+		defer os.Remove(tempPath)
+
+		// The temp file must live in the data directory (same filesystem) so
+		// the later hard-link publication is atomic.
+		if filepath.Dir(tempPath) != dir {
+			t.Fatalf("temp file dir = %q, want %q", filepath.Dir(tempPath), dir)
+		}
+
+		// Mode must be 0400 (owner read-only) on platforms that enforce it.
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(tempPath)
+			if err != nil {
+				t.Fatalf("Stat error = %v", err)
+			}
+			if got := info.Mode().Perm(); got != 0o400 {
+				t.Fatalf("temp file permissions = %o, want 0400", got)
+			}
+		}
+
+		// Content must be the full token plus newline before publication.
+		data, err := os.ReadFile(tempPath)
+		if err != nil {
+			t.Fatalf("ReadFile error = %v", err)
+		}
+		if string(data) != token+"\n" {
+			t.Fatalf("temp file content = %q, want %q", data, token+"\n")
+		}
+	})
+
+	t.Run("multiple calls create distinct temp files", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("DATA_DIR", dir)
+
+		p1, err := writeBootstrapTokenTemp(strings.Repeat("ab", 32))
+		if err != nil {
+			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
+		}
+		defer os.Remove(p1)
+		p2, err := writeBootstrapTokenTemp(strings.Repeat("cd", 32))
+		if err != nil {
+			t.Fatalf("writeBootstrapTokenTemp() error = %v", err)
+		}
+		defer os.Remove(p2)
+
+		if p1 == p2 {
+			t.Fatal("two temp files have the same path")
+		}
+	})
+}
+
+func TestLoadOrCreateBootstrapTokenFailsClosedOnEmptyFile(t *testing.T) {
+	// Regression: an existing final token of length 0 (the partial-file
+	// symptom the publish invariant eliminates) must fail closed. The final
+	// pathname only ever appears fully published now, but a pre-existing
+	// malformed file must never be deleted, repaired, or overwritten.
+	dir := t.TempDir()
+	t.Setenv("DATA_DIR", dir)
+
+	// Create an empty token file.
+	if err := os.WriteFile(GetBootstrapTokenPath(), nil, 0400); err != nil {
+		t.Fatalf("WriteFile error = %v", err)
+	}
+
+	_, err := LoadOrCreateBootstrapToken()
+	if err == nil {
+		t.Fatal("LoadOrCreateBootstrapToken should reject an empty token file")
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("error = %v, want 'invalid'", err)
+	}
+	// The empty file must still be there — never silently replaced.
+	data, err := os.ReadFile(GetBootstrapTokenPath())
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if len(data) != 0 {
+		t.Fatal("LoadOrCreateBootstrapToken must not overwrite an empty token file")
+	}
+}
+
+func TestLoadOrCreateBootstrapTokenNoTempLeak(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DATA_DIR", dir)
+
+	// Success path: the temp file must be cleaned up after publication.
+	token, err := LoadOrCreateBootstrapToken()
+	if err != nil {
+		t.Fatalf("LoadOrCreateBootstrapToken() error = %v", err)
+	}
+	if token == "" {
+		t.Fatal("token should not be empty")
+	}
+	if n := countBootstrapTokenTempFiles(t); n != 0 {
+		t.Fatalf("found %d leftover temp files after successful publication", n)
+	}
+
+	// Fail-closed path: an invalid existing final token must neither be
+	// replaced nor leave temp files behind. Remove the token created above
+	// first (the final file is 0400, so it cannot be overwritten in place).
+	if err := os.Remove(GetBootstrapTokenPath()); err != nil {
+		t.Fatalf("Remove error = %v", err)
+	}
+	if err := os.WriteFile(GetBootstrapTokenPath(), []byte("invalid\n"), 0400); err != nil {
+		t.Fatalf("WriteFile error = %v", err)
+	}
+	if _, err := LoadOrCreateBootstrapToken(); err == nil {
+		t.Fatal("LoadOrCreateBootstrapToken should reject invalid token file")
+	}
+	if n := countBootstrapTokenTempFiles(t); n != 0 {
+		t.Fatalf("found %d leftover temp files after fail-closed path", n)
+	}
+	if _, err := os.Stat(GetBootstrapTokenPath()); err != nil {
+		t.Fatal("fail-closed path must keep the invalid final token")
+	}
+}
+
+func TestLoadOrCreateBootstrapTokenConcurrentStress(t *testing.T) {
+	// Hammer the publish path with concurrent callers to verify the publish
+	// invariant under contention: every caller observes the same token, the
+	// final file always contains exactly one well-formed token, and no temp
+	// files leak from the ErrExist load-after-race path.
+	dir := t.TempDir()
+	t.Setenv("DATA_DIR", dir)
+
+	const goroutines = 16
+	var mu sync.Mutex
+	tokens := make([]string, 0, goroutines)
+	for round := 0; round < 20; round++ {
+		tokens = tokens[:0]
+		var wg sync.WaitGroup
+		for i := 0; i < goroutines; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				tok, err := LoadOrCreateBootstrapToken()
+				if err != nil {
+					t.Errorf("concurrent LoadOrCreateBootstrapToken error: %v", err)
+					return
+				}
+				mu.Lock()
+				tokens = append(tokens, tok)
+				mu.Unlock()
+			}()
+		}
+		wg.Wait()
+
+		if len(tokens) != goroutines {
+			t.Fatalf("round %d: expected %d successes, got %d", round, goroutines, len(tokens))
+		}
+		for _, tok := range tokens[1:] {
+			if tok != tokens[0] {
+				t.Fatalf("round %d: concurrent callers observed different tokens", round)
+			}
+		}
+
+		// The final file must always hold exactly one well-formed token.
+		if err := validateBootstrapTokenFile(GetBootstrapTokenPath()); err != nil {
+			t.Fatalf("round %d: published token file invalid: %v", round, err)
+		}
+	}
+
+	// No temp files may leak from any publication or ErrExist path.
+	if n := countBootstrapTokenTempFiles(t); n != 0 {
+		t.Fatalf("found %d leftover temp files after concurrent stress", n)
+	}
 }
 
 func TestRemoveBootstrapToken(t *testing.T) {

@@ -96,11 +96,60 @@ func validateDataDir() error {
 	return nil
 }
 
-// LoadOrCreateBootstrapToken loads an existing token or creates one exclusively.
+// writeBootstrapTokenTemp writes the token to a uniquely named private temp
+// file in the data directory, fsyncs it, and closes it. The returned path is
+// fully written and durable before any publication step, and the file is mode
+// 0400 so the published final file never exposes a broader permission.
+// The caller owns cleanup of the returned temp path.
+func writeBootstrapTokenTemp(token string) (string, error) {
+	dir := GetDataDir()
+	fd, err := os.CreateTemp(dir, BootstrapTokenFile+".tmp.*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create bootstrap token temp file: %w", err)
+	}
+	tempPath := fd.Name()
+
+	cleanup := func() {
+		_ = fd.Close()
+		_ = os.Remove(tempPath)
+	}
+
+	// Private: owner-only read. Set explicitly so the published final file is
+	// 0400 regardless of CreateTemp's defaults or the process umask.
+	if err := fd.Chmod(0400); err != nil {
+		cleanup()
+		return "", fmt.Errorf("failed to set bootstrap token temp file mode: %w", err)
+	}
+
+	if _, err := fd.Write([]byte(token + "\n")); err != nil {
+		cleanup()
+		return "", fmt.Errorf("failed to write bootstrap token: %w", err)
+	}
+	// Sync before close so the token is durable on disk before publication.
+	if err := fd.Sync(); err != nil {
+		cleanup()
+		return "", fmt.Errorf("failed to sync bootstrap token temp file: %w", err)
+	}
+	if err := fd.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("failed to close bootstrap token temp file: %w", err)
+	}
+	return tempPath, nil
+}
+
+// LoadOrCreateBootstrapToken loads an existing token or creates one.
 // Only called from runSetupServer (the HTTP setup wizard); never from CLI or AUTO_SETUP.
 // A valid existing token is never truncated; an invalid or insecure token file fails
-// closed (never silently deleted or overwritten). Token creation uses O_CREATE|O_EXCL
-// so no other process can replace an existing token.
+// closed (never silently deleted or overwritten).
+//
+// Publish invariant: a new token is written, fsynced, and closed in a uniquely
+// named private temp file inside the data directory, and only then atomically
+// published at the final pathname via a no-replace hard link (os.Link). The
+// final pathname therefore never exposes a partial or empty token: at every
+// instant it either does not exist or is a complete, durable token. If another
+// process published first, os.Link fails with ErrExist and the fully published
+// file is loaded and validated; the existing final token is never overwritten
+// or removed, and a malformed one fails closed.
 func LoadOrCreateBootstrapToken() (string, error) {
 	path := GetBootstrapTokenPath()
 
@@ -122,42 +171,44 @@ func LoadOrCreateBootstrapToken() (string, error) {
 		return "", fmt.Errorf("failed to read bootstrap token: %w", err)
 	}
 
-	// File does not exist. Create a new token using O_CREATE|O_EXCL so that
-	// we never replace a token created by another process between our probe
-	// and write.
+	// File does not exist. Generate a token and stage it in a temp file that
+	// is complete before publication.
 	token, err := generateBootstrapToken()
 	if err != nil {
 		return "", err
 	}
 
-	fd, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0400)
+	tempPath, err := writeBootstrapTokenTemp(token)
 	if err != nil {
-		// O_EXCL failed — the file was created by another process between our
-		// read probe and open. Try to load it instead of failing.
+		return "", err
+	}
+	// Always clean up the temp file: after a successful link it is merely an
+	// extra hard link to the published inode; after a failure it must not
+	// linger in the data directory.
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
+
+	// Publish with a no-replace hard link. The final pathname appears only
+	// once the temp file is fully written, synced, and closed, so a
+	// concurrent reader can never observe a partial token there.
+	if err := os.Link(tempPath, path); err != nil {
 		if os.IsExist(err) {
+			// Another process published a fully written token first. Load and
+			// validate the published file; never overwrite or remove it.
 			data, readErr := os.ReadFile(path)
-			if readErr == nil {
-				valErr := validateBootstrapTokenFile(path)
-				if valErr == nil {
-					return strings.TrimSpace(string(data)), nil
-				}
-				// The other process wrote an invalid token. Fail closed.
+			if readErr != nil {
+				return "", fmt.Errorf("failed to read concurrently created bootstrap token: %w", readErr)
+			}
+			if valErr := validateBootstrapTokenFile(path); valErr != nil {
+				// The concurrent publisher wrote an invalid token. Fail closed.
 				return "", fmt.Errorf("existing bootstrap token (created concurrently) is invalid: %w", valErr)
 			}
-			return "", fmt.Errorf("failed to read concurrently created bootstrap token: %w", readErr)
+			return strings.TrimSpace(string(data)), nil
 		}
-		return "", fmt.Errorf("failed to create bootstrap token exclusively: %w", err)
+		return "", fmt.Errorf("failed to publish bootstrap token: %w", err)
 	}
 
-	if _, err := fd.Write([]byte(token + "\n")); err != nil {
-		_ = fd.Close()
-		_ = os.Remove(path)
-		return "", fmt.Errorf("failed to write bootstrap token: %w", err)
-	}
-	if err := fd.Close(); err != nil {
-		_ = os.Remove(path)
-		return "", fmt.Errorf("failed to close bootstrap token file: %w", err)
-	}
 	return token, nil
 }
 
