@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 )
 
@@ -420,14 +419,8 @@ func TestBootstrapTokenOwnerOnlyPermissions(t *testing.T) {
 	}
 
 	// Check 0400 (owner read-only).
-	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok {
-			t.Fatal("Sys() did not return *syscall.Stat_t")
-		}
-		if int(stat.Uid) != os.Geteuid() {
-			t.Fatalf("file owner uid=%d != euid=%d", stat.Uid, os.Geteuid())
-		}
+	if got := info.Mode().Perm(); got != 0o400 {
+		t.Fatalf("file permissions = %o, want 0400", got)
 	}
 }
 

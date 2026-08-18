@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"go.uber.org/zap"
@@ -42,8 +40,8 @@ func generateBootstrapToken() (string, error) {
 }
 
 // validateBootstrapTokenFile defensively validates an existing token file.
-// It checks: regular file (not symlink), owner equals effective UID,
-// no group/other permissions, and valid hex encoding of the expected length.
+// It checks: regular file (not symlink), platform-specific ownership and
+// permission safety, and valid hex encoding of the expected length.
 func validateBootstrapTokenFile(path string) error {
 	// Lstat first: must not be a symlink.
 	lstatInfo, err := os.Lstat(path)
@@ -57,18 +55,8 @@ func validateBootstrapTokenFile(path string) error {
 		return fmt.Errorf("token file is not a regular file (mode=%s)", lstatInfo.Mode())
 	}
 
-	// Owner-only permissions check (Unix only — Windows cannot enforce this).
-	if runtime.GOOS != "windows" {
-		if lstatInfo.Mode()&0o077 != 0 {
-			return fmt.Errorf("token file has group/other permissions (mode=%s)", lstatInfo.Mode())
-		}
-		stat, ok := lstatInfo.Sys().(*syscall.Stat_t)
-		if !ok {
-			return fmt.Errorf("token file stat info not available")
-		}
-		if int(stat.Uid) != os.Geteuid() {
-			return fmt.Errorf("token file owner uid=%d does not match effective uid=%d", stat.Uid, os.Geteuid())
-		}
+	if err := validateBootstrapTokenFileMetadata(lstatInfo); err != nil {
+		return err
 	}
 
 	// Read and validate content.
@@ -87,8 +75,8 @@ func validateBootstrapTokenFile(path string) error {
 }
 
 // validateDataDir validates that the DATA_DIR is a real directory owned by the
-// effective user and not group/other writable (Unix only). This prevents
-// privilege escalation and tampering with the bootstrap token.
+// effective user and not group/other writable where the platform supports
+// those checks. This prevents privilege escalation and token tampering.
 func validateDataDir() error {
 	dir := GetDataDir()
 	info, err := os.Lstat(dir)
@@ -102,20 +90,8 @@ func validateDataDir() error {
 		return fmt.Errorf("data directory %q is not a directory", dir)
 	}
 
-	if runtime.GOOS != "windows" {
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok {
-			return fmt.Errorf("cannot get file info for data directory %q", dir)
-		}
-		if int(stat.Uid) != os.Geteuid() {
-			return fmt.Errorf("data directory %q owner uid=%d does not match effective uid=%d",
-				dir, stat.Uid, os.Geteuid())
-		}
-		// Reject group/other writable directories.
-		if info.Mode()&0o022 != 0 {
-			return fmt.Errorf("data directory %q is group or other writable (mode=%s)",
-				dir, info.Mode())
-		}
+	if err := validateBootstrapTokenDataDirMetadata(info, dir); err != nil {
+		return err
 	}
 	return nil
 }
