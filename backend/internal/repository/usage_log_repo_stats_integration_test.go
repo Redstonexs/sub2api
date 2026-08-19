@@ -114,3 +114,86 @@ func TestUsageLog_GetStatsWithFilters_AggregatesAndEndpoints(t *testing.T) {
 	require.NotEmpty(t, stats.UpstreamEndpoints)
 	require.NotEmpty(t, stats.EndpointPaths)
 }
+
+func TestUsageLog_GetAccountWindowStatsBatchByWindows(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newUsageLogRepositoryWithSQL(client, tx)
+
+	user := mustCreateUser(t, client, &service.User{Email: "batch-windows@test.com"})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-batch-windows", Name: "k"})
+	accountA := mustCreateAccount(t, client, &service.Account{Name: "acc-batch-windows-a"})
+	accountB := mustCreateAccount(t, client, &service.Account{Name: "acc-batch-windows-b"})
+
+	now := time.Now().UTC()
+	// accountA: two logs inside the 5h window, one log before it (excluded).
+	_, err := repo.Create(ctx, &service.UsageLog{
+		UserID: user.ID, APIKeyID: apiKey.ID, AccountID: accountA.ID,
+		Model: "claude-3", InputTokens: 2, OutputTokens: 3,
+		CacheCreationTokens: 4, CacheReadTokens: 5,
+		TotalCost: 0.5, ActualCost: 0.4, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, &service.UsageLog{
+		UserID: user.ID, APIKeyID: apiKey.ID, AccountID: accountA.ID,
+		Model: "claude-3", InputTokens: 10, OutputTokens: 20,
+		CacheCreationTokens: 0, CacheReadTokens: 0,
+		TotalCost: 1.0, ActualCost: 0.8, CreatedAt: now.Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, &service.UsageLog{
+		UserID: user.ID, APIKeyID: apiKey.ID, AccountID: accountA.ID,
+		Model: "claude-3", InputTokens: 100, OutputTokens: 100,
+		CacheCreationTokens: 0, CacheReadTokens: 0,
+		TotalCost: 9.0, ActualCost: 7.0, CreatedAt: now.Add(-10 * time.Hour),
+	})
+	require.NoError(t, err)
+
+	// accountB: no logs at all (zero-log window must return zero-valued stats).
+	_ = accountB
+
+	requests := []usagestats.AccountWindowStatsRequest{
+		{AccountID: accountA.ID, WindowKey: "5h", StartTime: now.Add(-5 * time.Hour)},
+		{AccountID: accountA.ID, WindowKey: "7d", StartTime: now.Add(-7 * 24 * time.Hour)},
+		{AccountID: accountB.ID, WindowKey: "5h", StartTime: now.Add(-5 * time.Hour)},
+	}
+	got, err := repo.GetAccountWindowStatsBatchByWindows(ctx, requests)
+	require.NoError(t, err)
+
+	// accountA 5h: two logs (now, now-1h); the now-10h log is excluded.
+	a5h := got[usagestats.AccountWindowStatsKey{AccountID: accountA.ID, WindowKey: "5h"}]
+	require.NotNil(t, a5h)
+	require.Equal(t, int64(2), a5h.Requests)
+	require.Equal(t, int64(2+3+4+5+10+20), a5h.Tokens)
+	require.InDelta(t, 1.5, a5h.Cost, 1e-9)
+	require.InDelta(t, 1.5, a5h.StandardCost, 1e-9)
+	require.InDelta(t, 1.2, a5h.UserCost, 1e-9)
+
+	// accountA 7d: all three logs.
+	a7d := got[usagestats.AccountWindowStatsKey{AccountID: accountA.ID, WindowKey: "7d"}]
+	require.NotNil(t, a7d)
+	require.Equal(t, int64(3), a7d.Requests)
+	require.Equal(t, int64(2+3+4+5+10+20+100+100), a7d.Tokens)
+	require.InDelta(t, 10.5, a7d.Cost, 1e-9)
+	require.InDelta(t, 10.5, a7d.StandardCost, 1e-9)
+	require.InDelta(t, 8.2, a7d.UserCost, 1e-9)
+
+	// accountB 5h: zero-log window returns zero-valued stats.
+	b5h := got[usagestats.AccountWindowStatsKey{AccountID: accountB.ID, WindowKey: "5h"}]
+	require.NotNil(t, b5h)
+	require.Equal(t, int64(0), b5h.Requests)
+	require.Equal(t, int64(0), b5h.Tokens)
+	require.InDelta(t, 0.0, b5h.Cost, 1e-9)
+	require.InDelta(t, 0.0, b5h.StandardCost, 1e-9)
+	require.InDelta(t, 0.0, b5h.UserCost, 1e-9)
+
+	// Cross-check against the single-account query for the same window.
+	single, err := repo.GetAccountWindowStats(ctx, accountA.ID, now.Add(-5*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, single.Requests, a5h.Requests)
+	require.Equal(t, single.Tokens, a5h.Tokens)
+	require.InDelta(t, single.Cost, a5h.Cost, 1e-9)
+	require.InDelta(t, single.StandardCost, a5h.StandardCost, 1e-9)
+	require.InDelta(t, single.UserCost, a5h.UserCost, 1e-9)
+}

@@ -388,6 +388,93 @@ func (r *usageLogRepository) GetAccountWindowStatsBatch(ctx context.Context, acc
 	return result, nil
 }
 
+// accountWindowStatsBatchReaderByWindows mirrors the optional narrow batch
+// reader port consumed by service.AccountUsageService via type assertion
+// (heterogeneous per-window start times). Kept local so the repository can pin
+// the contract without depending on an unexported service type.
+type accountWindowStatsBatchReaderByWindows interface {
+	GetAccountWindowStatsBatchByWindows(ctx context.Context, requests []usagestats.AccountWindowStatsRequest) (map[usagestats.AccountWindowStatsKey]*usagestats.AccountStats, error)
+}
+
+// Compile-time contract assertion: usageLogRepository must satisfy the
+// heterogeneous account-window batch reader port.
+var _ accountWindowStatsBatchReaderByWindows = (*usageLogRepository)(nil)
+
+// GetAccountWindowStatsBatchByWindows 批量获取多个账号在各自独立窗口起点下的统计。
+// 每个请求携带独立的 (accountID, windowKey, startTime)，一次 SQL 查询完成聚合。
+// 使用 UNNEST 输入关系 + LEFT JOIN，因此零日志的请求窗口也会返回零值统计。
+// 聚合公式与 GetAccountWindowStats 完全一致。
+func (r *usageLogRepository) GetAccountWindowStatsBatchByWindows(ctx context.Context, requests []usagestats.AccountWindowStatsRequest) (map[usagestats.AccountWindowStatsKey]*usagestats.AccountStats, error) {
+	result := make(map[usagestats.AccountWindowStatsKey]*usagestats.AccountStats, len(requests))
+	if len(requests) == 0 {
+		return result, nil
+	}
+
+	accountIDs := make([]int64, len(requests))
+	windowKeys := make([]string, len(requests))
+	startTimes := make([]time.Time, len(requests))
+	for i, req := range requests {
+		accountIDs[i] = req.AccountID
+		windowKeys[i] = req.WindowKey
+		startTimes[i] = req.StartTime
+	}
+
+	query := `
+		SELECT
+			w.account_id,
+			w.window_key,
+			COALESCE(COUNT(ul.id), 0) as requests,
+			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) as tokens,
+			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0) as cost,
+			COALESCE(SUM(ul.total_cost), 0) as standard_cost,
+			COALESCE(SUM(ul.actual_cost), 0) as user_cost
+		FROM (
+			SELECT account_id, window_key, start_time
+			FROM UNNEST($1::bigint[], $2::text[], $3::timestamptz[])
+				AS w(account_id, window_key, start_time)
+		) w
+		LEFT JOIN usage_logs ul
+			ON ul.account_id = w.account_id
+			AND ul.created_at >= w.start_time
+		GROUP BY w.account_id, w.window_key
+	`
+	rows, err := r.sql.QueryContext(ctx, query, pq.Array(accountIDs), pq.Array(windowKeys), pq.Array(startTimes))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var accountID int64
+		var windowKey string
+		stats := &usagestats.AccountStats{}
+		if err := rows.Scan(
+			&accountID,
+			&windowKey,
+			&stats.Requests,
+			&stats.Tokens,
+			&stats.Cost,
+			&stats.StandardCost,
+			&stats.UserCost,
+		); err != nil {
+			return nil, err
+		}
+		result[usagestats.AccountWindowStatsKey{AccountID: accountID, WindowKey: windowKey}] = stats
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 未命中的请求窗口返回零值统计，便于上层直接复用。
+	for _, req := range requests {
+		key := usagestats.AccountWindowStatsKey{AccountID: req.AccountID, WindowKey: req.WindowKey}
+		if _, ok := result[key]; !ok {
+			result[key] = &usagestats.AccountStats{}
+		}
+	}
+	return result, nil
+}
+
 // GetGeminiUsageTotalsBatch 批量聚合 Gemini 账号在窗口内的 Pro/Flash 请求与用量。
 // 模型分类规则与 service.geminiModelClassFromName 一致：model 包含 flash/lite 视为 flash，其余视为 pro。
 func (r *usageLogRepository) GetGeminiUsageTotalsBatch(ctx context.Context, accountIDs []int64, startTime, endTime time.Time) (map[int64]service.GeminiUsageTotals, error) {

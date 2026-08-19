@@ -84,6 +84,13 @@ type accountWindowStatsBatchReader interface {
 	GetAccountWindowStatsBatch(ctx context.Context, accountIDs []int64, startTime time.Time) (map[int64]*usagestats.AccountStats, error)
 }
 
+// accountWindowStatsBatchReaderByWindows is an optional narrow batch reader for
+// heterogeneous account-window stats (each request carries its own start time).
+// Obtained from the existing usage-log repo by type assertion; no Wire churn.
+type accountWindowStatsBatchReaderByWindows interface {
+	GetAccountWindowStatsBatchByWindows(ctx context.Context, requests []usagestats.AccountWindowStatsRequest) (map[usagestats.AccountWindowStatsKey]*usagestats.AccountStats, error)
+}
+
 // apiUsageCache 缓存从 Anthropic API 获取的使用率数据（utilization, resets_at）
 // 同时支持缓存错误响应（负缓存），防止 429 等错误导致的重试风暴
 type apiUsageCache struct {
@@ -661,7 +668,93 @@ func (s *AccountUsageService) GetPassiveUsageBatch(ctx context.Context, accountI
 		result[account.ID] = info
 	}
 
+	// 为实际存在的 5h/7d 窗口批量附加本地窗口统计（一次 SQL 查询，无 N+1）。
+	s.attachPassiveBatchWindowStats(ctx, result, accounts, now)
+
 	return result, nil
+}
+
+// attachPassiveBatchWindowStats 为被动批量结果中的 5h/7d 窗口附加本地窗口统计。
+// 通过可选的窄批量读取端口一次查询所有窗口；端口缺失或查询失败时仅记录一次日志，
+// 保留配额数据但不附加统计，绝不回退到逐账号查询。
+func (s *AccountUsageService) attachPassiveBatchWindowStats(ctx context.Context, result map[int64]*UsageInfo, accounts []*Account, now time.Time) {
+	if s.usageLogRepo == nil {
+		return
+	}
+	batchReader, ok := s.usageLogRepo.(accountWindowStatsBatchReaderByWindows)
+	if !ok {
+		return
+	}
+
+	// 只准备实际存在的窗口。
+	var requests []usagestats.AccountWindowStatsRequest
+	for _, account := range accounts {
+		info := result[account.ID]
+		if info == nil {
+			continue
+		}
+		if account.IsAnthropicOAuthOrSetupToken() {
+			// Anthropic 5h 使用当前会话窗口开始时间。
+			if info.FiveHour != nil {
+				requests = append(requests, usagestats.AccountWindowStatsRequest{
+					AccountID: account.ID,
+					WindowKey: "5h",
+					StartTime: account.GetCurrentWindowStartTime(),
+				})
+			}
+			// Anthropic 7d 从重置时间推导滚动 7 天起点，无重置时回退 now-7d。
+			if info.SevenDay != nil {
+				requests = append(requests, usagestats.AccountWindowStatsRequest{
+					AccountID: account.ID,
+					WindowKey: "7d",
+					StartTime: codexWindowStatsStart(info.SevenDay, 7*24*time.Hour, now),
+				})
+			}
+		} else if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
+			// OpenAI 沿用现有 codexWindowStatsStart 语义。
+			if info.FiveHour != nil {
+				requests = append(requests, usagestats.AccountWindowStatsRequest{
+					AccountID: account.ID,
+					WindowKey: "5h",
+					StartTime: codexWindowStatsStart(info.FiveHour, 5*time.Hour, now),
+				})
+			}
+			if info.SevenDay != nil {
+				requests = append(requests, usagestats.AccountWindowStatsRequest{
+					AccountID: account.ID,
+					WindowKey: "7d",
+					StartTime: codexWindowStatsStart(info.SevenDay, 7*24*time.Hour, now),
+				})
+			}
+		}
+	}
+
+	if len(requests) == 0 {
+		return
+	}
+
+	statsByKey, err := batchReader.GetAccountWindowStatsBatchByWindows(ctx, requests)
+	if err != nil {
+		slog.Warn("passive_batch_window_stats_query_failed", "windows", len(requests), "error", err)
+		return
+	}
+
+	for _, account := range accounts {
+		info := result[account.ID]
+		if info == nil {
+			continue
+		}
+		if info.FiveHour != nil {
+			if stats, ok := statsByKey[usagestats.AccountWindowStatsKey{AccountID: account.ID, WindowKey: "5h"}]; ok {
+				info.FiveHour.WindowStats = windowStatsFromAccountStats(stats)
+			}
+		}
+		if info.SevenDay != nil {
+			if stats, ok := statsByKey[usagestats.AccountWindowStatsKey{AccountID: account.ID, WindowKey: "7d"}]; ok {
+				info.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
+			}
+		}
+	}
 }
 
 func applySyntheticWindowStats(info *UsageInfo, extra map[string]any) {
