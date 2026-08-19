@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 )
 
 // settingRepoStub is a shared in-memory fake of SettingRepository used by
@@ -11,6 +12,7 @@ import (
 // Methods use pointer receivers so the call counters stay observable through the
 // interface; construct it as &settingRepoStub{...}.
 type settingRepoStub struct {
+	mu               sync.Mutex
 	values           map[string]string
 	err              error
 	getValueCalls    int
@@ -22,6 +24,8 @@ func (s *settingRepoStub) Get(context.Context, string) (*Setting, error) {
 }
 
 func (s *settingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.getValueCalls++
 	if s.err != nil {
 		return "", s.err
@@ -35,6 +39,8 @@ func (s *settingRepoStub) GetValue(ctx context.Context, key string) (string, err
 func (s *settingRepoStub) Set(context.Context, string, string) error { return nil }
 
 func (s *settingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.getMultipleCalls++
 	if s.err != nil {
 		return nil, s.err
