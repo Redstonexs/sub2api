@@ -95,12 +95,19 @@ jobs:
           check-latest: false
           cache: true
           cache-dependency-path: backend/go.sum
+      # Compute the key once, before any step that can mutate go.mod/go.sum
+      # (GoReleaser's before hook runs `go mod tidy -C backend`), so restore
+      # and save use the identical key.
+      - name: Compute GoReleaser cache key
+        id: goreleaser-cache-key
+        run: |
+          echo "key=goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}" >> "$GITHUB_OUTPUT"
       - name: Restore GoReleaser Go build cache
         id: restore-goreleaser-cache
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/goreleaser-go-build
-          key: goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}
+          key: ${{ steps.goreleaser-cache-key.outputs.key }}
       - name: Create placeholder for embedded frontend
         if: steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
         run: |
@@ -125,4 +132,4 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/goreleaser-go-build
-          key: goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}
+          key: ${{ steps.goreleaser-cache-key.outputs.key }}
