@@ -64,6 +64,14 @@ func (s *grokMediaOwnerHandlerCache) ReleaseGrokVideoBilled(_ context.Context, _
 	return nil
 }
 
+func (s *grokMediaOwnerHandlerCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (s *grokMediaOwnerHandlerCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", service.ErrReasoningContentNotFound
+}
+
 type grokMediaOwnerHandlerAccountRepo struct {
 	service.AccountRepository
 	account service.Account

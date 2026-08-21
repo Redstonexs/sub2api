@@ -59,6 +59,14 @@ func (s *grokMediaOwnerCacheStub) ReleaseGrokVideoBilled(_ context.Context, _ st
 	return nil
 }
 
+func (s *grokMediaOwnerCacheStub) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (s *grokMediaOwnerCacheStub) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", ErrReasoningContentNotFound
+}
+
 func TestOpenAIGatewayServiceGrokMediaVideoRequestOwner(t *testing.T) {
 	groupID := int64(44)
 	cache := &grokMediaOwnerCacheStub{}

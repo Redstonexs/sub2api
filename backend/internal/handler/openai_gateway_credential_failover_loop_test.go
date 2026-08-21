@@ -297,6 +297,14 @@ func (c *grokCredentialHandlerGatewayCache) ReleaseGrokVideoBilled(_ context.Con
 	return nil
 }
 
+func (c *grokCredentialHandlerGatewayCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (c *grokCredentialHandlerGatewayCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", service.ErrReasoningContentNotFound
+}
+
 func (c *grokCredentialHandlerTokenCache) GetAccessToken(context.Context, string) (string, error) {
 	return "", errors.New("not cached")
 }
