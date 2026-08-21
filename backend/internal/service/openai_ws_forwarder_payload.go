@@ -114,11 +114,20 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
 	if account != nil && account.Type == AccountTypeOAuth {
 		apiKeyID := getAPIKeyIDFromContext(c)
+		identity := resolveCodexOutboundSessionIdentity(c, apiKeyID, sessionResolution.SessionID)
 		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", isolateOpenAISessionID(apiKeyID, sessionResolution.SessionID))
+			if identity != nil {
+				// 同时校正上面逐字拷贝进来的客户端 session-id / thread-id，
+				// 否则握手头里会同时存在隔离后的 session_id 与客户端原值。
+				applyCodexSessionIdentityHeaders(headers, identity)
+			} else {
+				headers.Set("session_id", isolateOpenAISessionID(apiKeyID, sessionResolution.SessionID))
+			}
 		}
+		// conversation_id 仍按自己的种子派生：客户端把两者填成同值（真实 Codex 的
+		// 常态）时天然等于 identity.sessionID，填成不同值时保留这份区分。
 		if sessionResolution.ConversationID != "" {
-			headers.Set("conversation_id", isolateOpenAISessionID(apiKeyID, sessionResolution.ConversationID))
+			headers.Set("conversation_id", codexUpstreamSessionID(apiKeyID, sessionResolution.ConversationID))
 		}
 	} else {
 		if sessionResolution.SessionID != "" {

@@ -3061,7 +3061,11 @@ func TestOpenAIBuildUpstreamRequestOAuthMessagesBridgeUsesSessionOnly(t *testing
 	require.NotEmpty(t, req.Header.Get("Session_Id"))
 	require.Empty(t, req.Header.Get("Conversation_Id"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
-	require.Empty(t, req.Header.Get("originator"))
+	// bridge 出站同样落到 chatgptCodexURL，身份三元组必须完整：不再删掉 originator
+	// 让收口卫语句提前返回、再由单个调用方事后补回。
+	require.Equal(t, openai.CodexDefaultOriginator, req.Header.Get("originator"))
+	require.Equal(t, codexCLIVersion, req.Header.Get("version"))
+	require.Equal(t, codexCLIUserAgent, req.Header.Get("User-Agent"))
 }
 
 func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testing.T) {

@@ -424,6 +424,18 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if !isCompactRequest && applyCodexClientMetadata(decoded, account) {
 			markDecodedModified()
 		}
+		// 出站会话身份：把 body 侧的会话载体对齐到与出站头同一个 UUID。
+		// 必须在指纹收敛之前——收敛是显式 opt-in 的更强策略，session/full 模式
+		// 需要能覆盖这里的结果。compat bridge 的 prompt_cache_key 已被
+		// applyCodexOAuthTransform 摘除，且其会话语义由 messages 侧自行处理，跳过。
+		if !isCompactRequest && !compatMessagesBridge {
+			clientCacheKey, _ := decoded["prompt_cache_key"].(string)
+			if identity := resolveCodexOutboundSessionIdentity(c, apiKeyID, clientCacheKey); identity != nil {
+				if applyCodexSessionIdentityBody(decoded, identity) {
+					markDecodedModified()
+				}
+			}
+		}
 		stageCodexFingerprintIDs(c, nil)
 		// 指纹收敛：一次性解析收敛 ID，请求体和出站头共享同一份 IDs（保证 turn_id 等随机字段一致）。
 		// fingerprintIDs 在此处解析，后续 buildUpstreamRequest 中使用同一份。
@@ -1141,12 +1153,12 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Del("conversation_id")
 		req.Header.Del("session_id")
 
-		if compatMessagesBridge {
-			req.Header.Del("OpenAI-Beta")
-			req.Header.Del("originator")
-		} else {
-			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
-		}
+		// OAuth 一律出站到 chatgptCodexURL，因此 compat bridge 也必须带完整 Codex 身份。
+		// 历史实现在这里删掉 originator，使 enforceCodexIdentityHeadersWithUA 的
+		// `originator == ""` 卫语句提前返回（既无 version，UA 也未归一），再由
+		// openai_gateway_messages.go 事后补回——只有那一个调用方补，其余调用方遇到
+		// bridge 形态的 body 就会漏出不完整身份。改为不删，让收口在此处直接生效。
+		req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		apiKeyID := getAPIKeyIDFromContext(c)
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
@@ -1154,15 +1166,22 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
+			req.Header.Set("session_id", codexUpstreamSessionID(apiKeyID, compactSession))
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
-			isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
-			req.Header.Set("session_id", isolated)
+			// 与 Forward() body 侧共用同一份（context 固定的）身份，两侧载体必然一致。
+			var sessionID string
+			if identity := resolveCodexOutboundSessionIdentity(c, apiKeyID, promptCacheKey); identity != nil {
+				sessionID = identity.sessionID
+				applyCodexSessionIdentityHeaders(req.Header, identity)
+			} else {
+				sessionID = isolateOpenAISessionID(apiKeyID, promptCacheKey)
+				req.Header.Set("session_id", sessionID)
+			}
 			if !compatMessagesBridge || clientConversationID != "" {
-				req.Header.Set("conversation_id", isolated)
+				req.Header.Set("conversation_id", sessionID)
 			}
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
@@ -1183,6 +1202,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
 
+	// 安装标识：出站头跟随 body 里由 applyCodexClientMetadata 定稿的同名字段。
+	applyCodexInstallationIDHeader(req.Header, account, body)
 	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
 	applyStagedCodexFingerprintHeaders(c, account, req.Header)
 

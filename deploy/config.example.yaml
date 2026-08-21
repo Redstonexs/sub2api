@@ -270,6 +270,20 @@ gateway:
   #
   # 默认 false（即归一化开启）；仅当上游调整分桶、使归一化反而落入降载桶时才置 true。
   disable_codex_originator_normalization: false
+  # Stop aligning the outbound Codex request profile.
+  # 关闭「Codex 出站请求档案对齐」。
+  #
+  # 真实 Codex 客户端在一次请求里把同一个会话 UUID 同时写进 session_id / conversation_id /
+  # session-id / thread-id 头、body prompt_cache_key、client_metadata.session_id 与
+  # x-codex-turn-metadata；网关历史实现只改写 header 载体，且用的是 16 位十六进制哈希，
+  # 与 UUID 形态不符，也与 body 侧留存的客户端原值互相矛盾。对齐后所有载体收敛到同一个
+  # UUID，安装标识的出站头也跟随 body 同名字段。
+  #
+  # 注意：对齐会改写 body prompt_cache_key，首次上线时上游 prompt 缓存命中率会有一次性回落，
+  # 随会话重新预热自愈；建议低峰期开启。
+  #
+  # 默认 false（即对齐开启）；仅当上游策略变动、对齐反而有害时才置 true 回滚。
+  disable_codex_profile_alignment: false
   # Enable Codex image-generation bridge injection for /openai/v1/responses.
   # 是否为 Codex /responses 请求自动注入 image_generation 工具与桥接指令。
   #

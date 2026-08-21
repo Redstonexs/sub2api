@@ -14,7 +14,8 @@ func requireOpenAICodexProbeHeaders(t *testing.T, h http.Header) {
 	require.Equal(t, codexCLIUserAgent, h.Get("User-Agent"))
 	require.Equal(t, openai.CodexDefaultOriginator, h.Get("Originator"))
 	require.Equal(t, codexCLIVersion, h.Get("Version"))
-	require.Equal(t, "responses=experimental", h.Get("OpenAI-Beta"))
+	// 探测请求必须与生产出站形态一致：/backend-api/codex 不再发 responses=experimental。
+	require.Empty(t, h.Get("OpenAI-Beta"))
 	require.NotEmpty(t, h.Get("X-Codex-Window-ID"))
 }
 
@@ -31,7 +32,8 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		require.Equal(t, openai.CodexDefaultOriginator, h.Get("originator"))
 		require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
 		require.Equal(t, codexCLIVersion, h.Get("version"))
-		require.Equal(t, "responses=experimental", h.Get("OpenAI-Beta"))
+		// 身份补齐不再顺带声明 responses=experimental（当前客户端已不协商该实验位）。
+		require.Empty(t, h.Get("OpenAI-Beta"))
 	})
 
 	t.Run("官方非 CLI 客户端身份同样被统一", func(t *testing.T) {
@@ -46,7 +48,8 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		require.Equal(t, openai.CodexDefaultOriginator, h.Get("originator"))
 		require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
 		require.Equal(t, codexCLIVersion, h.Get("version"))
-		require.Equal(t, "responses=experimental", h.Get("OpenAI-Beta"))
+		// 身份收口只统一身份三元组，不再覆盖客户端独立协商的 beta 位。
+		require.Equal(t, "assistants=v2", h.Get("OpenAI-Beta"))
 	})
 }
 

@@ -159,6 +159,29 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 
+		if !isOpenAIResponsesCompactPath(c) {
+			// 安装标识：与非透传路径一致地补齐 client_metadata，避免 body backfill
+			// 只存在于非透传一侧（出站头随后跟随本字段取值）。
+			metaBody, metaChanged, metaErr := applyCodexClientMetadataRaw(body, account)
+			if metaErr != nil {
+				return nil, metaErr
+			}
+			if metaChanged {
+				body = metaBody
+			}
+			// 出站会话身份：与非透传路径同序——先对齐 body 侧会话载体，再让指纹收敛
+			// （显式 opt-in 的更强策略）有机会覆盖。
+			clientCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+			if identity := resolveCodexOutboundSessionIdentity(c, getAPIKeyIDFromContext(c), clientCacheKey); identity != nil {
+				alignedBody, alignedChanged, alignErr := applyCodexSessionIdentityBodyRaw(body, identity)
+				if alignErr != nil {
+					return nil, alignErr
+				}
+				if alignedChanged {
+					body = alignedBody
+				}
+			}
+		}
 		stageCodexFingerprintIDs(c, nil)
 		// 指纹收敛：与非透传路径同门控（仅 OAuth、legacy compact 形态跳过）。
 		// 一次性解析收敛 ID：请求体 client_metadata 在此改写（raw 字节外科
@@ -562,11 +585,29 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if clientConversationID == "" {
 			clientConversationID = promptCacheKey
 		}
-		if clientSessionID != "" {
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, clientSessionID))
-		}
-		if clientConversationID != "" {
-			req.Header.Set("conversation_id", isolateOpenAISessionID(apiKeyID, clientConversationID))
+		if isOpenAIResponsesCompactPath(c) {
+			// compact body 形态与 /responses 不同，不补齐会话载体，只统一标识形态。
+			if clientSessionID != "" {
+				req.Header.Set("session_id", codexUpstreamSessionID(apiKeyID, clientSessionID))
+			}
+			if clientConversationID != "" {
+				req.Header.Set("conversation_id", codexUpstreamSessionID(apiKeyID, clientConversationID))
+			}
+		} else if identity := resolveCodexOutboundSessionIdentity(c, apiKeyID, clientSessionID); identity != nil {
+			// 与 forwardOpenAIPassthrough 改写过的 body 载体同源（context 固定同一份）。
+			applyCodexSessionIdentityHeaders(req.Header, identity)
+			// conversation_id 仍按自己的种子派生：客户端把两者填成同值（真实 Codex 的
+			// 常态）时天然等于 identity.sessionID，填成不同值时保留这份区分。
+			if clientConversationID != "" {
+				req.Header.Set("conversation_id", codexUpstreamSessionID(apiKeyID, clientConversationID))
+			}
+		} else {
+			if clientSessionID != "" {
+				req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, clientSessionID))
+			}
+			if clientConversationID != "" {
+				req.Header.Set("conversation_id", isolateOpenAISessionID(apiKeyID, clientConversationID))
+			}
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
@@ -583,6 +624,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
+	// 安装标识：出站头跟随 body 里由 applyCodexClientMetadataRaw 定稿的同名字段。
+	applyCodexInstallationIDHeader(req.Header, account, body)
 	// 指纹收敛：使用 forwardOpenAIPassthrough 中预计算的收敛 ID 改写出站头，
 	// 与请求体 client_metadata 共享同一份 IDs（与非透传路径相同的相对位置：
 	// 会话隔离之后、终态身份收口之前）。

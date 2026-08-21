@@ -501,6 +501,8 @@ func NewOpenAIGatewayService(
 	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
 	if cfg != nil {
 		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
+		// 出站档案对齐同理：会话身份/安装标识的改写点同样是共用纯函数。
+		SetCodexProfileAlignmentEnabled(!cfg.Gateway.DisableCodexProfileAlignment)
 	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,

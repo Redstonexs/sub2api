@@ -971,6 +971,15 @@ type GatewayConfig struct {
 	// 取反义命名是为了让零值安全：该开关会发布为进程级快照，未经 viper 加载而手工构造的
 	// Config（测试、工具）其零值必须落在「强制统一开启」这一侧，否则会静默丢掉这层保护。
 	DisableCodexIdentityEnforcement bool `mapstructure:"disable_codex_identity_enforcement"`
+	// DisableCodexProfileAlignment: 关闭「Codex 出站请求档案对齐」。默认开启：一次请求里的
+	// 所有会话载体（session_id / conversation_id / session-id / thread-id 头、body
+	// prompt_cache_key、client_metadata.session_id、x-codex-turn-metadata）收敛到同一个
+	// UUID，安装标识的出站头跟随 body 同名字段。置 true 后逐字回到对齐前的行为：会话头用
+	// isolateOpenAISessionID 的 16 位十六进制值，body 侧保留客户端原值。
+	//
+	// 与 DisableCodexIdentityEnforcement 同样采用反义命名，理由相同：该开关会发布为进程级
+	// 快照，未经 viper 加载而手工构造的 Config（测试、工具）其零值必须落在「对齐开启」这一侧。
+	DisableCodexProfileAlignment bool `mapstructure:"disable_codex_profile_alignment"`
 	// DisableCodexOriginatorNormalization: 已废弃，等价于 DisableCodexIdentityEnforcement。
 	// 保留以兼容既有配置文件；加载时会折叠进新键，不要在新代码里直接读取。
 	DisableCodexOriginatorNormalization bool `mapstructure:"disable_codex_originator_normalization"`
@@ -2441,6 +2450,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.disable_codex_identity_enforcement", false)
 	viper.SetDefault("gateway.disable_codex_originator_normalization", false)
+	viper.SetDefault("gateway.disable_codex_profile_alignment", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.openai_compact_model", "gpt-5.4")

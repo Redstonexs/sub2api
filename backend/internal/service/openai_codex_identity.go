@@ -184,7 +184,11 @@ func ensureCodexIdentityHeaders(h http.Header) {
 	if strings.TrimSpace(h.Get("version")) == "" {
 		h.Set("version", identity.version)
 	}
-	h.Set("OpenAI-Beta", "responses=experimental")
+	// 不再补 OpenAI-Beta: responses=experimental。当前 Codex OAuth 客户端已不再协商该
+	// 实验位（stripOpenAILegacyResponsesBeta），而 /responses 主路径本来就一个都不发；
+	// 由本函数单方面补上，会让桥接与探测请求带着主路径没有的头出站。#3901 的 404 归因
+	// 见 PairCodexClientIdentity：真正的门槛是 originator 与 UA 首段配套，不是该实验位。
+	// 其它上游面（alpha/search、quota）各自显式声明，不受影响。
 }
 
 // applyOpenAICodexProbeHeaders 为合成探测请求补齐 Codex 身份和引擎指纹。

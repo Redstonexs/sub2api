@@ -333,18 +333,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			upstreamReq.Header.Set("conversation_id", isolatedSessionID)
 		}
 	}
-	if account.Type == AccountTypeOAuth && account.Platform != PlatformGrok {
-		// buildUpstreamRequest 保留 Messages bridge 的 body/session 兼容行为，并会先
-		// 清除身份头。真正发送前恢复完整 Codex 身份，避免 ChatGPT Codex 上游因缺失
-		// originator/OpenAI-Beta 返回 404（issue #3901）。
-		ensureCodexIdentityHeaders(upstreamReq.Header)
-		enforceCodexIdentityHeaders(upstreamReq.Header)
-		logger.L().Debug("openai messages: upstream identity restored",
-			zap.Int64("account_id", account.ID),
-			zap.String("upstream_model", upstreamModel),
-			zap.Bool("compat_identity_restored", true),
-		)
-	}
+	// 身份收口由 buildUpstreamRequest 内的 enforceCodexIdentityHeadersWithUA 直接完成：
+	// bridge 分支不再删除 originator，因此那个卫语句不会再提前返回，也就不需要事后补回
+	// （事后补回只有本调用方做，其余调用方遇到 bridge 形态 body 就会漏出不完整身份）。
 	if account.Type == AccountTypeOAuth && promptCacheKey != "" && strings.TrimSpace(c.GetHeader("conversation_id")) == "" {
 		upstreamReq.Header.Del("conversation_id")
 	}

@@ -221,7 +221,9 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 	require.NotEmpty(t, upstream.lastReq.Header.Get("Session_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("Conversation_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
-	require.Empty(t, upstream.lastReq.Header.Get("originator"))
+	// 同上：bridge 也必须带完整 Codex 身份出站。
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 }
 
 type openAIPassthroughFailoverRepo struct {
