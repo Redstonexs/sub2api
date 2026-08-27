@@ -54,6 +54,12 @@ func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *
 		}
 	}
 
+	codeChallenge := antigravity.GenerateCodeChallenge(codeVerifier)
+	authURL, err := antigravity.BuildAuthorizationURL(state, codeChallenge)
+	if err != nil {
+		return nil, fmt.Errorf("构建授权 URL 失败: %w", err)
+	}
+
 	session := &antigravity.OAuthSession{
 		State:        state,
 		CodeVerifier: codeVerifier,
@@ -61,9 +67,6 @@ func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *
 		CreatedAt:    time.Now(),
 	}
 	s.sessionStore.Set(sessionID, session)
-
-	codeChallenge := antigravity.GenerateCodeChallenge(codeVerifier)
-	authURL := antigravity.BuildAuthorizationURL(state, codeChallenge)
 
 	return &AntigravityAuthURLResult{
 		AuthURL:   authURL,

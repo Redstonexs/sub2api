@@ -1,8 +1,50 @@
 package service
 
 import (
+	"context"
+	"net/url"
+	"strings"
 	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 )
+
+func TestAntigravityOAuthService_GenerateAuthURLUsesConfiguredClientID(t *testing.T) {
+	t.Setenv(antigravity.AntigravityOAuthClientIDEnv, "  synthetic-service-client-id  ")
+	t.Setenv(antigravity.AntigravityOAuthClientSecretEnv, "  synthetic-service-client-secret  ")
+
+	service := NewAntigravityOAuthService(nil)
+	defer service.Stop()
+
+	result, err := service.GenerateAuthURL(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("GenerateAuthURL() failed: %v", err)
+	}
+	parsed, err := url.Parse(result.AuthURL)
+	if err != nil {
+		t.Fatalf("generated auth URL is invalid: %v", err)
+	}
+	if got := parsed.Query().Get("client_id"); got != "synthetic-service-client-id" {
+		t.Fatalf("generated auth URL client_id = %q", got)
+	}
+}
+
+func TestAntigravityOAuthService_GenerateAuthURLFailsBeforeSessionStorage(t *testing.T) {
+	t.Setenv(antigravity.AntigravityOAuthClientIDEnv, "")
+	t.Setenv(antigravity.AntigravityOAuthClientSecretEnv, "")
+
+	service := NewAntigravityOAuthService(nil)
+	defer service.Stop()
+
+	result, err := service.GenerateAuthURL(context.Background(), nil)
+	if err == nil || result != nil {
+		t.Fatalf("GenerateAuthURL() should fail without credentials: result=%v err=%v", result, err)
+	}
+	if !strings.Contains(err.Error(), antigravity.AntigravityOAuthClientIDEnv) ||
+		!strings.Contains(err.Error(), antigravity.AntigravityOAuthClientSecretEnv) {
+		t.Fatalf("configuration error should name both environment variables: %v", err)
+	}
+}
 
 func TestResolveDefaultTierID(t *testing.T) {
 	t.Parallel()

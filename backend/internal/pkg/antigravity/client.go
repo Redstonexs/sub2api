@@ -320,13 +320,13 @@ func shouldFallbackToNextURL(err error, statusCode int) bool {
 
 // ExchangeCode 用 authorization code 交换 token
 func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*TokenResponse, error) {
-	clientSecret, err := getClientSecret()
+	clientID, clientSecret, err := getClientCredentials()
 	if err != nil {
 		return nil, err
 	}
 
 	params := url.Values{}
-	params.Set("client_id", ClientID)
+	params.Set("client_id", clientID)
 	params.Set("client_secret", clientSecret)
 	params.Set("code", code)
 	params.Set("redirect_uri", RedirectURI)
@@ -364,13 +364,13 @@ func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*
 
 // RefreshToken 刷新 access_token
 func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
-	clientSecret, err := getClientSecret()
+	clientID, clientSecret, err := getClientCredentials()
 	if err != nil {
 		return nil, err
 	}
 
 	params := url.Values{}
-	params.Set("client_id", ClientID)
+	params.Set("client_id", clientID)
 	params.Set("client_secret", clientSecret)
 	params.Set("refresh_token", refreshToken)
 	params.Set("grant_type", "refresh_token")
