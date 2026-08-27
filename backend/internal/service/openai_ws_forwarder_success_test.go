@@ -427,7 +427,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersPreservesCodexIdentity(t *test
 	require.Empty(t, headers.Get("X-Test"))
 }
 
-func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesClientSessionIdentity(t *testing.T) {
+func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedClientSessionIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -462,10 +462,15 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesClientSessi
 	require.NoError(t, err)
 	require.Equal(t, ids.installationID, headers.Get("x-codex-installation-id"))
 	require.NotEqual(t, "client-installation", headers.Get("x-codex-installation-id"))
-	require.Equal(t, "client-window", headers.Get("x-codex-window-id"))
-	require.Equal(t, "client-session", headers.Get("session-id"))
-	require.Equal(t, "client-thread", headers.Get("thread-id"))
-	require.Equal(t, "client-request", headers.Get("x-client-request-id"))
+	// 账号 namespace 继续接管它不与会话对齐冲突的头。
+	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "request", "client-request"), headers.Get("x-client-request-id"))
+	// session/thread/window 三个载体由本 fork 的 Codex 档案对齐收敛到同一个 UUID
+	// （window 形态为 `{session}:0`），见 openai_codex_session_identity.go。
+	sessionIdentity := codexUpstreamSessionID(0, "client-session")
+	require.NotEmpty(t, sessionIdentity)
+	require.Equal(t, sessionIdentity, headers.Get("session-id"))
+	require.Equal(t, sessionIdentity, headers.Get("thread-id"))
+	require.Equal(t, sessionIdentity+":0", headers.Get("x-codex-window-id"))
 }
 
 func TestLogOpenAIWSBindResponseAccountWarn(t *testing.T) {
@@ -796,6 +801,73 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	// 测试中未设置 api_key 到 context，apiKeyID=0。
 	require.Equal(t, codexUpstreamSessionID(0, "sess-oauth-1"), captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, codexUpstreamSessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
+}
+
+func TestOpenAIGatewayService_Forward_WSv2_OAuthSanitizesInvalidNativeToolItemID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+	groupID := int64(5662)
+	c.Set("api_key", &APIKey{GroupID: &groupID})
+
+	cfg := newOpenAIWSV2TestConfig()
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 1
+	cfg.Gateway.OpenAIWS.QueueLimitPerConn = 8
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	captureConn := &openAIWSCaptureConn{events: [][]byte{
+		[]byte(`{"type":"response.completed","response":{"id":"resp_oauth_tool_history","model":"gpt-5.6-sol","usage":{"input_tokens":1,"output_tokens":1}}}`),
+	}}
+	captureDialer := &openAIWSCaptureDialer{conn: captureConn}
+	pool := newOpenAIWSConnPool(cfg)
+	pool.setClientDialerForTest(captureDialer)
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     &httpUpstreamRecorder{},
+		cache:            &stubGatewayCache{},
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+		toolCorrector:    NewCodexToolCorrector(),
+		openaiWSPool:     pool,
+	}
+
+	account := &Account{
+		ID:          5662,
+		Name:        "openai-oauth-ws-tool-history",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "test-oauth-token"},
+		Extra: map[string]any{
+			"responses_websockets_v2_enabled": true,
+		},
+	}
+
+	body := []byte(`{"model":"gpt-5.6-sol","stream":false,"instructions":"Continue the task.","input":[{"type":"custom_tool_call","id":"fc_hotfix_probe","call_id":"fc_hotfix","name":"exec","input":"pwd","status":"completed"},{"type":"custom_tool_call_output","call_id":"fc_hotfix","output":"done"}]}`)
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	captureConn.mu.Lock()
+	requestPayload := cloneMapStringAny(captureConn.lastWrite)
+	captureConn.mu.Unlock()
+	requestJSON := requestToJSONString(requestPayload)
+	require.Equal(t, "response.create", gjson.Get(requestJSON, "type").String())
+	require.False(t, gjson.Get(requestJSON, "input.0.id").Exists(), "stale fc_* ID must not be replayed as a native custom_tool_call ID")
+	require.Equal(t, "ctc_hotfix", gjson.Get(requestJSON, "input.0.call_id").String())
+	require.Equal(t, "custom_tool_call_output", gjson.Get(requestJSON, "input.1.type").String())
+	require.Equal(t, "ctc_hotfix", gjson.Get(requestJSON, "input.1.call_id").String())
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
@@ -1886,13 +1958,13 @@ func (c *openAIWSCaptureConn) WriteJSON(ctx context.Context, value any) error {
 		c.writes = append(c.writes, cloneMapStringAny(payload))
 	case json.RawMessage:
 		var parsed map[string]any
-		if err := json.Unmarshal(payload, &parsed); err == nil {
+		if err := decodeOpenAIJSONUseNumber(payload, &parsed); err == nil {
 			c.lastWrite = cloneMapStringAny(parsed)
 			c.writes = append(c.writes, cloneMapStringAny(parsed))
 		}
 	case []byte:
 		var parsed map[string]any
-		if err := json.Unmarshal(payload, &parsed); err == nil {
+		if err := decodeOpenAIJSONUseNumber(payload, &parsed); err == nil {
 			c.lastWrite = cloneMapStringAny(parsed)
 			c.writes = append(c.writes, cloneMapStringAny(parsed))
 		}

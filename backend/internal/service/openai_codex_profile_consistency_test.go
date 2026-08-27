@@ -116,7 +116,11 @@ func TestCodexProfile_AllSessionCarriersAgree(t *testing.T) {
 	// 与会话身份无关的字段必须原样保留。
 	require.Equal(t, "workspace-write", gjson.Get(headerMeta, "sandbox").String())
 	require.Equal(t, "tui", gjson.Get(headerMeta, "thread_source").String())
-	require.Equal(t, "turn-client", gjson.Get(headerMeta, "turn_id").String())
+	// turn_id 不是会话载体，档案对齐不接管它：上游 v0.1.18x 起由
+	// applyCodexAccountIdentityHeaders 按账号 namespace 隔离，因此这里断言隔离后的
+	// 稳定值而不是客户端原值（同一账号恒定，换号才轮换）。
+	require.Equal(t, scopeCodexAccountIdentityValue(codexProfileTestAccount(), 0, "turn", "turn-client"),
+		gjson.Get(headerMeta, "turn_id").String())
 
 	// body 侧载体
 	require.Equal(t, sessionID, gjson.GetBytes(outBody, "prompt_cache_key").String())

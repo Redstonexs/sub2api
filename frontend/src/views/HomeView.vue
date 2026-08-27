@@ -42,6 +42,15 @@
           >
             <Icon name="book" size="md" />
           </a>
+          <router-link
+            v-if="showModelPlazaEntry"
+            to="/model-plaza"
+            class="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            :title="t('nav.modelPlaza')"
+          >
+            <Icon name="grid" size="md" />
+            <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
+          </router-link>
           <button
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-dark-400 dark:hover:bg-dark-800"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
@@ -113,6 +122,17 @@
           </a>
 
           <span data-testid="home-nav-locale"><LocaleSwitcher /></span>
+
+          <router-link
+            v-if="showModelPlazaEntry"
+            data-testid="home-nav-model-plaza"
+            to="/model-plaza"
+            class="inline-flex items-center gap-1.5 rounded-lg p-2.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:bg-dark-800 dark:hover:text-gray-200"
+            :aria-label="t('nav.modelPlaza')"
+          >
+            <Icon name="grid" size="sm" />
+            <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
+          </router-link>
 
           <button
             data-testid="home-nav-theme"
@@ -192,6 +212,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useAuthStore, useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -211,9 +232,16 @@ const sanitizedHomeContent = computed(() =>
     ADD_ATTR: ['src', 'sandbox', 'allowfullscreen', 'referrerpolicy', 'allow', 'name', 'loading', 'frameborder'],
   })
 )
+const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
 
 // Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const modelPlazaRequiresAuth = computed(
+  () => appStore.cachedPublicSettings?.model_plaza_require_auth === true,
+)
+const showModelPlazaEntry = computed(
+  () => modelPlazaEnabled.value && (isAuthenticated.value || !modelPlazaRequiresAuth.value),
+)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
 const userInitial = computed(() => authStore.user?.email?.charAt(0).toUpperCase() || '')

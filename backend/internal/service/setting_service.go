@@ -151,6 +151,7 @@ type SettingService struct {
 	// instance owns its own cache, no shared package-level state.
 	openAIQuotaAutoPauseSettingsCache atomic.Value // *cachedOpenAIQuotaAutoPauseSettings
 	openAIQuotaAutoPauseSettingsSF    singleflight.Group
+	openAIAPIKeyHealthBreakerCache    atomic.Value // *cachedOpenAIAPIKeyHealthBreakerSettings
 
 	// settingsInvalidationBus 跨副本 settings 变更通知（Redis Pub/Sub，nil = 单副本本地失效）。
 	// StartSettingsInvalidationSubscriber 在 SetupRouter 设置 onUpdate 回调后才启动；
