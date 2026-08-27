@@ -1,11 +1,22 @@
 name: CI
 
 on:
+  # Feature-branch pushes are already covered by their pull_request run. Keeping
+  # `push` unfiltered ran every job twice per PR and, worse, made every branch a
+  # cache *writer* -- and branch-scoped cache entries are invisible to every
+  # other ref, so they only ever evicted the shared default-branch entries.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a default-branch run: it is the only writer of the caches every
+  # PR run restores from.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   shell:
@@ -23,26 +34,51 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets ./.github/actions/go-cache delete the entries this run supersedes.
+      actions: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
+          # setup-go bundles GOMODCACHE and GOCACHE into a single entry keyed on
+          # go.sum only. That key is shared verbatim by every Go job in the repo
+          # (they race to save it) and it never changes when *source* changes, so
+          # the build cache froze at its first save. ./.github/actions/go-cache
+          # splits the two and gives the build cache a rolling key instead.
+          cache: false
       - name: Verify Go version
         run: |
           go version | grep -q 'go1.27.0'
+      - name: Restore Go caches
+        uses: ./.github/actions/go-cache
+        with:
+          mode: restore
+          workload: test
+          deps-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
       - name: Unit tests
         working-directory: backend
         run: make test-unit
       - name: Integration tests
         working-directory: backend
         run: make test-integration
+      - name: Save Go caches
+        # A build cache produced by a failing run is still valid -- Go's cache is
+        # content-addressed, so entries are either correct or absent. Saving on
+        # red keeps the next run warm.
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/go-cache
+        with:
+          mode: save
+          token: ${{ github.token }}
 
   frontend:
     runs-on: ubuntu-latest
+    env:
+      CACHE_WRITER: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     steps:
       - uses: actions/checkout@v6
       - name: Setup pnpm
@@ -53,13 +89,60 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          # Cache managed below so PR runs stay restore-only, like every other
+          # cache in this repo.
+      - name: Resolve pnpm store path
+        id: pnpm-store-path
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore pnpm store
+        id: pnpm-store
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store-path.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          # The store is content-addressed, so a stale restore is never wrong --
+          # only incomplete. Falling back turns a lockfile bump from a cold
+          # install into a delta install.
+          restore-keys: pnpm-store-${{ runner.os }}-
       - name: Install frontend dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Save pnpm store
+        if: ${{ env.CACHE_WRITER == 'true' && steps.pnpm-store.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.pnpm-store-path.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+      - name: Restore ESLint cache
+        uses: actions/cache/restore@v5
+        with:
+          path: frontend/.eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('frontend/.eslintrc.cjs', 'frontend/.eslintignore', 'frontend/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('frontend/.eslintrc.cjs', 'frontend/.eslintignore', 'frontend/pnpm-lock.yaml') }}-
+            eslint-${{ runner.os }}-
       - name: Frontend typecheck and critical vitest
         run: make test-frontend
+      - name: Save ESLint cache
+        if: ${{ env.CACHE_WRITER == 'true' && !cancelled() }}
+        uses: actions/cache/save@v5
+        with:
+          path: frontend/.eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('frontend/.eslintrc.cjs', 'frontend/.eslintignore', 'frontend/pnpm-lock.yaml') }}-${{ github.sha }}
+      # `vue-tsc -b && vite build` was previously only ever exercised at release
+      # time. Running it here both closes that gap and lets the tag build reuse
+      # the artifact instead of rebuilding it on the release critical path.
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+      # Keep this key byte-identical to the `Restore frontend dist` key in
+      # release.yml -- a divergence silently costs the release a cache hit.
+      - name: Save frontend dist
+        if: ${{ env.CACHE_WRITER == 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: backend/internal/web/dist
+          key: frontend-dist-${{ runner.os }}-${{ hashFiles('frontend/src/**', 'frontend/public/**', 'frontend/index.html', 'frontend/package.json', 'frontend/pnpm-lock.yaml', 'frontend/vite.config.ts', 'frontend/tsconfig.json', 'frontend/tsconfig.node.json', 'frontend/tailwind.config.js', 'frontend/postcss.config.js') }}
 
   golangci-lint:
     runs-on: ubuntu-latest
@@ -69,68 +152,24 @@ jobs:
         with:
           go-version-file: backend/go.mod
           check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
+          cache: false
       - name: Verify Go version
         run: |
           go version | grep -q 'go1.27.0'
+      # Restore-only consumer of the `test` build cache: the 200-odd dependency
+      # packages compile identically for both workloads, so lint gets that for
+      # free without adding a second ~GB entry that would race `test` on save.
+      # golangci-lint's own analysis cache (~/.cache/golangci-lint) is handled by
+      # the action below, which already keys and restores it correctly.
+      - name: Restore Go caches
+        uses: ./.github/actions/go-cache
+        with:
+          mode: restore
+          workload: test
+          deps-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13
           args: --timeout=30m
           working-directory: backend
-
-  # Warms a dedicated GoReleaser GOCACHE on default-branch pushes only.
-  # Tag jobs (release.yml) restore this exact-key cache, which cannot be
-  # re-warmed at release time because tag-scoped cache writes are not reusable.
-  # The key is stable so source-only pushes reuse the populated entry.
-  warm-goreleaser-cache:
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
-      # Compute the key once, before any step that can mutate go.mod/go.sum
-      # (GoReleaser's before hook runs `go mod tidy -C backend`), so restore
-      # and save use the identical key.
-      - name: Compute GoReleaser cache key
-        id: goreleaser-cache-key
-        run: |
-          echo "key=goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}" >> "$GITHUB_OUTPUT"
-      - name: Restore GoReleaser Go build cache
-        id: restore-goreleaser-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ runner.temp }}/goreleaser-go-build
-          key: ${{ steps.goreleaser-cache-key.outputs.key }}
-      - name: Create placeholder for embedded frontend
-        if: steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p backend/internal/web/dist
-          # The placeholder makes `go:embed all:dist` compile on a clean checkout.
-          # It is ignored and exists only in the runner workspace.
-          touch backend/internal/web/dist/.cache-warm-placeholder
-      - name: Warm GoReleaser Go build cache
-        if: steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: '~> v2'
-          args: build --snapshot --clean
-        env:
-          GOCACHE: ${{ runner.temp }}/goreleaser-go-build
-          # GoReleaser evaluates the release-section templates even for snapshot
-          # builds (scm releases pipe); non-secret GitHub context, mirrors release.yml.
-          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
-      - name: Save GoReleaser Go build cache
-        if: success() && steps.restore-goreleaser-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ runner.temp }}/goreleaser-go-build
-          key: ${{ steps.goreleaser-cache-key.outputs.key }}

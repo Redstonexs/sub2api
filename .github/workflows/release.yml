@@ -61,23 +61,49 @@ jobs:
         with:
           ref: ${{ needs.validate-release-tag.outputs.tag }}
 
+      # `dist` is a pure function of the frontend sources (no version or git
+      # metadata is injected), so the build the CI `frontend` job already ran on
+      # this commit is byte-for-byte the one we want. Keep this key identical to
+      # FRONTEND_DIST_KEY in backend-ci.yml.
+      - name: Restore frontend dist
+        id: dist-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: backend/internal/web/dist
+          key: frontend-dist-${{ runner.os }}-${{ hashFiles('frontend/src/**', 'frontend/public/**', 'frontend/index.html', 'frontend/package.json', 'frontend/pnpm-lock.yaml', 'frontend/vite.config.ts', 'frontend/tsconfig.json', 'frontend/tsconfig.node.json', 'frontend/tailwind.config.js', 'frontend/postcss.config.js') }}
+
       - name: Setup pnpm
+        if: steps.dist-cache.outputs.cache-hit != 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
+        if: steps.dist-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Resolve pnpm store path
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        id: pnpm-store-path
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store-path.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile --prefer-offline
         working-directory: frontend
 
       - name: Build frontend
+        if: steps.dist-cache.outputs.cache-hit != 'true'
         run: pnpm run build
         working-directory: frontend
 
@@ -109,16 +135,25 @@ jobs:
         with:
           go-version-file: backend/go.mod
           check-latest: false
-          cache-dependency-path: backend/go.sum
+          # setup-go's bundled cache would restore ~1 GB into the *native*
+          # GOCACHE, which GoReleaser never reads (it builds into a dedicated
+          # GOCACHE below). ./.github/actions/go-cache restores the module cache
+          # -- which GoReleaser does need -- plus the cross-compile build cache.
+          cache: false
 
-      # 恢复缓存：默认分支 CI（backend-ci.yml 的 warm-goreleaser-cache）
-      # 已用 goreleaser build --snapshot 预热专用 GOCACHE，tag 任务直接复用
-      # 以加速交叉编译。仅恢复、不保存：tag 作用域的缓存写入无法被复用。
-      - name: Restore GoReleaser Go build cache
-        uses: actions/cache/restore@v5
+      # Restore-only: a cache written under a tag ref is scoped to that tag and
+      # no later release could read it. The producer is release-cache.yml, which
+      # warms this namespace nightly on the default branch. Restore-keys walk
+      # back from this commit to the newest usable ancestor, so a warm cache is
+      # never all-or-nothing the way the old exact-key restore was.
+      - name: Restore Go caches
+        uses: ./.github/actions/go-cache
         with:
-          path: ${{ runner.temp }}/goreleaser-go-build
-          key: goreleaser-go-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml') }}
+          mode: restore
+          workload: release
+          deps-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
+          build-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml', '.goreleaser.simple.yaml') }}
+          gocache-path: ${{ runner.temp }}/goreleaser-go-build
 
       - name: Verify Go version
         run: |

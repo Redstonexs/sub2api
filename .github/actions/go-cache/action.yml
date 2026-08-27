@@ -1,0 +1,199 @@
+name: Go cache
+description: >-
+  Restore/save the Go module cache and a per-workload Go build cache using
+  rolling, self-pruning keys. Requires actions/setup-go to have run first
+  (with cache: false) so `go env` resolves.
+
+inputs:
+  mode:
+    description: '`restore` or `save`. Call `restore` early, `save` as the last step.'
+    required: true
+  deps-hash:
+    description: >-
+      hashFiles('backend/go.mod', 'backend/go.sum'). Keys the module cache.
+      Supplied by the caller so the value is frozen at restore time, before a
+      hook such as GoReleaser's `go mod tidy` can rewrite go.sum underneath it.
+    required: false
+    default: ''
+  workload:
+    description: >-
+      Build-cache namespace. Jobs that compile the module differently (build
+      tags, cross-compilation targets) must use different namespaces, otherwise
+      whichever finishes first decides what everyone else restores. Leave empty
+      to manage the module cache only.
+    required: false
+    default: ''
+  build-hash:
+    description: >-
+      Hash folded into the build-cache key. Defaults to deps-hash. Override for
+      workloads whose output depends on more than the Go dependency manifests
+      (e.g. the GoReleaser target matrix).
+    required: false
+    default: ''
+  gocache-path:
+    description: 'GOCACHE override. Defaults to `go env GOCACHE`.'
+    required: false
+    default: ''
+  token:
+    description: >-
+      Token with `actions: write`, used in `save` mode to delete the cache
+      entries this run supersedes. Pruning is skipped when empty; it never
+      fails the job.
+    required: false
+    default: ''
+
+outputs:
+  gocache:
+    description: 'Resolved GOCACHE path (also exported as $GOCACHE).'
+    value: ${{ env.GO_CACHE_BUILD_PATH }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -euo pipefail
+        case "$MODE" in
+          restore|save) ;;
+          *) echo "::error::go-cache: mode must be 'restore' or 'save', got '${MODE}'"; exit 1 ;;
+        esac
+        if [ -z "${DEFAULT_BRANCH}" ]; then
+          echo "::warning::go-cache: this event carries no repository.default_branch; caches will be restore-only."
+        fi
+
+    # ---------------------------------------------------------------- restore
+    - name: Compute Go cache keys
+      if: inputs.mode == 'restore'
+      shell: bash
+      env:
+        WORKLOAD: ${{ inputs.workload }}
+        DEPS_HASH: ${{ inputs.deps-hash }}
+        BUILD_HASH: ${{ inputs.build-hash }}
+        GOCACHE_OVERRIDE: ${{ inputs.gocache-path }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -euo pipefail
+
+        # Namespace every key by the toolchain that produced it. Go's caches are
+        # content-addressed, so a stale entry is never wrong -- only unused --
+        # but entries from another Go version are pure dead weight.
+        arch="$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
+        ns="${RUNNER_OS}-${arch}-$(go env GOVERSION)"
+
+        build_hash="${BUILD_HASH:-$DEPS_HASH}"
+        build_path="${GOCACHE_OVERRIDE:-$(go env GOCACHE)}"
+        mkdir -p "$build_path"
+
+        {
+          echo "GO_CACHE_NS=${ns}"
+          echo "GO_CACHE_WORKLOAD=${WORKLOAD}"
+          echo "GO_CACHE_MOD_PATH=$(go env GOMODCACHE)"
+          echo "GO_CACHE_BUILD_PATH=${build_path}"
+          # Module cache: invalidated only by go.sum, so an exact key is the
+          # normal case and a prefix hit still saves most of the download.
+          echo "GO_CACHE_MOD_KEY=go-mod-${ns}-${DEPS_HASH}"
+          echo "GO_CACHE_MOD_PREFIX=go-mod-${ns}-"
+          if [ -n "${DEPS_HASH}" ]; then echo "GO_CACHE_MOD_ENABLED=true"; else echo "GO_CACHE_MOD_ENABLED=false"; fi
+          # Build cache: invalidated by *source*, which no key can express. So
+          # the key is unique per commit (always saves, never freezes) and the
+          # restore-keys walk back to the newest usable ancestor.
+          echo "GO_CACHE_BUILD_KEY=go-build-${WORKLOAD}-${ns}-${build_hash}-${GITHUB_SHA}"
+          echo "GO_CACHE_BUILD_PREFIX=go-build-${WORKLOAD}-${ns}-${build_hash}-"
+          echo "GO_CACHE_BUILD_PREFIX_NS=go-build-${WORKLOAD}-${ns}-"
+          # Only the default branch writes caches. Branch-scoped entries are
+          # invisible to every other ref, so writing them on PRs just burns the
+          # repository's 10 GB budget and evicts the shared entries.
+          if [ "$GITHUB_REF" = "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "GO_CACHE_SAVE_OK=true"
+          else
+            echo "GO_CACHE_SAVE_OK=false"
+          fi
+          echo "GOCACHE=${build_path}"
+        } >> "$GITHUB_ENV"
+
+    - name: Restore Go module cache
+      if: inputs.mode == 'restore' && inputs.deps-hash != ''
+      id: restore-mod
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.GO_CACHE_MOD_PATH }}
+        key: ${{ env.GO_CACHE_MOD_KEY }}
+        restore-keys: ${{ env.GO_CACHE_MOD_PREFIX }}
+
+    - name: Restore Go build cache
+      if: inputs.mode == 'restore' && inputs.workload != ''
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.GO_CACHE_BUILD_PATH }}
+        key: ${{ env.GO_CACHE_BUILD_KEY }}
+        restore-keys: |
+          ${{ env.GO_CACHE_BUILD_PREFIX }}
+          ${{ env.GO_CACHE_BUILD_PREFIX_NS }}
+
+    - name: Record module cache hit
+      if: inputs.mode == 'restore'
+      shell: bash
+      env:
+        MOD_HIT: ${{ steps.restore-mod.outputs.cache-hit }}
+      run: echo "GO_CACHE_MOD_HIT=${MOD_HIT:-false}" >> "$GITHUB_ENV"
+
+    # ------------------------------------------------------------------- save
+    - name: Save Go module cache
+      if: inputs.mode == 'save' && env.GO_CACHE_SAVE_OK == 'true' && env.GO_CACHE_MOD_ENABLED == 'true' && env.GO_CACHE_MOD_HIT != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.GO_CACHE_MOD_PATH }}
+        key: ${{ env.GO_CACHE_MOD_KEY }}
+
+    - name: Save Go build cache
+      if: inputs.mode == 'save' && env.GO_CACHE_SAVE_OK == 'true' && env.GO_CACHE_WORKLOAD != ''
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.GO_CACHE_BUILD_PATH }}
+        key: ${{ env.GO_CACHE_BUILD_KEY }}
+
+    - name: Prune superseded cache entries
+      if: inputs.mode == 'save' && env.GO_CACHE_SAVE_OK == 'true' && inputs.token != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -uo pipefail
+        # Rolling keys would otherwise leave one dead entry per commit. Delete
+        # everything this run just superseded so the repository cache holds a
+        # bounded, legible set instead of relying on 10 GB LRU eviction.
+        prune() {
+          local prefix="$1" keep="$2"
+          [ -n "$prefix" ] || return 0
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/caches?per_page=100" \
+            --jq ".actions_caches[] | select(.key | startswith(\"${prefix}\")) | select(.key != \"${keep}\") | .id" \
+          | while read -r id; do
+              [ -n "$id" ] || continue
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/caches/${id}" >/dev/null \
+                && echo "pruned cache id=${id} (prefix ${prefix})"
+            done
+        }
+        prune "${GO_CACHE_MOD_PREFIX}" "${GO_CACHE_MOD_KEY}"
+        if [ -n "${GO_CACHE_WORKLOAD}" ]; then
+          prune "${GO_CACHE_BUILD_PREFIX_NS}" "${GO_CACHE_BUILD_KEY}"
+        fi
+
+    - name: Report cache sizes
+      if: inputs.mode == 'save'
+      shell: bash
+      run: |
+        set -uo pipefail
+        for dir in "${GO_CACHE_MOD_PATH:-}" "${GO_CACHE_BUILD_PATH:-}"; do
+          [ -n "$dir" ] && [ -d "$dir" ] && du -sh "$dir" || true
+        done
+
+    - name: Report cache decision
+      if: inputs.mode == 'save' && env.GO_CACHE_SAVE_OK != 'true'
+      shell: bash
+      run: |
+        echo "::notice::Go caches not saved -- ${GITHUB_REF} is not the default branch (restore-only by design)."

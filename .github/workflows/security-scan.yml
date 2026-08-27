@@ -1,7 +1,10 @@
 name: Security Scan
 
 on:
+  # Same rationale as backend-ci.yml: PRs cover feature branches, and only the
+  # default branch is allowed to write caches.
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: '0 3 * * 1'
@@ -9,10 +12,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend-security:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CACHE_WRITER: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     steps:
       - uses: actions/checkout@v6
       - name: Set up Go
@@ -20,15 +29,50 @@ jobs:
         with:
           go-version-file: backend/go.mod
           check-latest: false
-          cache-dependency-path: backend/go.sum
+          cache: false
       - name: Verify Go version
         run: |
           go version | grep -q 'go1.27.0'
+      # Restore-only consumer of the `test` namespace -- govulncheck compiles the
+      # same packages the test job does, so it rides along for free rather than
+      # adding a fourth ~GB entry that races the others on save.
+      - name: Restore Go caches
+        uses: ./.github/actions/go-cache
+        with:
+          mode: restore
+          workload: test
+          deps-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
+      - name: Resolve govulncheck cache key
+        id: govulncheck-key
+        run: |
+          set -euo pipefail
+          # `@latest` is deliberate for a security tool, but recompiling it from
+          # source on every push is pure waste. A weekly stamp keeps the analyzer
+          # at most 7 days old; the vulnerability database itself is fetched from
+          # vuln.go.dev at run time and is never cached.
+          echo "bin=$(go env GOPATH)/bin/govulncheck" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Restore govulncheck binary
+        id: govulncheck-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.govulncheck-key.outputs.bin }}
+          key: govulncheck-${{ runner.os }}-${{ runner.arch }}-${{ steps.govulncheck-key.outputs.week }}
+      - name: Install govulncheck
+        if: steps.govulncheck-cache.outputs.cache-hit != 'true'
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Save govulncheck binary
+        if: ${{ env.CACHE_WRITER == 'true' && steps.govulncheck-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.govulncheck-key.outputs.bin }}
+          key: govulncheck-${{ runner.os }}-${{ runner.arch }}-${{ steps.govulncheck-key.outputs.week }}
       - name: Run govulncheck
         working-directory: backend
+        env:
+          GOVULNCHECK_BIN: ${{ steps.govulncheck-key.outputs.bin }}
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          "$GOVULNCHECK_BIN" ./...
 
   frontend-security:
     runs-on: ubuntu-latest
@@ -43,11 +87,21 @@ jobs:
         with:
           node-version: '22'
           check-latest: true
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Resolve pnpm store path
+        id: pnpm-store-path
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      # Restore-only: backend-ci.yml's `frontend` job is the single writer of
+      # this key. The store is content-addressed, so sharing it across Node
+      # versions is safe.
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store-path.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
       - name: Install dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
       - name: Run pnpm audit
         working-directory: frontend
         run: |

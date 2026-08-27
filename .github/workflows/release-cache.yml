@@ -1,0 +1,86 @@
+name: Release cache
+
+# The GoReleaser cross-compile cache can only be produced on the default branch:
+# a cache written during a tag run is scoped to that tag's ref, and no later tag
+# can read it. This job is what makes the tag build warm.
+#
+# It replaces the old `warm-goreleaser-cache` job in backend-ci.yml, which ran on
+# every default-branch push behind a key that deliberately excluded source ("the
+# key is stable so source-only pushes reuse the populated entry"). That made it
+# a no-op on almost every push and left the release restoring a cache frozen at
+# whichever commit last touched go.sum -- often hundreds of commits stale, so
+# GoReleaser recompiled nearly everything anyway.
+#
+# Nightly + rolling keys instead: one incremental cross-compile per day keeps the
+# release cache within 24h of HEAD.
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/go.mod'
+      - 'backend/go.sum'
+      - '.goreleaser.yaml'
+      - '.goreleaser.simple.yaml'
+      - '.github/workflows/release-cache.yml'
+      - '.github/actions/go-cache/action.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: release-cache
+  # A cancelled warm saves nothing, so let a superseded run finish.
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: false
+      - name: Verify Go version
+        run: |
+          go version | grep -q 'go1.27.0'
+      # deps-hash / build-hash are evaluated here and frozen into the environment,
+      # so GoReleaser's `go mod tidy -C backend` before-hook cannot change the key
+      # between restore and save.
+      - name: Restore Go caches
+        uses: ./.github/actions/go-cache
+        with:
+          mode: restore
+          workload: release
+          deps-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
+          build-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml', '.goreleaser.simple.yaml') }}
+          gocache-path: ${{ runner.temp }}/goreleaser-go-build
+      - name: Create placeholder for embedded frontend
+        run: |
+          mkdir -p backend/internal/web/dist
+          # `//go:embed all:dist` needs at least one match to compile on a clean
+          # checkout. Only the `internal/web` package sees this; every other
+          # package's cache entry is identical to the real release build.
+          touch backend/internal/web/dist/.cache-warm-placeholder
+      - name: Cross-compile release targets
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: build --snapshot --clean
+        env:
+          GOCACHE: ${{ runner.temp }}/goreleaser-go-build
+          # GoReleaser evaluates the release-section templates even for snapshot
+          # builds (scm releases pipe); non-secret GitHub context, mirrors release.yml.
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+      - name: Save Go caches
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/go-cache
+        with:
+          mode: save
+          token: ${{ github.token }}
