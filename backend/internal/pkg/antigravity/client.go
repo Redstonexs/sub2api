@@ -319,10 +319,11 @@ func shouldFallbackToNextURL(err error, statusCode int) bool {
 }
 
 // ExchangeCode 用 authorization code 交换 token
-func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*TokenResponse, error) {
-	clientID, clientSecret, err := getClientCredentials()
-	if err != nil {
-		return nil, err
+func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string, credentials OAuthClientCredentials) (*TokenResponse, error) {
+	clientID := strings.TrimSpace(credentials.ClientID)
+	clientSecret := strings.TrimSpace(credentials.ClientSecret)
+	if clientID == "" || clientSecret == "" {
+		return nil, errors.New("antigravity oauth client credentials are incomplete")
 	}
 
 	params := url.Values{}
@@ -363,10 +364,11 @@ func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*
 }
 
 // RefreshToken 刷新 access_token
-func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
-	clientID, clientSecret, err := getClientCredentials()
-	if err != nil {
-		return nil, err
+func (c *Client) RefreshToken(ctx context.Context, refreshToken string, credentials OAuthClientCredentials) (*TokenResponse, error) {
+	clientID := strings.TrimSpace(credentials.ClientID)
+	clientSecret := strings.TrimSpace(credentials.ClientSecret)
+	if clientID == "" || clientSecret == "" {
+		return nil, errors.New("antigravity oauth client credentials are incomplete")
 	}
 
 	params := url.Values{}

@@ -5733,6 +5733,62 @@
                 </p>
               </div>
 
+              <div
+                class="rounded-xl border border-violet-200 bg-violet-50/60 p-5 dark:border-violet-900/60 dark:bg-violet-950/20"
+                data-testid="antigravity-oauth-credentials"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                      {{ t("admin.settings.antigravityOAuth.title") }}
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      {{ t("admin.settings.antigravityOAuth.description") }}
+                    </p>
+                  </div>
+                  <span v-if="antigravityCredentialsLoaded" data-testid="antigravity-oauth-status" class="rounded-full px-2.5 py-1 text-xs font-medium" :class="antigravityCredentialsStatusClass">
+                    {{ t(`admin.settings.antigravityOAuth.status.${antigravityCredentialsStatusKey}`) }}
+                  </span>
+                </div>
+                <div v-if="antigravityCredentialsLoading" class="mt-4 text-sm text-gray-500" role="status">
+                  {{ t("common.loading") }}
+                </div>
+                <div v-else-if="antigravityCredentialsLoadFailed" class="mt-4 flex items-center gap-3 text-sm text-red-600 dark:text-red-400" role="alert">
+                  <span>{{ t("admin.settings.antigravityOAuth.loadFailed") }}</span>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="loadAntigravityOAuthCredentials">
+                    {{ t("admin.settings.antigravityOAuth.retry") }}
+                  </button>
+                </div>
+                <div v-else class="mt-4 space-y-4">
+                  <dl v-if="antigravityCredentials" class="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
+                    <div><dt class="inline font-medium">{{ t("admin.settings.antigravityOAuth.sourceLabel") }}:</dt> <dd class="inline">{{ t(`admin.settings.antigravityOAuth.source.${antigravityCredentials.source}`) }}</dd></div>
+                    <div><dt class="inline font-medium">{{ t("admin.settings.antigravityOAuth.secretStatusLabel") }}:</dt> <dd class="inline">{{ antigravityCredentials.client_secret_configured ? t("admin.settings.antigravityOAuth.configured") : t("admin.settings.antigravityOAuth.notConfigured") }}</dd></div>
+                    <div><dt class="inline font-medium">{{ t("admin.settings.antigravityOAuth.validLabel") }}:</dt> <dd class="inline">{{ antigravityCredentials.valid ? t("admin.settings.antigravityOAuth.valid") : t("admin.settings.antigravityOAuth.invalid") }}</dd></div>
+                  </dl>
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label for="antigravity-oauth-client-id" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.settings.antigravityOAuth.clientId") }}</label>
+                      <input id="antigravity-oauth-client-id" v-model="antigravityCredentialsForm.client_id" type="text" class="input w-full font-mono text-sm" autocomplete="off" :disabled="antigravityCredentialsSaving" :placeholder="t('admin.settings.antigravityOAuth.clientIdPlaceholder')" />
+                    </div>
+                    <div>
+                      <label for="antigravity-oauth-client-secret" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.settings.antigravityOAuth.clientSecret") }}</label>
+                      <input id="antigravity-oauth-client-secret" v-model="antigravityCredentialsForm.client_secret" type="password" autocomplete="new-password" class="input w-full font-mono text-sm" :disabled="antigravityCredentialsSaving" :placeholder="t('admin.settings.antigravityOAuth.clientSecretPlaceholder')" />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.antigravityOAuth.clientSecretHint") }}</p>
+                    </div>
+                  </div>
+                  <p v-if="!antigravityEncryptionKeyConfigured" class="text-xs text-amber-700 dark:text-amber-300" data-testid="antigravity-oauth-encryption-warning" role="alert">{{ t("admin.settings.antigravityOAuth.encryptionWarning") }}</p>
+                  <p class="text-xs text-gray-600 dark:text-gray-400">{{ t("admin.settings.antigravityOAuth.reauthorizationWarning") }}</p>
+                  <div class="flex flex-wrap gap-3">
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="antigravity-oauth-save" :disabled="antigravityCredentialsSaving || !antigravityEncryptionKeyConfigured" :aria-busy="antigravityCredentialsSaving" @click="saveAntigravityOAuthCredentials">
+                      {{ antigravityCredentialsSaving ? t("common.saving") : t("common.save") }}
+                    </button>
+                    <button v-if="antigravityCredentialsCanClear" type="button" class="btn btn-secondary btn-sm text-red-600 dark:text-red-400" data-testid="antigravity-oauth-clear" :disabled="antigravityCredentialsSaving" @click="antigravityCredentialsClearDialog = true">
+                      {{ t("admin.settings.antigravityOAuth.clear") }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- OpenAI Codex UA -->
               <div>
                 <label
@@ -7768,6 +7824,15 @@
         @confirm="handleAffiliateConfirm"
         @cancel="cancelAffiliateConfirm"
       />
+      <ConfirmDialog
+        :show="antigravityCredentialsClearDialog"
+        :title="t('admin.settings.antigravityOAuth.title')"
+        :message="t('admin.settings.antigravityOAuth.clearConfirm')"
+        :confirm-text="t('admin.settings.antigravityOAuth.clear')"
+        danger
+        @confirm="clearAntigravityOAuthCredentials"
+        @cancel="antigravityCredentialsClearDialog = false"
+      />
       <!-- 关闭 step-up 开关等敏感保存操作触发的 TOTP 二次验证 -->
       <TotpStepUpDialog :controller="settingsStepUp" />
     </div>
@@ -7803,6 +7868,7 @@ import type {
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
   WebSearchTestResult,
+  AntigravityOAuthCredentials,
 } from "@/api/admin/settings";
 import type {
   AdminGroup,
@@ -8026,6 +8092,29 @@ const panelRateLimitForm = reactive({
   exempt_admin: true,
   public_ip_rpm: 300,
 });
+
+const antigravityCredentialsLoading = ref(true);
+const antigravityCredentialsLoadFailed = ref(false);
+const antigravityCredentialsSaving = ref(false);
+const antigravityCredentialsClearDialog = ref(false);
+const antigravityCredentials = ref<AntigravityOAuthCredentials | null>(null);
+const antigravityCredentialsForm = reactive({ client_id: "", client_secret: "" });
+const antigravityCredentialsLoaded = computed(() => antigravityCredentials.value !== null);
+const antigravityEncryptionKeyConfigured = computed(() => antigravityCredentials.value?.encryption_key_configured === true);
+const antigravityCredentialsCanClear = computed(() => antigravityCredentials.value?.source === "settings");
+const antigravityCredentialsStatusKey = computed(() => {
+  const credentials = antigravityCredentials.value;
+  if (!credentials) return "none";
+  if (!credentials.valid && credentials.source === "settings") return "settingsInvalid";
+  if (!credentials.valid && credentials.source === "environment") return "environmentInvalid";
+  if (credentials.valid && credentials.client_secret_configured) return "configured";
+  return credentials.source === "environment" ? "environment" : "none";
+});
+const antigravityCredentialsStatusClass = computed(() =>
+  antigravityCredentialsStatusKey.value === "configured"
+    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+    : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+);
 
 // Stream Timeout 状态
 const streamTimeoutLoading = ref(true);
@@ -9760,6 +9849,56 @@ const codexSyncedVersionLabel = computed(() => {
     version: synced,
   });
 });
+
+async function loadAntigravityOAuthCredentials(): Promise<void> {
+  antigravityCredentialsLoading.value = true;
+  antigravityCredentialsLoadFailed.value = false;
+  antigravityCredentialsForm.client_secret = "";
+  try {
+    const credentials = await adminAPI.settings.getAntigravityOAuthCredentials();
+    antigravityCredentials.value = credentials;
+    antigravityCredentialsForm.client_id = credentials.client_id || "";
+  } catch (error: unknown) {
+    antigravityCredentialsLoadFailed.value = true;
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.antigravityOAuth.loadFailed")));
+  } finally {
+    antigravityCredentialsLoading.value = false;
+  }
+}
+
+async function saveAntigravityOAuthCredentials(): Promise<void> {
+  antigravityCredentialsSaving.value = true;
+  try {
+    const request: { client_id: string; client_secret?: string } = {
+      client_id: antigravityCredentialsForm.client_id.trim(),
+    };
+    const secret = antigravityCredentialsForm.client_secret.trim();
+    if (secret) request.client_secret = secret;
+    antigravityCredentials.value = await adminAPI.settings.updateAntigravityOAuthCredentials(request);
+    antigravityCredentialsForm.client_id = antigravityCredentials.value.client_id || request.client_id;
+    antigravityCredentialsForm.client_secret = "";
+    appStore.showSuccess(t("admin.settings.antigravityOAuth.saved"));
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.antigravityOAuth.saveFailed")));
+  } finally {
+    antigravityCredentialsSaving.value = false;
+  }
+}
+
+async function clearAntigravityOAuthCredentials(): Promise<void> {
+  antigravityCredentialsClearDialog.value = false;
+  antigravityCredentialsSaving.value = true;
+  try {
+    await adminAPI.settings.deleteAntigravityOAuthCredentials();
+    await loadAntigravityOAuthCredentials();
+    antigravityCredentialsForm.client_secret = "";
+    appStore.showSuccess(t("admin.settings.antigravityOAuth.cleared"));
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.antigravityOAuth.clearFailed")));
+  } finally {
+    antigravityCredentialsSaving.value = false;
+  }
+}
 
 async function loadSettings() {
   loading.value = true;
@@ -11518,6 +11657,7 @@ async function handleDeleteProvider() {
 
 onMounted(() => {
   loadSettings();
+  loadAntigravityOAuthCredentials();
   loadSubscriptionGroups();
   loadAdminApiKey();
   loadUpstreamBillingProbeSettings();

@@ -1087,6 +1087,48 @@ export async function updateSettings(
   return data;
 }
 
+export type AntigravityOAuthCredentialSource =
+  | "settings"
+  | "environment"
+  | "none";
+
+export interface AntigravityOAuthCredentials {
+  client_id: string;
+  client_secret_configured: boolean;
+  source: AntigravityOAuthCredentialSource;
+  valid: boolean;
+  encryption_key_configured: boolean;
+}
+
+export interface UpdateAntigravityOAuthCredentialsRequest {
+  client_id: string;
+  client_secret?: string;
+}
+
+export async function getAntigravityOAuthCredentials(): Promise<AntigravityOAuthCredentials> {
+  const { data } = await apiClient.get<AntigravityOAuthCredentials>(
+    "/admin/settings/antigravity-oauth-credentials",
+  );
+  return data;
+}
+
+export async function updateAntigravityOAuthCredentials(
+  request: UpdateAntigravityOAuthCredentialsRequest,
+): Promise<AntigravityOAuthCredentials> {
+  const { data } = await apiClient.put<AntigravityOAuthCredentials>(
+    "/admin/settings/antigravity-oauth-credentials",
+    request,
+  );
+  return data;
+}
+
+export async function deleteAntigravityOAuthCredentials(): Promise<{ status: string }> {
+  const { data } = await apiClient.delete<{ status: string }>(
+    "/admin/settings/antigravity-oauth-credentials",
+  );
+  return data;
+}
+
 /**
  * Test SMTP connection request
  */
@@ -1580,6 +1622,9 @@ export async function resetWebSearchUsage(payload: {
 export const settingsAPI = {
   getSettings,
   updateSettings,
+  getAntigravityOAuthCredentials,
+  updateAntigravityOAuthCredentials,
+  deleteAntigravityOAuthCredentials,
   testSmtpConnection,
   sendTestEmail,
   getEmailTemplates,

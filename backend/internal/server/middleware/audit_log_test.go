@@ -188,3 +188,40 @@ func TestOllamaCloudUsageSessionRouteOmitsAuditBody(t *testing.T) {
 	require.Equal(t, "<credential-bearing body omitted>", logs[0].RequestBody)
 	require.NotContains(t, logs[0].RequestBody, "audit-canary")
 }
+
+func TestAntigravityOAuthCredentialRouteOmitsCredentialBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	route := "PUT /api/v1/admin/settings/antigravity-oauth-credentials"
+	require.Contains(t, auditBodyOmittedRoutes, route)
+
+	repository := &auditCaptureRepository{}
+	auditService := service.NewAuditLogService(repository, nil)
+	auditService.Start()
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(ContextKeyUser), AuthSubject{UserID: 77})
+		c.Set(string(ContextKeyUserRole), "admin")
+		c.Next()
+	})
+	router.Use(gin.HandlerFunc(NewAuditLogMiddleware(auditService)))
+	router.PUT("/api/v1/admin/settings/antigravity-oauth-credentials", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings/antigravity-oauth-credentials",
+		bytes.NewBufferString(`{"client_id":"synthetic-client-id","client_secret":"synthetic-client-secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	auditService.Stop()
+
+	repository.mu.Lock()
+	logs := append([]*service.AuditLog(nil), repository.logs...)
+	repository.mu.Unlock()
+	require.Len(t, logs, 1)
+	require.Equal(t, "<credential-bearing body omitted>", logs[0].RequestBody)
+	require.NotContains(t, logs[0].RequestBody, "synthetic-client-id")
+	require.NotContains(t, logs[0].RequestBody, "synthetic-client-secret")
+}

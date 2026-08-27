@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -315,6 +316,27 @@ func TestSessionStore_SetAndGet(t *testing.T) {
 	}
 	if got.ProxyURL != "http://proxy.example.com" {
 		t.Errorf("ProxyURL 不匹配: got %s", got.ProxyURL)
+	}
+}
+
+func TestOAuthSession_JSONOmitsCredentialSnapshot(t *testing.T) {
+	session := &OAuthSession{
+		State:        "synthetic-state",
+		CodeVerifier: "synthetic-verifier",
+		ClientID:     "synthetic-client-id",
+		ClientSecret: "synthetic-client-secret",
+		CreatedAt:    time.Now(),
+	}
+	raw, err := json.Marshal(session)
+	if err != nil {
+		t.Fatalf("marshal OAuthSession failed: %v", err)
+	}
+	serialized := string(raw)
+	if strings.Contains(serialized, "synthetic-client-id") || strings.Contains(serialized, "synthetic-client-secret") {
+		t.Fatalf("OAuthSession serialized credential snapshot: %s", serialized)
+	}
+	if strings.Contains(serialized, "client_id") || strings.Contains(serialized, "client_secret") {
+		t.Fatalf("OAuthSession serialized credential fields: %s", serialized)
 	}
 }
 

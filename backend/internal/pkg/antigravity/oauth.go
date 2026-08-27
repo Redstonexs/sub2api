@@ -62,6 +62,14 @@ var userAgentVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // UserAgentVersionResolver 提供运行时 User-Agent 版本号覆盖能力。
 type UserAgentVersionResolver func(ctx context.Context) string
 
+// OAuthClientCredentials is the complete credential pair used for one OAuth
+// operation. Callers resolve it once and pass the value explicitly so an OAuth
+// flow cannot observe a different configuration halfway through.
+type OAuthClientCredentials struct {
+	ClientID     string
+	ClientSecret string
+}
+
 var (
 	// defaultUserAgentVersion 可通过环境变量 ANTIGRAVITY_USER_AGENT_VERSION 配置。
 	defaultUserAgentVersion  = DefaultUserAgentVersion
@@ -131,12 +139,15 @@ func GetUserAgent() string {
 	return GetUserAgentForContext(context.Background())
 }
 
-func getClientCredentials() (clientID, clientSecret string, err error) {
-	clientID = strings.TrimSpace(os.Getenv(AntigravityOAuthClientIDEnv))
-	clientSecret = strings.TrimSpace(os.Getenv(AntigravityOAuthClientSecretEnv))
+// ResolveOAuthClientCredentialsFromEnv resolves the legacy environment
+// fallback. Settings-backed callers should resolve through SettingService and
+// pass the returned pair explicitly to the client.
+func ResolveOAuthClientCredentialsFromEnv() (OAuthClientCredentials, error) {
+	clientID := strings.TrimSpace(os.Getenv(AntigravityOAuthClientIDEnv))
+	clientSecret := strings.TrimSpace(os.Getenv(AntigravityOAuthClientSecretEnv))
 
 	if clientID == "" && clientSecret == "" {
-		return "", "", infraerrors.Newf(
+		return OAuthClientCredentials{}, infraerrors.Newf(
 			http.StatusBadRequest,
 			"ANTIGRAVITY_OAUTH_CLIENT_CONFIGURATION_MISSING",
 			"missing antigravity oauth client_id and client_secret; set %s and %s",
@@ -145,7 +156,7 @@ func getClientCredentials() (clientID, clientSecret string, err error) {
 		)
 	}
 	if clientID == "" {
-		return "", "", infraerrors.Newf(
+		return OAuthClientCredentials{}, infraerrors.Newf(
 			http.StatusBadRequest,
 			"ANTIGRAVITY_OAUTH_CLIENT_CONFIGURATION_PARTIAL",
 			"partial antigravity oauth client configuration: missing client_id; set %s",
@@ -153,14 +164,24 @@ func getClientCredentials() (clientID, clientSecret string, err error) {
 		)
 	}
 	if clientSecret == "" {
-		return "", "", infraerrors.Newf(
+		return OAuthClientCredentials{}, infraerrors.Newf(
 			http.StatusBadRequest,
 			"ANTIGRAVITY_OAUTH_CLIENT_CONFIGURATION_PARTIAL",
 			"partial antigravity oauth client configuration: missing client_secret; set %s",
 			AntigravityOAuthClientSecretEnv,
 		)
 	}
-	return clientID, clientSecret, nil
+	return OAuthClientCredentials{ClientID: clientID, ClientSecret: clientSecret}, nil
+}
+
+// getClientCredentials is retained for package-local compatibility with older
+// tests and callers. New code should use the explicit credentials type.
+func getClientCredentials() (clientID, clientSecret string, err error) {
+	credentials, err := ResolveOAuthClientCredentialsFromEnv()
+	if err != nil {
+		return "", "", err
+	}
+	return credentials.ClientID, credentials.ClientSecret, nil
 }
 
 // BaseURLs 定义 Antigravity API 端点（与 Antigravity-Manager 保持一致）
@@ -296,6 +317,8 @@ type OAuthSession struct {
 	State        string    `json:"state"`
 	CodeVerifier string    `json:"code_verifier"`
 	ProxyURL     string    `json:"proxy_url,omitempty"`
+	ClientID     string    `json:"-"`
+	ClientSecret string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -412,9 +435,23 @@ func base64URLEncode(data []byte) string {
 
 // BuildAuthorizationURL 构建 Google OAuth 授权 URL。
 func BuildAuthorizationURL(state, codeChallenge string) (string, error) {
-	clientID, _, err := getClientCredentials()
+	credentials, err := ResolveOAuthClientCredentialsFromEnv()
 	if err != nil {
 		return "", err
+	}
+	return BuildAuthorizationURLWithCredentials(credentials, state, codeChallenge)
+}
+
+// BuildAuthorizationURLWithCredentials constructs an authorization URL from
+// an already-resolved credential pair.
+func BuildAuthorizationURLWithCredentials(credentials OAuthClientCredentials, state, codeChallenge string) (string, error) {
+	clientID := strings.TrimSpace(credentials.ClientID)
+	if clientID == "" {
+		return "", infraerrors.Newf(
+			http.StatusBadRequest,
+			"ANTIGRAVITY_OAUTH_CLIENT_CONFIGURATION_PARTIAL",
+			"partial antigravity oauth client configuration: missing client_id",
+		)
 	}
 
 	params := url.Values{}

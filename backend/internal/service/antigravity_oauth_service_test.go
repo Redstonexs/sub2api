@@ -46,6 +46,47 @@ func TestAntigravityOAuthService_GenerateAuthURLFailsBeforeSessionStorage(t *tes
 	}
 }
 
+func TestAntigravityOAuthService_GenerateAuthURLSnapshotsCredentials(t *testing.T) {
+	service := NewAntigravityOAuthService(nil)
+	defer service.Stop()
+	service.SetCredentialsResolver(func(context.Context) (antigravity.OAuthClientCredentials, error) {
+		return antigravity.OAuthClientCredentials{
+			ClientID:     "synthetic-snapshot-id",
+			ClientSecret: "synthetic-snapshot-secret",
+		}, nil
+	})
+
+	result, err := service.GenerateAuthURL(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("GenerateAuthURL() failed: %v", err)
+	}
+	session, ok := service.sessionStore.Get(result.SessionID)
+	if !ok {
+		t.Fatal("generated OAuth session was not stored")
+	}
+	if session.ClientID != "synthetic-snapshot-id" || session.ClientSecret != "synthetic-snapshot-secret" {
+		t.Fatalf("session credentials = (%q, %q)", session.ClientID, session.ClientSecret)
+	}
+}
+
+func TestAntigravityOAuthService_RefreshResolvesCredentialsOnce(t *testing.T) {
+	service := NewAntigravityOAuthService(nil)
+	defer service.Stop()
+	resolutions := 0
+	service.SetCredentialsResolver(func(context.Context) (antigravity.OAuthClientCredentials, error) {
+		resolutions++
+		return antigravity.OAuthClientCredentials{ClientID: "synthetic-id", ClientSecret: "synthetic-secret"}, nil
+	})
+
+	_, err := service.RefreshToken(context.Background(), "synthetic-refresh-token", "://invalid-proxy")
+	if err == nil {
+		t.Fatal("invalid proxy should fail refresh")
+	}
+	if resolutions != 1 {
+		t.Fatalf("credentials were resolved %d times, want once", resolutions)
+	}
+}
+
 func TestResolveDefaultTierID(t *testing.T) {
 	t.Parallel()
 

@@ -8,13 +8,13 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"golang.org/x/sync/singleflight"
-	"sync"
 )
 
 const (
@@ -134,6 +134,15 @@ type SettingService struct {
 	openAICodexVersionSF        singleflight.Group
 	codexRestrictionPolicyCache atomic.Value // *cachedCodexRestrictionPolicy
 	codexRestrictionPolicySF    singleflight.Group
+
+	// antigravityOAuthCredentialMu protects the optional settings-backed OAuth
+	// encryptor. It belongs to the service instance so separate settings
+	// services cannot overwrite one another and discarded services are not kept
+	// alive by a package-global registry.
+	antigravityOAuthCredentialMu                 sync.RWMutex
+	antigravityOAuthCredentialEncryptorValue     SecretEncryptor
+	antigravityOAuthEncryptionKeyConfiguredValue bool
+	antigravityOAuthCredentialStateSet           bool
 
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group

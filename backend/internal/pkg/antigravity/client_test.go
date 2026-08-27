@@ -573,12 +573,12 @@ func TestClient_ExchangeCode_无ClientSecret(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientSecretEnv, "")
 
 	client := mustNewClient(t, "")
-	_, err := client.ExchangeCode(context.Background(), "code", "verifier")
+	_, err := client.ExchangeCode(context.Background(), "code", "verifier", OAuthClientCredentials{ClientID: testAntigravityClientID})
 	if err == nil {
 		t.Fatal("缺少 client_secret 时应返回错误")
 	}
-	if !strings.Contains(err.Error(), AntigravityOAuthClientSecretEnv) {
-		t.Errorf("错误信息应包含环境变量名: got %s", err.Error())
+	if !strings.Contains(err.Error(), "credentials are incomplete") {
+		t.Errorf("错误信息应说明凭证不完整: got %s", err.Error())
 	}
 }
 
@@ -671,7 +671,7 @@ func TestClient_RefreshToken_无ClientSecret(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientSecretEnv, "")
 
 	client := mustNewClient(t, "")
-	_, err := client.RefreshToken(context.Background(), "refresh-tok")
+	_, err := client.RefreshToken(context.Background(), "refresh-tok", OAuthClientCredentials{ClientID: testAntigravityClientID})
 	if err == nil {
 		t.Fatal("缺少 client_secret 时应返回错误")
 	}
@@ -915,7 +915,7 @@ func TestClient_ExchangeCode_Success_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	tokenResp, err := client.ExchangeCode(context.Background(), "test-auth-code", "test-verifier")
+	tokenResp, err := client.ExchangeCode(context.Background(), "test-auth-code", "test-verifier", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err != nil {
 		t.Fatalf("ExchangeCode 失败: %v", err)
 	}
@@ -949,7 +949,7 @@ func TestClient_ExchangeCode_ServerError_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	_, err := client.ExchangeCode(context.Background(), "expired-code", "verifier")
+	_, err := client.ExchangeCode(context.Background(), "expired-code", "verifier", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("服务器返回 400 时应返回错误")
 	}
@@ -975,7 +975,7 @@ func TestClient_ExchangeCode_InvalidJSON_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	_, err := client.ExchangeCode(context.Background(), "code", "verifier")
+	_, err := client.ExchangeCode(context.Background(), "code", "verifier", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("无效 JSON 响应应返回错误")
 	}
@@ -1000,7 +1000,7 @@ func TestClient_ExchangeCode_ContextCanceled_RealCall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 立即取消
 
-	_, err := client.ExchangeCode(ctx, "code", "verifier")
+	_, err := client.ExchangeCode(ctx, "code", "verifier", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("context 取消时应返回错误")
 	}
@@ -1047,7 +1047,7 @@ func TestClient_RefreshToken_Success_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	tokenResp, err := client.RefreshToken(context.Background(), "my-refresh-token")
+	tokenResp, err := client.RefreshToken(context.Background(), "my-refresh-token", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err != nil {
 		t.Fatalf("RefreshToken 失败: %v", err)
 	}
@@ -1072,7 +1072,7 @@ func TestClient_RefreshToken_ServerError_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	_, err := client.RefreshToken(context.Background(), "revoked-token")
+	_, err := client.RefreshToken(context.Background(), "revoked-token", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("服务器返回 401 时应返回错误")
 	}
@@ -1095,7 +1095,7 @@ func TestClient_RefreshToken_InvalidJSON_RealCall(t *testing.T) {
 		TokenURL: server.URL,
 	})
 
-	_, err := client.RefreshToken(context.Background(), "refresh-tok")
+	_, err := client.RefreshToken(context.Background(), "refresh-tok", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("无效 JSON 响应应返回错误")
 	}
@@ -1120,7 +1120,7 @@ func TestClient_RefreshToken_ContextCanceled_RealCall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := client.RefreshToken(ctx, "refresh-tok")
+	_, err := client.RefreshToken(ctx, "refresh-tok", OAuthClientCredentials{ClientID: testAntigravityClientID, ClientSecret: testAntigravityClientSecret})
 	if err == nil {
 		t.Fatal("context 取消时应返回错误")
 	}

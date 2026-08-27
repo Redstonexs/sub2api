@@ -11,6 +11,9 @@ import SettingsView from "../SettingsView.vue";
 const {
   getSettings,
   updateSettings,
+  getAntigravityOAuthCredentials,
+  updateAntigravityOAuthCredentials,
+  deleteAntigravityOAuthCredentials,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
   getAdminApiKey,
@@ -39,6 +42,9 @@ const {
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  getAntigravityOAuthCredentials: vi.fn(),
+  updateAntigravityOAuthCredentials: vi.fn(),
+  deleteAntigravityOAuthCredentials: vi.fn(),
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
   getAdminApiKey: vi.fn(),
@@ -86,6 +92,9 @@ vi.mock("@/api", () => ({
     settings: {
       getSettings,
       updateSettings,
+      getAntigravityOAuthCredentials,
+      updateAntigravityOAuthCredentials,
+      deleteAntigravityOAuthCredentials,
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
       getAdminApiKey,
@@ -654,6 +663,9 @@ describe("admin SettingsView payment visible method controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
+    getAntigravityOAuthCredentials.mockReset();
+    updateAntigravityOAuthCredentials.mockReset();
+    deleteAntigravityOAuthCredentials.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
@@ -680,6 +692,21 @@ describe("admin SettingsView payment visible method controls", () => {
     localeRef.value = "zh-CN";
 
     getSettings.mockResolvedValue({ ...baseSettingsResponse });
+    getAntigravityOAuthCredentials.mockResolvedValue({
+      client_id: "",
+      client_secret_configured: false,
+      source: "none",
+      valid: false,
+      encryption_key_configured: false,
+    });
+    updateAntigravityOAuthCredentials.mockImplementation(async (payload) => ({
+      client_id: payload.client_id,
+      client_secret_configured: Boolean(payload.client_secret),
+      source: "settings",
+      valid: true,
+      encryption_key_configured: true,
+    }));
+    deleteAntigravityOAuthCredentials.mockResolvedValue({ status: "cleared" });
     updateSettings.mockImplementation(async (payload) => ({
       ...baseSettingsResponse,
       ...payload,
@@ -1932,6 +1959,68 @@ describe("admin SettingsView wechat connect controls", () => {
         oidc_connect_validate_id_token: false,
       }),
     );
+  });
+
+  it("renders an invalid panel source as the panel-invalid status", async () => {
+    getAntigravityOAuthCredentials.mockResolvedValueOnce({
+      client_id: "panel-client",
+      client_secret_configured: true,
+      source: "settings",
+      valid: false,
+      encryption_key_configured: true,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    const card = wrapper.get('[data-testid="antigravity-oauth-credentials"]');
+    expect(card.get('[data-testid="antigravity-oauth-status"]').text()).toContain(
+      "settingsInvalid",
+    );
+    expect(card.text()).toContain("admin.settings.antigravityOAuth.source.settings");
+  });
+
+  it("does not offer clear for environment credentials", async () => {
+    getAntigravityOAuthCredentials.mockResolvedValueOnce({
+      client_id: "environment-client",
+      client_secret_configured: true,
+      source: "environment",
+      valid: true,
+      encryption_key_configured: false,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="antigravity-oauth-clear"]').exists()).toBe(false);
+  });
+
+  it("disables credential save and explains how to configure the missing key", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="antigravity-oauth-save"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-testid="antigravity-oauth-encryption-warning"]').text()).toContain(
+      "encryptionWarning",
+    );
+  });
+
+  it("keeps clear available for invalid panel credentials without an encryption key", async () => {
+    getAntigravityOAuthCredentials.mockResolvedValueOnce({
+      client_id: "broken-panel-client",
+      client_secret_configured: true,
+      source: "settings",
+      valid: false,
+      encryption_key_configured: false,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    const clear = wrapper.get('[data-testid="antigravity-oauth-clear"]');
+    expect(clear.attributes("disabled")).toBeUndefined();
+    await clear.trigger("click");
+    expect(deleteAntigravityOAuthCredentials).not.toHaveBeenCalled();
   });
 });
 

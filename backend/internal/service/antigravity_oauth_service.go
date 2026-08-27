@@ -11,15 +11,39 @@ import (
 )
 
 type AntigravityOAuthService struct {
-	sessionStore *antigravity.SessionStore
-	proxyRepo    ProxyRepository
+	sessionStore        *antigravity.SessionStore
+	proxyRepo           ProxyRepository
+	credentialsResolver func(context.Context) (antigravity.OAuthClientCredentials, error)
 }
+
+// AntigravityOAuthCredentialsResolver resolves one complete OAuth client
+// credential pair. The service calls it once per operation, never from the
+// Antigravity client retry loop.
+type AntigravityOAuthCredentialsResolver func(context.Context) (antigravity.OAuthClientCredentials, error)
 
 func NewAntigravityOAuthService(proxyRepo ProxyRepository) *AntigravityOAuthService {
 	return &AntigravityOAuthService{
 		sessionStore: antigravity.NewSessionStore(),
 		proxyRepo:    proxyRepo,
+		credentialsResolver: func(context.Context) (antigravity.OAuthClientCredentials, error) {
+			return antigravity.ResolveOAuthClientCredentialsFromEnv()
+		},
 	}
+}
+
+// SetCredentialsResolver injects the settings-backed resolver without changing
+// the constructor used by existing tests and alternate providers.
+func (s *AntigravityOAuthService) SetCredentialsResolver(resolver AntigravityOAuthCredentialsResolver) {
+	if s == nil || resolver == nil {
+		return
+	}
+	s.credentialsResolver = resolver
+}
+
+// SetOAuthClientCredentialsResolver is the explicit-name alias used by
+// callers that keep several OAuth resolver types in the same service.
+func (s *AntigravityOAuthService) SetOAuthClientCredentialsResolver(resolver AntigravityOAuthCredentialsResolver) {
+	s.SetCredentialsResolver(resolver)
 }
 
 // AntigravityAuthURLResult is the result of generating an authorization URL
@@ -31,6 +55,11 @@ type AntigravityAuthURLResult struct {
 
 // GenerateAuthURL 生成 Google OAuth 授权链接
 func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64) (*AntigravityAuthURLResult, error) {
+	credentials, err := s.credentialsResolver(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve antigravity oauth client credentials: %w", err)
+	}
+
 	state, err := antigravity.GenerateState()
 	if err != nil {
 		return nil, fmt.Errorf("生成 state 失败: %w", err)
@@ -55,7 +84,7 @@ func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *
 	}
 
 	codeChallenge := antigravity.GenerateCodeChallenge(codeVerifier)
-	authURL, err := antigravity.BuildAuthorizationURL(state, codeChallenge)
+	authURL, err := antigravity.BuildAuthorizationURLWithCredentials(credentials, state, codeChallenge)
 	if err != nil {
 		return nil, fmt.Errorf("构建授权 URL 失败: %w", err)
 	}
@@ -64,6 +93,8 @@ func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *
 		State:        state,
 		CodeVerifier: codeVerifier,
 		ProxyURL:     proxyURL,
+		ClientID:     credentials.ClientID,
+		ClientSecret: credentials.ClientSecret,
 		CreatedAt:    time.Now(),
 	}
 	s.sessionStore.Set(sessionID, session)
@@ -123,7 +154,10 @@ func (s *AntigravityOAuthService) ExchangeCode(ctx context.Context, input *Antig
 	}
 
 	// 交换 token
-	tokenResp, err := client.ExchangeCode(ctx, input.Code, session.CodeVerifier)
+	tokenResp, err := client.ExchangeCode(ctx, input.Code, session.CodeVerifier, antigravity.OAuthClientCredentials{
+		ClientID:     session.ClientID,
+		ClientSecret: session.ClientSecret,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("token 交换失败: %w", err)
 	}
@@ -171,6 +205,11 @@ func (s *AntigravityOAuthService) ExchangeCode(ctx context.Context, input *Antig
 
 // RefreshToken 刷新 token
 func (s *AntigravityOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*AntigravityTokenInfo, error) {
+	credentials, err := s.credentialsResolver(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve antigravity oauth client credentials: %w", err)
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt <= 3; attempt++ {
@@ -186,7 +225,7 @@ func (s *AntigravityOAuthService) RefreshToken(ctx context.Context, refreshToken
 		if err != nil {
 			return nil, fmt.Errorf("create antigravity client failed: %w", err)
 		}
-		tokenResp, err := client.RefreshToken(ctx, refreshToken)
+		tokenResp, err := client.RefreshToken(ctx, refreshToken, credentials)
 		if err == nil {
 			now := time.Now()
 			expiresAt := now.Unix() + tokenResp.ExpiresIn - 300
