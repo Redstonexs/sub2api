@@ -1,6 +1,5 @@
 import { onMounted, onUnmounted, nextTick } from 'vue'
-import { driver, type Driver, type DriveStep } from 'driver.js'
-import 'driver.js/dist/driver.css'
+import type { Driver, DriveStep } from 'driver.js'
 import { useAuthStore as useUserStore } from '@/stores/auth'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useI18n } from 'vue-i18n'
@@ -99,6 +98,19 @@ export function useOnboardingTour(options: OnboardingOptions) {
 
     // 确保 DOM 就绪
     await nextTick()
+
+    // 按需加载 driver.js（仅当引导真正启动时），避免进入初始公共包
+    // 加载失败时中止引导，避免 auto-start/replay 产生未处理的 Promise 拒绝
+    let driver: typeof import('driver.js')['driver']
+    try {
+      const mod = await import('driver.js')
+      driver = mod.driver
+      // CSS 必须在构造 driver 实例之前加载完成
+      await import('driver.js/dist/driver.css')
+    } catch (err) {
+      console.error('Onboarding: failed to load driver.js, tour aborted:', err)
+      return
+    }
 
     // 如果指定了起始步骤，确保元素可见
     const currentStep = steps[startIndex]

@@ -131,8 +131,13 @@ export default defineConfig(({ mode }) => {
             }
 
             // UI 工具库（较大，单独分离）
-            if (id.includes('/@vueuse/') || id.includes('/xlsx/')) {
+            if (id.includes('/@vueuse/')) {
               return 'vendor-ui'
+            }
+
+            // xlsx 仅在 UsageView 导出时按需加载，独立分包避免与 vendor-ui 一起加载
+            if (id.includes('/xlsx/')) {
+              return 'vendor-xlsx'
             }
 
             // 图表库
@@ -148,6 +153,16 @@ export default defineConfig(({ mode }) => {
             // Stripe 仅在支付流程中按需加载，避免进入首页公共依赖。
             if (id.includes('/@stripe/stripe-js/')) {
               return 'vendor-stripe'
+            }
+
+            // gsap 仅 Home 页懒加载时使用，独立分包避免进入初始 vendor-misc
+            if (id.includes('/gsap/')) {
+              return 'vendor-gsap'
+            }
+
+            // driver.js 仅引导启动时按需加载，独立分包避免进入初始 vendor-misc
+            if (id.includes('/driver.js/')) {
+              return 'vendor-driver'
             }
 
             // 其他小型第三方库合并

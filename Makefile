@@ -20,7 +20,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeIntegrity.spec.ts \
 	src/features/channel-monitor-v2/__tests__/designSystem.structure.spec.ts \
 	src/features/channel-monitor-v2/__tests__/monitorFormat.spec.ts \
-	src/features/channel-monitor-v2/__tests__/monitorZoom.spec.ts
+	src/features/channel-monitor-v2/__tests__/monitorZoom.spec.ts \
+	src/composables/__tests__/useOnboardingTour.spec.ts
 
 # 一键编译前后端
 build: build-backend build-frontend

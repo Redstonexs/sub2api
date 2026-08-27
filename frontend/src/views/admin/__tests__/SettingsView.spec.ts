@@ -608,6 +608,26 @@ async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
+async function openAgreementTab(wrapper: ReturnType<typeof mountView>) {
+  const agreementTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.agreement"));
+
+  expect(agreementTabButton).toBeDefined();
+  await agreementTabButton?.trigger("click");
+  await flushPromises();
+}
+
+async function openEmailTab(wrapper: ReturnType<typeof mountView>) {
+  const emailTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.email"));
+
+  expect(emailTabButton).toBeDefined();
+  await emailTabButton?.trigger("click");
+  await flushPromises();
+}
+
 describe("admin SettingsView email domain quota copy", () => {
   it("documents the email domain quota and empty-whitelist behavior in both locales", () => {
     expect(zhCommon.auth.emailDomainRegistrationLimit).toContain("主流邮箱");
@@ -738,6 +758,85 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
     );
+  });
+
+  it("keeps General tab edits when saving from another tab", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const siteNameInput = wrapper.get('[data-testid="site-name-input"]');
+    await siteNameInput.setValue("My Renamed Site");
+
+    await openPaymentTab(wrapper);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ site_name: "My Renamed Site" }),
+    );
+  });
+
+  it("keeps Email tab smtp host edits when saving from another tab", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      email_verify_enabled: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openEmailTab(wrapper);
+
+    const smtpHostInput = wrapper.find(
+      'input[placeholder="admin.settings.smtp.hostPlaceholder"]',
+    );
+    expect(smtpHostInput.exists()).toBe(true);
+    await smtpHostInput.setValue("smtp.example.com");
+
+    await openPaymentTab(wrapper);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ smtp_host: "smtp.example.com" }),
+    );
+  });
+
+  it("blocks global save when page-size options are invalid even after switching tabs", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const pageSizeOptionsInput = wrapper.get(
+      '[data-testid="page-size-options-input"]',
+    );
+    await pageSizeOptionsInput.setValue("10, 20, abc");
+
+    await openPaymentTab(wrapper);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(
+      "admin.settings.site.tablePageSizeOptionsFormatError",
+    );
+  });
+
+  it("emits table default page size as a number (v-model.number parity)", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    const pageSizeInput = wrapper.get(
+      '[data-testid="table-default-page-size-input"]',
+    );
+    await pageSizeInput.setValue("50");
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls.at(-1)![0] as Record<string, unknown>;
+    // 必须是 number 而非原始输入字符串（与 v-model.number 语义一致）
+    expect(payload["table_default_page_size"]).toBe(50);
   });
 
   it("renders panel rate limit card and saves settings", async () => {
@@ -2057,6 +2156,145 @@ describe("admin SettingsView gateway error messages", () => {
 
     const codes = wrapper.findAll('[data-testid="gateway-error-code"]');
     await codes[0].setValue("99");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalled();
+  });
+});
+
+describe("admin SettingsView login agreement tab", () => {
+  beforeEach(() => {
+    getSettings.mockReset();
+    updateSettings.mockReset();
+    getWebSearchEmulationConfig.mockReset();
+    updateWebSearchEmulationConfig.mockReset();
+    getAdminApiKey.mockReset();
+    getOverloadCooldownSettings.mockReset();
+    getRateLimit429CooldownSettings.mockReset();
+    updateRateLimit429CooldownSettings.mockReset();
+    getStreamTimeoutSettings.mockReset();
+    getRectifierSettings.mockReset();
+    getBetaPolicySettings.mockReset();
+    getUpstreamBillingProbeSettings.mockReset();
+    updateUpstreamBillingProbeSettings.mockReset();
+    getOllamaCloudUsageSettings.mockReset();
+    updateOllamaCloudUsageSettings.mockReset();
+    getGroups.mockReset();
+    listProxies.mockReset();
+    getProviders.mockReset();
+    updateProvider.mockReset();
+    createProvider.mockReset();
+    deleteProvider.mockReset();
+    fetchPublicSettings.mockReset();
+    adminSettingsFetch.mockReset();
+    showError.mockReset();
+    showSuccess.mockReset();
+    localeRef.value = "zh-CN";
+
+    getSettings.mockResolvedValue({ ...baseSettingsResponse });
+    updateSettings.mockImplementation(async (payload) => ({
+      ...baseSettingsResponse,
+      ...payload,
+    }));
+    getWebSearchEmulationConfig.mockResolvedValue({
+      enabled: false,
+      providers: [],
+    });
+    updateWebSearchEmulationConfig.mockResolvedValue({
+      enabled: false,
+      providers: [],
+    });
+    getAdminApiKey.mockResolvedValue({
+      exists: false,
+      masked_key: "",
+    });
+    getOverloadCooldownSettings.mockResolvedValue({
+      enabled: true,
+      cooldown_minutes: 10,
+    });
+    getRateLimit429CooldownSettings.mockResolvedValue({
+      enabled: true,
+      cooldown_seconds: 5,
+    });
+    updateRateLimit429CooldownSettings.mockImplementation(async (payload) => payload);
+    getStreamTimeoutSettings.mockResolvedValue({
+      enabled: true,
+      action: "temp_unsched",
+      temp_unsched_minutes: 5,
+      threshold_count: 3,
+      threshold_window_minutes: 10,
+    });
+    getRectifierSettings.mockResolvedValue({
+      enabled: true,
+      thinking_signature_enabled: true,
+      thinking_budget_enabled: true,
+      apikey_signature_enabled: false,
+      apikey_signature_patterns: [],
+    });
+    getBetaPolicySettings.mockResolvedValue({
+      rules: [],
+    });
+    getUpstreamBillingProbeSettings.mockResolvedValue({
+      enabled: true,
+      interval_minutes: 30,
+    });
+    updateUpstreamBillingProbeSettings.mockImplementation(async (payload) => payload);
+    getOllamaCloudUsageSettings.mockResolvedValue({
+      enabled: false,
+      interval_minutes: 60,
+      debounce_minutes: 1,
+    });
+    updateOllamaCloudUsageSettings.mockImplementation(async (payload) => payload);
+    getGroups.mockResolvedValue([]);
+    listProxies.mockResolvedValue({
+      items: [],
+    });
+    getProviders.mockResolvedValue({
+      data: [],
+    });
+    fetchPublicSettings.mockResolvedValue(undefined);
+    adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("persists a login agreement document title edit after switching tabs and includes it in the global save", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openAgreementTab(wrapper);
+
+    await wrapper
+      .get('[data-testid="login-agreement-doc-title-0"]')
+      .setValue("Updated Terms Title");
+
+    await openPaymentTab(wrapper);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        login_agreement_documents: expect.arrayContaining([
+          expect.objectContaining({ title: "Updated Terms Title" }),
+        ]),
+      }),
+    );
+  });
+
+  it("blocks the global save when an enabled agreement has an empty title with content, even after switching tabs", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openAgreementTab(wrapper);
+
+    await wrapper.get('[data-testid="login-agreement-enabled"]').setValue(true);
+    await wrapper
+      .get('[data-testid="login-agreement-doc-title-0"]')
+      .setValue("");
+    await wrapper
+      .get('[data-testid="login-agreement-doc-content-0"]')
+      .setValue("Some markdown content");
+
+    await openPaymentTab(wrapper);
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 

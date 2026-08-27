@@ -53,6 +53,37 @@ watch(
   { deep: true }
 )
 
+// Announcements: periodic refresh for long-lived authenticated sessions.
+// The store throttles fetches to 20 minutes, so poll at the same cadence.
+// This replaces the removed per-route afterEach check without re-adding it:
+// a continuously visible, non-navigating session still gets fresh data.
+const ANNOUNCEMENT_REFRESH_MS = 20 * 60 * 1000
+let announcementRefreshTimer: ReturnType<typeof setInterval> | null = null
+let pendingLoginAnnouncement: ReturnType<typeof setTimeout> | null = null
+
+function startAnnouncementRefresh() {
+  if (announcementRefreshTimer) return // never create duplicate timers
+  announcementRefreshTimer = setInterval(() => {
+    announcementStore.fetchAnnouncements()
+  }, ANNOUNCEMENT_REFRESH_MS)
+}
+
+function stopAnnouncementRefresh() {
+  if (announcementRefreshTimer) {
+    clearInterval(announcementRefreshTimer)
+    announcementRefreshTimer = null
+  }
+}
+
+// A stale delayed login callback must never start the recurring timer: clear it
+// on logout/unmount so only a live authenticated session can own the timer.
+function clearPendingLoginAnnouncement() {
+  if (pendingLoginAnnouncement) {
+    clearTimeout(pendingLoginAnnouncement)
+    pendingLoginAnnouncement = null
+  }
+}
+
 // Watch for authentication state and manage subscription data + announcements
 function onVisibilityChange() {
   if (document.visibilityState === 'visible' && authStore.isAuthenticated) {
@@ -83,34 +114,39 @@ watch(
 
       // Announcements: new login vs page refresh restore
       if (oldValue === false) {
-        // New login: delay 3s then force fetch
-        setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
+        // New login: delay 3s then force fetch. The recurring timer starts only
+        // after that forced fetch has run, so its first tick is not throttled
+        // by the store's 20-minute window (which would push the next real
+        // refresh out to ~40 minutes).
+        pendingLoginAnnouncement = setTimeout(() => {
+          pendingLoginAnnouncement = null
+          announcementStore.fetchAnnouncements(true)
+          startAnnouncementRefresh()
+        }, 3000)
       } else {
         // Page refresh restore (oldValue was undefined)
         announcementStore.fetchAnnouncements()
+        startAnnouncementRefresh()
       }
 
       // Register visibility change listener
       document.addEventListener('visibilitychange', onVisibilityChange)
     } else {
       // User logged out: clear data and stop polling
+      clearPendingLoginAnnouncement()
       subscriptionStore.clear()
       announcementStore.reset()
       adminComplianceStore.reset()
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      stopAnnouncementRefresh()
     }
   },
   { immediate: true }
 )
 
-// Route change trigger (throttled by store)
-router.afterEach(() => {
-  if (authStore.isAuthenticated) {
-    announcementStore.fetchAnnouncements()
-  }
-})
-
 onBeforeUnmount(() => {
+  clearPendingLoginAnnouncement()
+  stopAnnouncementRefresh()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('admin-compliance-required', onAdminComplianceRequired)
 })
