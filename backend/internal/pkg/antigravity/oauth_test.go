@@ -14,27 +14,27 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// getClientCredentials
+// ResolveOAuthClientCredentialsFromEnv
 // ---------------------------------------------------------------------------
 
-func TestGetClientCredentials_ConfiguredAndTrimmed(t *testing.T) {
+func TestResolveOAuthClientCredentialsFromEnv_ConfiguredAndTrimmed(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientIDEnv, "  synthetic-client-id  ")
 	t.Setenv(AntigravityOAuthClientSecretEnv, "  synthetic-client-secret  ")
 
-	clientID, clientSecret, err := getClientCredentials()
+	credentials, err := ResolveOAuthClientCredentialsFromEnv()
 	if err != nil {
 		t.Fatalf("获取 OAuth client credentials 失败: %v", err)
 	}
-	if clientID != "synthetic-client-id" || clientSecret != "synthetic-client-secret" {
-		t.Fatalf("OAuth client credentials 未规范化: got (%q, %q)", clientID, clientSecret)
+	if credentials.ClientID != "synthetic-client-id" || credentials.ClientSecret != "synthetic-client-secret" {
+		t.Fatalf("OAuth client credentials 未规范化: got (%q, %q)", credentials.ClientID, credentials.ClientSecret)
 	}
 }
 
-func TestGetClientCredentials_MissingBoth(t *testing.T) {
+func TestResolveOAuthClientCredentialsFromEnv_MissingBoth(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientIDEnv, "")
 	t.Setenv(AntigravityOAuthClientSecretEnv, "")
 
-	_, _, err := getClientCredentials()
+	_, err := ResolveOAuthClientCredentialsFromEnv()
 	if err == nil {
 		t.Fatal("缺少 OAuth client credentials 时应返回错误")
 	}
@@ -44,22 +44,22 @@ func TestGetClientCredentials_MissingBoth(t *testing.T) {
 	}
 }
 
-func TestGetClientCredentials_PartialMissingID(t *testing.T) {
+func TestResolveOAuthClientCredentialsFromEnv_PartialMissingID(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientIDEnv, "")
 	t.Setenv(AntigravityOAuthClientSecretEnv, testAntigravityClientSecret)
 
-	_, _, err := getClientCredentials()
+	_, err := ResolveOAuthClientCredentialsFromEnv()
 	if err == nil || !strings.Contains(err.Error(), AntigravityOAuthClientIDEnv) ||
 		!strings.Contains(err.Error(), "partial") {
 		t.Errorf("缺少 client_id 的部分配置错误不明确: %v", err)
 	}
 }
 
-func TestGetClientCredentials_PartialMissingSecret(t *testing.T) {
+func TestResolveOAuthClientCredentialsFromEnv_PartialMissingSecret(t *testing.T) {
 	t.Setenv(AntigravityOAuthClientIDEnv, testAntigravityClientID)
 	t.Setenv(AntigravityOAuthClientSecretEnv, "")
 
-	_, _, err := getClientCredentials()
+	_, err := ResolveOAuthClientCredentialsFromEnv()
 	if err == nil || !strings.Contains(err.Error(), AntigravityOAuthClientSecretEnv) ||
 		!strings.Contains(err.Error(), "partial") {
 		t.Errorf("缺少 client_secret 的部分配置错误不明确: %v", err)

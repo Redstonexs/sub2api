@@ -174,16 +174,6 @@ func ResolveOAuthClientCredentialsFromEnv() (OAuthClientCredentials, error) {
 	return OAuthClientCredentials{ClientID: clientID, ClientSecret: clientSecret}, nil
 }
 
-// getClientCredentials is retained for package-local compatibility with older
-// tests and callers. New code should use the explicit credentials type.
-func getClientCredentials() (clientID, clientSecret string, err error) {
-	credentials, err := ResolveOAuthClientCredentialsFromEnv()
-	if err != nil {
-		return "", "", err
-	}
-	return credentials.ClientID, credentials.ClientSecret, nil
-}
-
 // BaseURLs 定义 Antigravity API 端点（与 Antigravity-Manager 保持一致）
 var BaseURLs = []string{
 	antigravityProdBaseURL,  // prod (优先)
