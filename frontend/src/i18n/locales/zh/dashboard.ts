@@ -385,6 +385,7 @@ export default {
     qosEffects: '影响：{effects}',
     qosWindow: { daily: '每日', weekly: '每周', monthly: '每月' },
     qosEffect: { model: '模型', reasoning: '推理', rpm: '速率限制' },
+    requestedReasoningEffort: '请求推理强度',
     endpoint: '端点',
     endpointDistribution: '端点分布',
     inbound: '入站',

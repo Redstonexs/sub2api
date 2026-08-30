@@ -380,6 +380,7 @@ export default {
     qosEffects: 'Effects: {effects}',
     qosWindow: { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' },
     qosEffect: { model: 'model', reasoning: 'reasoning', rpm: 'rate limit' },
+    requestedReasoningEffort: 'Requested reasoning effort',
     endpoint: 'Endpoint',
     endpointDistribution: 'Endpoint Distribution',
     inbound: 'Inbound',

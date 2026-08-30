@@ -109,10 +109,11 @@ func TestScanUsageLog_GroupQoSSnapshotRoundTrip(t *testing.T) {
 		0,                // video_count
 		sql.NullString{}, // video_resolution
 		sql.NullInt64{},  // video_duration_seconds
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
+		sql.NullString{}, // service_tier
+		sql.NullString{}, // reasoning_effort
+		sql.NullString{}, // requested_reasoning_effort
+		sql.NullString{}, // inbound_endpoint
+		sql.NullString{}, // upstream_endpoint
 		false,
 		false,
 		sql.NullInt64{},                      // channel_id
@@ -173,10 +174,11 @@ func TestScanUsageLog_GroupQoSZeroMaskSurvives(t *testing.T) {
 		0,                // video_count
 		sql.NullString{}, // video_resolution
 		sql.NullInt64{},  // video_duration_seconds
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
+		sql.NullString{}, // service_tier
+		sql.NullString{}, // reasoning_effort
+		sql.NullString{}, // requested_reasoning_effort
+		sql.NullString{}, // inbound_endpoint
+		sql.NullString{}, // upstream_endpoint
 		false,
 		false,
 		sql.NullInt64{},                      // channel_id
@@ -237,10 +239,11 @@ func TestScanUsageLog_GroupQoSAllNullIsLegacy(t *testing.T) {
 		0,
 		sql.NullString{},
 		sql.NullInt64{},
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
-		sql.NullString{},
+		sql.NullString{}, // service_tier
+		sql.NullString{}, // reasoning_effort
+		sql.NullString{}, // requested_reasoning_effort
+		sql.NullString{}, // inbound_endpoint
+		sql.NullString{}, // upstream_endpoint
 		false,
 		false,
 		sql.NullInt64{},
