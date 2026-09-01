@@ -89,6 +89,15 @@ vi.mock('@/stores', () => ({
   useAuthStore: () => authStoreState,
 }))
 
+// HomeView reads the stores through the '@/stores' barrel, but
+// '@/utils/featureFlags' imports useAppStore from '@/stores/app' directly.
+// Vitest mocks are specifier-based, so the barrel mock above does not cover
+// that deep import — without this the real Pinia store factory runs and throws
+// "getActivePinia() was called but there was no active Pinia".
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => appStoreState,
+}))
+
 function mountHomeView() {
   return mount(HomeView, {
     global: {

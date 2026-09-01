@@ -90,14 +90,6 @@ export default {
     myAnnouncements: "我的公告",
   },
   admin: {
-    dashboard: {
-      newUsersToday: "今日新增用户",
-      active: "活跃",
-      ok: "正常",
-      err: "异常",
-      create: "创建",
-      userUsageTrend: "用户使用趋势（Top 12）",
-    },
     users: {
       passwordCopied: "密码已复制",
     },
@@ -331,11 +323,6 @@ export default {
         addUserId: "添加用户 ID",
         removeUserId: "移除用户 ID",
       },
-    },
-  },
-  payment: {
-    admin: {
-      allowUserRefund: "允许用户退款",
     },
   },
   onboarding: {
