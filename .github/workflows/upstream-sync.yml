@@ -85,12 +85,17 @@ jobs:
             fi
           fi
 
-      # Engine contract (tools/upstream_sync.sh, frozen): exit 0 = success or
-      # no-op; exit 10 = necessary conflict (paths on stdout, merge aborted,
-      # tree clean); exit 1 = error. On success it creates a merge commit plus
-      # a follow-up `chore: record last-synced upstream tag <tag> [skip ci]`
-      # commit updating STATE_FILE. It never pushes. We mask exit 10 below so
-      # the job can branch into conflict notification rather than hard-failing.
+      # Engine contract (tools/upstream_sync.sh): exit 0 = success or no-op;
+      # exit 10 = necessary conflict (paths on stdout, merge aborted, tree
+      # clean); exit 1 = error. On exit 0 stdout carries exactly one
+      # `sync-result=<merged|state-only|noop>` line:
+      #   merged      upstream commits landed -> run the full verification
+      #   state-only  the tag was already an ancestor of HEAD (a maintainer had
+      #               merged upstream/main by hand); only STATE_FILE moved, so
+      #               the tree is unchanged and there is nothing to verify
+      #   noop        nothing happened at all
+      # It never pushes. We mask exit 10 below so the job can branch into
+      # conflict notification rather than hard-failing.
       - name: Run upstream sync engine
         id: engine
         if: steps.stored.outputs.noop != 'true'
@@ -121,6 +126,12 @@ jobs:
             cat "$STDERR_FILE"
             echo "UPSTREAM_SYNC_END"
           } >> "$GITHUB_OUTPUT"
+          # Outcome marker (exit 0 only); absent on exit 10, where stdout is
+          # the conflict list instead.
+          if [ "$CODE" -eq 0 ]; then
+            RESULT="$(sed -n 's/^sync-result=//p' "$STDOUT_FILE" | head -1)"
+            echo "result=${RESULT:-unknown}" >> "$GITHUB_OUTPUT"
+          fi
           HEAD_AFTER="$(git rev-parse HEAD)"
           if [ "$HEAD_BEFORE" != "$HEAD_AFTER" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -134,8 +145,10 @@ jobs:
           fi
 
       # ── Verification: byte-for-byte parity with backend-ci.yml setup blocks. ──
-      # Gate: only when the engine merged something (skip on no-op / conflict).
-      - if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+      # Gate on result == 'merged': a state-only sync leaves the tree
+      # byte-identical apart from .github/upstream-sync-tag, so there is
+      # nothing to test and no reason to burn a full CI cycle on it.
+      - if: steps.engine.outputs.result == 'merged'
         uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
@@ -143,32 +156,52 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
+      # Derived from backend/go.mod, never hardcoded: this workflow merges
+      # upstream, and upstream bumping its Go directive is a routine change.
+      # A pinned literal here goes stale on that bump and wedges every
+      # subsequent run (see the go1.26.6-vs-go1.27.0 outage).
       - name: Verify Go version
         id: verify_go
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         run: |
-          go version | grep -q 'go1.26.6'
+          set -e
+          EXPECTED="$(awk '/^go /{print $2; exit}' backend/go.mod)"
+          if [ -z "$EXPECTED" ]; then
+            echo "::error::could not read the go directive from backend/go.mod"
+            exit 1
+          fi
+          ACTUAL="$(go version | awk '{print $3}' | sed 's/^go//')"
+          # go.mod may pin an exact patch (1.27.0) or a minor (1.27); accept a
+          # patch release of the pinned minor, reject anything else.
+          case "$ACTUAL" in
+            "$EXPECTED" | "$EXPECTED".*) ;;
+            *)
+              echo "::error::toolchain go${ACTUAL} does not match backend/go.mod (go${EXPECTED})"
+              exit 1
+              ;;
+          esac
+          echo "toolchain go${ACTUAL} matches backend/go.mod (go${EXPECTED})"
 
       - name: Unit tests
         id: unit_tests
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         working-directory: backend
         run: make test-unit
 
       - name: Integration tests
         id: integration_tests
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         working-directory: backend
         run: make test-integration
 
       - name: Setup pnpm
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -177,22 +210,23 @@ jobs:
 
       - name: Install frontend dependencies
         id: install_frontend
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
       - name: Frontend typecheck and critical vitest
         id: frontend_tests
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         run: make test-frontend
 
       - name: Build
         id: build
-        if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
+        if: steps.engine.outputs.result == 'merged'
         run: make build
 
       - name: Push to main (with retry and PR fallback)
         id: push
+        # Pushes both a verified merge and a state-only bookkeeping commit.
         if: steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -252,8 +286,6 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set +e
-          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
-          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
           BODY_FILE="$(mktemp)"
           printf '%s\n' \
             "Upstream sync of tag ${TARGET_TAG} is blocked by necessary conflicts outside the fork-preservation whitelist." \
@@ -272,10 +304,27 @@ jobs:
             "   make build" \
             "5. Push to main." \
             "6. Update .github/upstream-sync-tag to ${TARGET_TAG}." \
-            "7. Close this issue." \
+            "7. Close the tracking issue if one was opened." \
             "" \
             "Workflow run: ${RUN_URL}" \
             > "$BODY_FILE"
+
+          # The job summary is the reliable channel: it needs no repo feature
+          # and always renders on the run page. Write it FIRST, unconditionally.
+          {
+            echo "## :warning: Upstream sync blocked — necessary conflicts"
+            echo ""
+            sed 's/^/> /' "$BODY_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Tracking issue is best-effort: Issues may be disabled on this repo.
+          if ! gh issue list --repo "$GITHUB_REPOSITORY" --limit 1 >/dev/null 2>&1; then
+            echo "::warning::Issues are disabled on $GITHUB_REPOSITORY; conflict report written to the job summary only."
+            echo "action=summary-only" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
             echo "issue_number=$EXISTING" >> "$GITHUB_OUTPUT"
@@ -292,7 +341,7 @@ jobs:
           exit 0
 
       - name: Notify on verification failure
-        if: failure() && steps.engine.outputs.exit_code == '0' && steps.engine.outputs.changed == 'true' && steps.push.outcome != 'failure'
+        if: failure() && steps.engine.outputs.result == 'merged' && steps.push.outcome != 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_TAG: ${{ steps.tag.outputs.tag }}
@@ -315,8 +364,6 @@ jobs:
           if [ -z "$FAILED" ]; then
             FAILED=" (setup/infrastructure step - see run logs)"
           fi
-          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
-          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
           BODY_FILE="$(mktemp)"
           printf '%s\n' \
             "Upstream sync of tag ${TARGET_TAG} failed verification. No changes were pushed." \
@@ -327,6 +374,20 @@ jobs:
             "" \
             "Workflow run: ${RUN_URL}" \
             > "$BODY_FILE"
+
+          # Reliable channel first (see the conflict notifier above).
+          {
+            echo "## :x: Upstream sync failed verification"
+            echo ""
+            sed 's/^/> /' "$BODY_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if ! gh issue list --repo "$GITHUB_REPOSITORY" --limit 1 >/dev/null 2>&1; then
+            echo "::warning::Issues are disabled on $GITHUB_REPOSITORY; failure report written to the job summary only."
+            exit 0
+          fi
+          gh label create upstream-sync --color FFA500 --description "Upstream sync tracking" --force
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)"
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
           else
@@ -351,6 +412,7 @@ jobs:
           STORED_TAG: ${{ steps.stored.outputs.stored }}
           NOOP: ${{ steps.stored.outputs.noop }}
           EXIT_CODE: ${{ steps.engine.outputs.exit_code }}
+          SYNC_RESULT: ${{ steps.engine.outputs.result }}
           CHANGED: ${{ steps.engine.outputs.changed }}
           PUSH_RESULT: ${{ steps.push.outputs.result }}
           PR_BRANCH: ${{ steps.push.outputs.pr_branch }}
@@ -366,6 +428,7 @@ jobs:
             echo "| Stored tag | ${STORED_TAG:-<none>} |"
             echo "| No-op guard | ${NOOP:-false} |"
             echo "| Engine exit | ${EXIT_CODE:-skipped} |"
+            echo "| Sync result | ${SYNC_RESULT:-skipped} |"
             echo "| HEAD changed | ${CHANGED:-skipped} |"
             echo "| Push result | ${PUSH_RESULT:-skipped} |"
             if [ -n "$PR_BRANCH" ]; then echo "| PR branch | ${PR_BRANCH} |"; fi

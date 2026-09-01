@@ -14,6 +14,18 @@
 # Tag hygiene: the upstream tag is fetched into refs/upstream-sync/<tag> (never
 # refs/tags) so upstream releases cannot pollute the fork's own version line.
 #
+# Sync state is derived from git ancestry, not from STATE_FILE. A maintainer
+# who merges upstream/main by hand advances the merge graph without touching
+# STATE_FILE, so treating that file as the source of truth makes it drift and
+# the engine then re-merges tags the fork already contains. STATE_FILE is kept
+# as a human-readable record and a fast path, but ancestry decides.
+#
+# On exit 0 a single machine-readable line is printed on stdout:
+#   sync-result=merged      upstream commits were merged; verify before pushing
+#   sync-result=state-only  tag already an ancestor; only STATE_FILE moved
+#   sync-result=noop        nothing to do; no commits created
+# On exit 10 stdout carries the conflicted paths instead (one per line).
+#
 # Requires: bash, git. Run from anywhere inside the fork working tree.
 
 set -u
@@ -61,8 +73,9 @@ Environment:
                  (default: .github/upstream-sync-tag)
 
 Exit codes:
-  0   success (merged + state file committed) or no-op (STATE_FILE already
-      records UPSTREAM_TAG; zero new commits)
+  0   success (merged + state file committed), state-only (tag was already an
+      ancestor of HEAD, so only STATE_FILE moved), or no-op (zero new commits).
+      The exact outcome is on stdout as sync-result=<merged|state-only|noop>.
   10  necessary conflict outside the fork-preservation whitelist; the merge
       was aborted and the offending paths are printed one per line on stdout
   1   error (usage, environment, fetch, or unexpected git failure; stderr
@@ -72,6 +85,9 @@ EOF
 
 log() { printf '%s\n' "$*" >&2; }
 err() { printf 'error: %s\n' "$*" >&2; }
+# The only thing this script writes to stdout on a 0 exit; the workflow reads
+# it to decide whether the verification suite has anything to verify.
+result() { printf 'sync-result=%s\n' "$1"; }
 
 is_whitelisted() {
   local p="$1" w
@@ -124,6 +140,7 @@ noop_check() {
     recorded="$(tr -d '[:space:]' <"$STATE_FILE")"
     if [[ "$recorded" == "$UPSTREAM_TAG" ]]; then
       log "STATE_FILE ($STATE_FILE) already records $UPSTREAM_TAG; nothing to do."
+      result noop
       exit 0
     fi
   fi
@@ -149,6 +166,14 @@ fetch_tag() {
 
 cleanup_sync_ref() {
   git update-ref -d "$SYNC_REF" 2>/dev/null || true
+}
+
+# True when the tag's commit is already reachable from HEAD — i.e. the fork
+# has this upstream code, however it arrived (this engine, or a maintainer's
+# manual `git merge upstream/main`). This is the drift-proof no-op test:
+# git ancestry cannot go stale the way a checked-in state file does.
+already_merged() {
+  git merge-base --is-ancestor "$SYNC_REF^{commit}" HEAD 2>/dev/null
 }
 
 merge_tag() {
@@ -240,8 +265,22 @@ main() {
   preflight
   noop_check
   fetch_tag
+
+  # Ancestry fast path: the code is already here, so there is nothing to merge
+  # and nothing for the caller to verify. Only the bookkeeping needs to catch
+  # up. Without this the engine builds an empty merge commit and burns a full
+  # verification cycle every time the fork was synced by hand.
+  if already_merged; then
+    log "$UPSTREAM_TAG is already an ancestor of HEAD; recording it without a merge"
+    cleanup_sync_ref
+    write_state_file
+    result state-only
+    exit 0
+  fi
+
   merge_tag
   write_state_file
+  result merged
   exit 0
 }
 

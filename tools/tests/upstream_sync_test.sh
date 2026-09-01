@@ -319,6 +319,7 @@ func pickAccount() string {
 }' "S1 upstream change present"
   assert_ref_absent "$fork" "refs/tags/v1.1.0" "S1 upstream tag not leaked into refs/tags"
   assert_ref_absent "$fork" "refs/upstream-sync/v1.1.0" "S1 temp sync ref cleaned"
+  assert_stdout_contains "$FIX/engine.stdout" "sync-result=merged" "S1 reports merged"
 
   end_scenario "S1 clean merge of non-whitelist upstream change"
 }
@@ -423,6 +424,7 @@ scenario_s4() {
   assert_commit_count_delta "$fork" "$before_count" 0 "S4 zero new commits"
   assert_head_unchanged "$fork" "$before_sha" "S4 HEAD unchanged"
   assert_file_content "$fork/$STATE_FILE_REL" "v1.1.0" "S4 STATE_FILE still v1.1.0"
+  assert_stdout_contains "$FIX/engine.stdout" "sync-result=noop" "S4 reports noop"
 
   end_scenario "S4 no-op when STATE_FILE already contains tag"
 }
@@ -533,13 +535,71 @@ func pickAccount() string {
   end_scenario "S8 annotated upstream tag merges successfully"
 }
 
+# Regression guard for the real-world drift that wedged the workflow: the
+# maintainer merges upstream/main by hand, so the tag is already an ancestor of
+# HEAD while STATE_FILE still names a much older tag. The engine must recognise
+# that from ancestry, skip the merge entirely, and only move the bookkeeping —
+# no empty merge commit, and a marker telling the caller there is nothing to
+# verify.
+scenario_s9() {
+  begin_scenario
+  make_fixture "s9"
+  local upstream="$FIX/upstream" fork="$FIX/fork"
+
+  apply_fork_baseline "$fork"
+  write_file "$fork" "$STATE_FILE_REL" "v1.0.0"
+  git_commit_all "$fork" "fork: record last sync tag v1.0.0"
+
+  write_file "$upstream" "backend/internal/service/gateway_service.go" 'package service
+
+// pickAccount returns the upstream account id.
+func pickAccount() string {
+  return "upstream-v1.1.0"
+}'
+  git_commit_all "$upstream" "upstream: gateway_service v1.1.0"
+  git -C "$upstream" tag v1.1.0
+
+  # Simulate `git merge upstream/main` done by hand, bypassing this engine:
+  # the code lands but STATE_FILE is left behind at v1.0.0.
+  git -C "$fork" fetch -q origin "$BASE_BRANCH"
+  git -C "$fork" merge -q --no-ff -m "Merge upstream/main by hand" FETCH_HEAD
+
+  local before_count
+  before_count="$(git -C "$fork" rev-list --count HEAD)"
+
+  run_engine "$fork" "$upstream" "v1.1.0"
+  local rc=$?
+
+  assert_exit 0 "$rc" "S9 exit code"
+  assert_stdout_contains "$FIX/engine.stdout" "sync-result=state-only" "S9 reports state-only"
+  assert_commit_count_delta "$fork" "$before_count" 1 "S9 exactly one new commit (state file only)"
+  assert_file_content "$fork/$STATE_FILE_REL" "v1.1.0" "S9 STATE_FILE fast-forwarded"
+  assert_git_clean "$fork" "S9 tree clean"
+  assert_ref_absent "$fork" "refs/tags/v1.1.0" "S9 upstream tag not leaked into refs/tags"
+  assert_ref_absent "$fork" "refs/upstream-sync/v1.1.0" "S9 temp sync ref cleaned"
+
+  local head_subject
+  head_subject="$(git -C "$fork" log -1 --format=%s HEAD)"
+  if [[ "$head_subject" != "chore: record last-synced upstream tag v1.1.0 [skip ci]" ]]; then
+    record_failure "S9 HEAD is not the state-file commit (subject: <<$head_subject>>)"
+  fi
+  # The engine must not have manufactured a merge commit on top.
+  local head_parents
+  head_parents="$(git -C "$fork" rev-list --parents -n 1 HEAD | wc -w | tr -d '[:space:]')"
+  if [[ "$head_parents" != "2" ]]; then
+    record_failure "S9 HEAD should be a normal one-parent commit (field count=$head_parents, expected 2)"
+  fi
+
+  end_scenario "S9 tag already an ancestor records state without re-merging"
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 main() {
   echo "TAP version 13"
-  echo "1..8"
+  echo "1..9"
   if [[ -f "$ENGINE" ]]; then
     echo "# engine: $ENGINE (present)"
   else
@@ -554,8 +614,9 @@ main() {
   scenario_s6a
   scenario_s6b
   scenario_s8
+  scenario_s9
 
-  local total=8 passed
+  local total=9 passed
   passed=$((total - TESTS_FAILED))
   echo "PASSED: $passed/$total"
 
