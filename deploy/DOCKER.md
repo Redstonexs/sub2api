@@ -54,6 +54,20 @@ Then start with either:
 - `docker compose -f docker-compose.local.yml up -d` (local directories, easy migration), or
 - `docker compose up -d` (named volumes).
 
+## Startup and Database Recovery
+
+Sub2API runs database migrations while starting. PostgreSQL may still be
+recovering briefly after a host or Docker daemon restart. The application
+retries transient PostgreSQL startup and connection errors with bounded
+exponential backoff, then continues startup when the database is ready.
+Permanent errors such as invalid credentials, migration checksum mismatches,
+SQL errors, and incompatible data fail immediately.
+
+The Compose deployment also checks PostgreSQL readiness with both `pg_isready`
+and a simple SQL query. `depends_on: condition: service_healthy` helps order a
+fresh Compose start, but application-level retries are still required when
+Docker restores existing containers after a host restart.
+
 ## Environment Variables
 
 The image is configured with discrete `DATABASE_*` and `REDIS_*` variables — connection URLs such as `DATABASE_URL`/`REDIS_URL` are **not** supported. The bundled Compose files map the variables for you; the standalone Compose file (`docker-compose.standalone.yml`) requires you to provide `DATABASE_HOST`, `DATABASE_PASSWORD`, `REDIS_HOST`, and `ADMIN_PASSWORD` for externally managed PostgreSQL and Redis instances.

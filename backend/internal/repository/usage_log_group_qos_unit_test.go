@@ -40,22 +40,22 @@ func TestPrepareUsageLogInsert_GroupQoSSnapshotArgWiring(t *testing.T) {
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
 
-	tierArg := prepared.args[len(prepared.args)-4]
+	tierArg := prepared.args[len(prepared.args)-5]
 	require.Equal(t, int16(2), tierArg, "group_qos_tier arg should be the int16 tier")
 
-	windowArg := prepared.args[len(prepared.args)-3]
+	windowArg := prepared.args[len(prepared.args)-4]
 	ws, ok := windowArg.(*string)
 	require.True(t, ok, "group_qos_window arg should be *string, got %T", windowArg)
 	require.NotNil(t, ws)
 	require.Equal(t, "weekly", *ws)
 
-	maskArg := prepared.args[len(prepared.args)-2]
+	maskArg := prepared.args[len(prepared.args)-3]
 	require.Equal(t, int16(service.GroupQoSEffectModel|service.GroupQoSEffectRPM), maskArg,
 		"group_qos_effect_mask arg should carry the effect bits")
 
-	require.Equal(t, "smallint", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-4])
-	require.Equal(t, "text", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-3])
-	require.Equal(t, "smallint", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
+	require.Equal(t, "smallint", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-5])
+	require.Equal(t, "text", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-4])
+	require.Equal(t, "smallint", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-3])
 }
 
 // TestPrepareUsageLogInsert_GroupQoSAllNullWithoutSnapshot proves that a request
@@ -64,9 +64,9 @@ func TestPrepareUsageLogInsert_GroupQoSSnapshotArgWiring(t *testing.T) {
 func TestPrepareUsageLogInsert_GroupQoSAllNullWithoutSnapshot(t *testing.T) {
 	prepared := prepareUsageLogInsert(newQoSUsageLog(nil))
 
-	require.Nil(t, prepared.args[len(prepared.args)-4], "group_qos_tier must be NULL")
-	require.Nil(t, prepared.args[len(prepared.args)-3], "group_qos_window must be NULL")
-	require.Nil(t, prepared.args[len(prepared.args)-2], "group_qos_effect_mask must be NULL")
+	require.Nil(t, prepared.args[len(prepared.args)-5], "group_qos_tier must be NULL")
+	require.Nil(t, prepared.args[len(prepared.args)-4], "group_qos_window must be NULL")
+	require.Nil(t, prepared.args[len(prepared.args)-3], "group_qos_effect_mask must be NULL")
 }
 
 // TestScanUsageLog_GroupQoSSnapshotRoundTrip proves the SELECT side reconstructs
@@ -125,6 +125,7 @@ func TestScanUsageLog_GroupQoSSnapshotRoundTrip(t *testing.T) {
 		sql.NullInt64{Valid: true, Int64: 3}, // group_qos_tier
 		sql.NullString{Valid: true, String: "monthly"},                                                          // group_qos_window
 		sql.NullInt64{Valid: true, Int64: int64(service.GroupQoSEffectModel | service.GroupQoSEffectReasoning)}, // group_qos_effect_mask
+		false, // native_compaction_v2
 		now,
 	}})
 	require.NoError(t, err)
@@ -190,6 +191,7 @@ func TestScanUsageLog_GroupQoSZeroMaskSurvives(t *testing.T) {
 		sql.NullInt64{Valid: true, Int64: 1}, // group_qos_tier
 		sql.NullString{Valid: true, String: "daily"}, // group_qos_window
 		sql.NullInt64{Valid: true, Int64: 0},         // group_qos_effect_mask
+		false,                                        // native_compaction_v2
 		now,
 	}})
 	require.NoError(t, err)
@@ -255,6 +257,7 @@ func TestScanUsageLog_GroupQoSAllNullIsLegacy(t *testing.T) {
 		sql.NullInt64{},  // group_qos_tier NULL
 		sql.NullString{}, // group_qos_window NULL
 		sql.NullInt64{},  // group_qos_effect_mask NULL
+		false,            // native_compaction_v2
 		now,
 	}})
 	require.NoError(t, err)
