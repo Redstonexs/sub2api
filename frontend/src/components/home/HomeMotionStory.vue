@@ -65,6 +65,7 @@
     </section>
 
     <HomeRelayStage />
+    <HomeModelLeaderboard />
     <HomeFeatureStory :dashboard-path="dashboardPath" :is-authenticated="isAuthenticated" />
   </main>
 </template>
@@ -73,6 +74,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import HomeFeatureStory from './HomeFeatureStory.vue'
+import HomeModelLeaderboard from './HomeModelLeaderboard.vue'
 import HomeRelayStage from './HomeRelayStage.vue'
 import HomeRoutingDiagram from './HomeRoutingDiagram.vue'
 import Icon from '@/components/icons/Icon.vue'

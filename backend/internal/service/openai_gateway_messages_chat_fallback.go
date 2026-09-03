@@ -74,7 +74,6 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	convertedEffort := chatReq.ReasoningEffort
 	reasoningEffort := &convertedEffort
 	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
-	serviceTier := extractOpenAIServiceTierFromBody(body)
 
 	chatBody, err := json.Marshal(chatReq)
 	if err != nil {
@@ -113,7 +112,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 		}
 		return nil, policyErr
 	}
-	serviceTier = extractOpenAIServiceTierFromBody(chatBody)
+	serviceTier := extractOpenAIServiceTierFromBody(chatBody)
 
 	logger.L().Debug("openai messages: forwarding via raw chat completions",
 		zap.Int64("account_id", account.ID),
