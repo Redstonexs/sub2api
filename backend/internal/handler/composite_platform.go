@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -59,23 +60,17 @@ func effectiveAPIKeyPlatform(c *gin.Context, apiKey *service.APIKey) string {
 	return apiKey.Group.Platform
 }
 
-func openAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey) (string, []service.ReasoningEffortMapping, bool) {
+func openAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey) (string, []service.ReasoningEffortMapping, string, bool) {
 	if apiKey == nil || apiKey.Group == nil {
-		return "", nil, false
+		return "", nil, "", false
 	}
 	if apiKey.Group.Platform != service.PlatformOpenAI && apiKey.Group.Platform != service.PlatformComposite {
-		return "", nil, false
+		return "", nil, "", false
 	}
 	if effectiveAPIKeyPlatform(c, apiKey) != service.PlatformOpenAI {
-		return "", nil, false
+		return "", nil, "", false
 	}
-	// 分组常设上限与当前生效的 QoS 档位上限取更严格者：降级中的用户不应
-	// 因为分组本身放得宽就绕过 QoS 天花板。
-	maxEffort := service.EffectiveMaxReasoningEffort(
-		apiKey.Group.MaxReasoningEffort,
-		service.GroupQoSDecisionFromContext(c.Request.Context()),
-	)
-	return maxEffort, apiKey.Group.ReasoningEffortMappings, true
+	return apiKey.Group.MaxReasoningEffort, apiKey.Group.ReasoningEffortMappings, apiKey.Group.MaxReasoningEffortOverLimit, true
 }
 
 func bindRequestedReasoningEffort(c *gin.Context, body []byte, model string) {
@@ -106,19 +101,21 @@ func stampForwardRequestedReasoningEffort(result *service.ForwardResult, request
 	result.RequestedReasoningEffort = requested
 }
 
-func applyOpenAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey, body []byte) ([]byte, bool) {
+func applyOpenAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey, body []byte) ([]byte, bool, error) {
 	bindRequestedReasoningEffort(c, body, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
-	maxEffort, mappings, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
+	maxEffort, mappings, overLimit, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
 	if !ok {
-		return body, false
+		return body, false, nil
 	}
-	capped, changed := service.ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings)
-	// QoS 推理上限真正把本请求压到分组常设上限之下时，记入用量快照；
-	// 仅档位生效但未改写的请求不计。body 是改写前的原始请求体。
-	if changed {
-		service.MarkGroupQoSReasoningEffect(c.Request.Context(), body)
+	return service.ApplyOpenAIReasoningEffortPolicyWithGroupQoS(c.Request.Context(), body, maxEffort, mappings, overLimit)
+}
+
+func respondOpenAIReasoningEffortPolicyError(c *gin.Context, err error, write func(*gin.Context, int, string, string)) {
+	if c == nil || err == nil || write == nil {
+		return
 	}
-	return capped, changed
+	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+	write(c, http.StatusForbidden, "permission_error", err.Error())
 }
 
 func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *service.APIKey, body []byte) {
@@ -133,14 +130,9 @@ func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *s
 	if !effort.Exists() || effort.Type != gjson.String || strings.TrimSpace(effort.String()) == "" {
 		return
 	}
-	maxEffort, mappings, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
+	maxEffort, mappings, overLimit, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
 	if !ok {
 		return
 	}
-	c.Request = c.Request.WithContext(service.WithOpenAIReasoningEffortPolicy(c.Request.Context(), maxEffort, mappings))
-	// 绑定即评估：客户端显式携带的 effort 若会被生效上限改写，说明 QoS 推理
-	// 上限真正改变了本请求，把效果记入请求级用量快照。
-	if _, changed := service.ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings); changed {
-		service.MarkGroupQoSReasoningEffect(c.Request.Context(), body)
-	}
+	c.Request = c.Request.WithContext(service.WithOpenAIReasoningEffortPolicy(c.Request.Context(), maxEffort, mappings, overLimit))
 }

@@ -696,14 +696,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		firstClientMessage = liteFirstMessage
 	}
 	originalFirstClientMessage := firstClientMessage
-	if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
-		if capped, changed := ApplyOpenAIReasoningEffortPolicy(firstClientMessage, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
-			// Turn 1 has no BeforeTurn in passthrough mode; effects marked so
-			// far (admission RPM etc.) stay with turn 1's snapshot.
-			MarkGroupQoSReasoningEffect(ctx, firstClientMessage)
-			firstClientMessage = capped
-		}
-	}
 	requestModel := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String())
 	requestPreviousResponseID := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "previous_response_id").String())
 	promptCacheKey := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "prompt_cache_key").String())
@@ -734,6 +726,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 	if initialRequestModel == "" {
 		initialRequestModel = openAIWSPassthroughRequestModelForFrame(firstClientMessage)
+	}
+	if next, policyErr := applyOpenAIReasoningEffortPolicyWithGroupQoS(firstClientMessage, initialRequestModel, hooks, ctx); policyErr != nil {
+		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, policyErr.Error(), policyErr)
+	} else {
+		firstClientMessage = next
 	}
 	if hooks != nil && hooks.MapRequestModel != nil {
 		mappedModel, mapErr := hooks.MapRequestModel(1, initialRequestModel)
@@ -1043,14 +1040,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					payload = litePayload
 				}
 				originalResponseCreate := payload
-				if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
-					if capped, changed := ApplyOpenAIReasoningEffortPolicy(payload, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
-						// Follow-up frames that actually apply a QoS reasoning
-						// rewrite must be marked against this turn's snapshot.
-						MarkGroupQoSReasoningEffect(ctx, payload)
-						payload = capped
-					}
-				}
 				usageMeta.captureRequestedReasoningEffort(originalResponseCreate)
 			}
 			requestModelForThisFrame := ""
@@ -1058,6 +1047,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				requestModelForThisFrame = usageMeta.requestModelForFrame(payload)
 				if requestModelForThisFrame == "" {
 					requestModelForThisFrame = capturedSessionModel
+				}
+				if next, policyErr := applyOpenAIReasoningEffortPolicyWithGroupQoS(payload, requestModelForThisFrame, hooks, ctx); policyErr != nil {
+					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, policyErr.Error(), policyErr)
+				} else {
+					payload = next
 				}
 				if hooks != nil && hooks.BeforeRequest != nil {
 					if err := hooks.BeforeRequest(turnNo, payload, requestModelForThisFrame); err != nil {

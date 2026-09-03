@@ -3,7 +3,11 @@ package service
 import (
 	"bytes"
 	"context"
+	"strings"
 	"sync"
+
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 // GroupQoSEffectMask is a bit field describing which group QoS degradation
@@ -205,6 +209,86 @@ func MarkGroupQoSReasoningEffect(ctx context.Context, body []byte) {
 	acc.turnEffects |= GroupQoSEffectReasoning
 }
 
+// ApplyOpenAIReasoningEffortPolicyWithGroupQoS applies the standing group
+// policy first, preserving its configured deny/downgrade behavior, and then
+// applies the active QoS ceiling as downgrade-only. QoS effects are recorded
+// only after that second policy has successfully changed the request.
+func ApplyOpenAIReasoningEffortPolicyWithGroupQoS(ctx context.Context, body []byte, maxEffort string, mappings []ReasoningEffortMapping, overLimit string) ([]byte, bool, error) {
+	standing, standingChanged, err := ApplyOpenAIReasoningEffortPolicy(body, maxEffort, mappings, overLimit)
+	if err != nil {
+		return body, false, err
+	}
+	decision := GroupQoSDecisionFromContext(ctx)
+	if decision == nil || strings.TrimSpace(decision.MaxReasoningEffort) == "" {
+		return standing, standingChanged, nil
+	}
+	qosBody, qosChanged, err := ApplyOpenAIReasoningEffortPolicy(
+		standing, decision.MaxReasoningEffort, nil, ReasoningEffortOverLimitDowngrade,
+	)
+	if err != nil {
+		return body, false, err
+	}
+	if qosChanged {
+		MarkGroupQoSReasoningEffect(ctx, body)
+	}
+	return qosBody, standingChanged || qosChanged, nil
+}
+
+// ApplyOpenAIReasoningEffortPolicyWithGroupQoSForModel is the model-scoped
+// variant used by compatibility bridges. The policy sees the client-requested
+// model while the returned body retains its already mapped upstream model.
+func ApplyOpenAIReasoningEffortPolicyWithGroupQoSForModel(ctx context.Context, body []byte, requestModel, maxEffort string, mappings []ReasoningEffortMapping, overLimit string) ([]byte, bool, error) {
+	requestModel = strings.TrimSpace(requestModel)
+	if requestModel == "" {
+		return ApplyOpenAIReasoningEffortPolicyWithGroupQoS(ctx, body, maxEffort, mappings, overLimit)
+	}
+
+	originalModel := gjson.GetBytes(body, "model")
+	policyBody, err := sjson.SetBytes(body, "model", requestModel)
+	if err != nil {
+		return body, false, err
+	}
+	updated, changed, err := ApplyOpenAIReasoningEffortPolicyWithGroupQoS(ctx, policyBody, maxEffort, mappings, overLimit)
+	if err != nil {
+		return body, false, err
+	}
+	if originalModel.Exists() {
+		updated, err = sjson.SetBytes(updated, "model", originalModel.String())
+	} else {
+		updated, err = sjson.DeleteBytes(updated, "model")
+	}
+	if err != nil {
+		return body, false, err
+	}
+	return updated, changed, nil
+}
+
+// ApplyOpenAIReasoningEffortPolicyFromContextWithGroupQoSForModel applies the
+// bound standing policy and the active QoS ceiling using the client model for
+// scoped mappings.
+func ApplyOpenAIReasoningEffortPolicyFromContextWithGroupQoSForModel(ctx context.Context, body []byte, requestModel string) ([]byte, bool, error) {
+	if ctx == nil {
+		return body, false, nil
+	}
+	policy, ok := ctx.Value(openAIReasoningEffortPolicyContextKey{}).(openAIReasoningEffortPolicy)
+	if !ok {
+		return body, false, nil
+	}
+	return ApplyOpenAIReasoningEffortPolicyWithGroupQoSForModel(
+		ctx, body, requestModel, policy.maxEffort, policy.mappings, policy.overLimit,
+	)
+}
+
+func applyOpenAIReasoningEffortPolicyWithGroupQoS(body []byte, requestModel string, hooks *OpenAIWSIngressHooks, ctx context.Context) ([]byte, error) {
+	if hooks == nil {
+		return body, nil
+	}
+	updated, _, err := ApplyOpenAIReasoningEffortPolicyWithGroupQoSForModel(
+		ctx, body, requestModel, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings, hooks.MaxReasoningEffortOverLimit,
+	)
+	return updated, err
+}
+
 // GroupQoSRPMTightened reports whether a QoS tier's RPM limit is positive and
 // strictly stricter than the pre-QoS group-layer limit (override ?? group
 // rpm_limit; 0 means unlimited on both sides). A redundant cap — equal to or
@@ -247,11 +331,17 @@ func GroupQoSReasoningEffectActual(body []byte, groupCeiling string, groupMappin
 		return false
 	}
 	effective := EffectiveMaxReasoningEffort(groupCeiling, decision)
-	combined, combinedChanged := ApplyOpenAIReasoningEffortPolicy(body, effective, groupMappings)
+	combined, combinedChanged, combinedErr := ApplyOpenAIReasoningEffortPolicy(body, effective, groupMappings, ReasoningEffortOverLimitDowngrade)
+	if combinedErr != nil {
+		return false
+	}
 	if !combinedChanged {
 		return false
 	}
-	standing, _ := ApplyOpenAIReasoningEffortPolicy(body, groupCeiling, groupMappings)
+	standing, _, standingErr := ApplyOpenAIReasoningEffortPolicy(body, groupCeiling, groupMappings, ReasoningEffortOverLimitDowngrade)
+	if standingErr != nil {
+		return false
+	}
 	return !bytes.Equal(combined, standing)
 }
 

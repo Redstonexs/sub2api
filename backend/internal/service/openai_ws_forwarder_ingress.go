@@ -268,13 +268,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		// BeforeTurn 再重置会把这个 turn 刚标记的效果抹掉。
 		BeginGroupQoSTurn(ctx, turn)
 		requestedReasoningEffort := CanonicalRequestedReasoningEffort(normalized, strings.TrimSpace(values[1].String()))
-		if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
-			if capped, changed := ApplyOpenAIReasoningEffortPolicy(normalized, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
-				// Mark with the pre-policy body so the effect test can compare
-				// the QoS outcome against the standing group policy alone.
-				MarkGroupQoSReasoningEffect(ctx, normalized)
-				normalized = capped
-			}
+		policyModel := strings.TrimSpace(values[1].String())
+		if policyModel == "" {
+			policyModel = ingressSessionOriginalModel
+		}
+		if next, policyErr := applyOpenAIReasoningEffortPolicyWithGroupQoS(normalized, policyModel, hooks, ctx); policyErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, policyErr.Error(), policyErr)
+		} else {
+			normalized = next
 		}
 		responsesLite := isOpenAIResponsesLiteWebSocketPayload(normalized)
 		if compatibilityBody, compatibilityChanged, compatibilityErr := normalizeOpenAIResponsesWebSocketCompatibilityBody(normalized, account, responsesLite); compatibilityErr != nil {
