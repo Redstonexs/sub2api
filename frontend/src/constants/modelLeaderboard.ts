@@ -43,19 +43,17 @@ export interface LeaderboardEntry {
   /** Intelligence Index, normalised 0-100 by the source. */
   score: number
   accent: LeaderboardAccent
-  /** Whether the gateway can forward requests for this model family. */
-  routable: boolean
 }
 
 export const MODEL_LEADERBOARD: readonly LeaderboardEntry[] = [
-  { rank: 1, model: 'Claude Fable 5.1', creator: 'Anthropic', score: 66, accent: 'claude', routable: true },
-  { rank: 2, model: 'Claude Opus 5', creator: 'Anthropic', score: 63, accent: 'claude', routable: true },
-  { rank: 3, model: 'Muse Spark 1.3', creator: 'Meta', score: 62, accent: 'neutral', routable: false },
-  { rank: 4, model: 'Claude Fable 5', creator: 'Anthropic', score: 62, accent: 'claude', routable: true },
-  { rank: 5, model: 'GPT-5.6 Sol', creator: 'OpenAI', score: 61, accent: 'gpt', routable: true },
-  { rank: 6, model: 'Grok 4.6', creator: 'SpaceXAI', score: 61, accent: 'grok', routable: true },
-  { rank: 7, model: 'Kimi K3', creator: 'Moonshot AI', score: 60, accent: 'neutral', routable: false },
-  { rank: 8, model: 'GLM-5.3', creator: 'Z AI', score: 60, accent: 'neutral', routable: false },
-  { rank: 9, model: 'Gemini 3.8 Flash', creator: 'Google', score: 59, accent: 'gemini', routable: true },
-  { rank: 10, model: 'Qwen3.8 Max', creator: 'Alibaba', score: 58, accent: 'neutral', routable: false },
+  { rank: 1, model: 'Claude Fable 5.1', creator: 'Anthropic', score: 66, accent: 'claude' },
+  { rank: 2, model: 'Claude Opus 5', creator: 'Anthropic', score: 63, accent: 'claude' },
+  { rank: 3, model: 'Muse Spark 1.3', creator: 'Meta', score: 62, accent: 'neutral' },
+  { rank: 4, model: 'Claude Fable 5', creator: 'Anthropic', score: 62, accent: 'claude' },
+  { rank: 5, model: 'GPT-5.6 Sol', creator: 'OpenAI', score: 61, accent: 'gpt' },
+  { rank: 6, model: 'Grok 4.6', creator: 'SpaceXAI', score: 61, accent: 'grok' },
+  { rank: 7, model: 'Kimi K3', creator: 'Moonshot AI', score: 60, accent: 'neutral' },
+  { rank: 8, model: 'GLM-5.3', creator: 'Z AI', score: 60, accent: 'neutral' },
+  { rank: 9, model: 'Gemini 3.8 Flash', creator: 'Google', score: 59, accent: 'gemini' },
+  { rank: 10, model: 'Qwen3.8 Max', creator: 'Alibaba', score: 58, accent: 'neutral' },
 ]

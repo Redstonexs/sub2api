@@ -72,15 +72,7 @@
 
           <span class="min-w-0">
             <span class="block truncate text-base font-semibold text-gray-900 dark:text-white">{{ entry.model }}</span>
-            <span class="mt-0.5 flex flex-wrap items-center gap-2">
-              <span class="font-mono text-xs" :class="ACCENT_TEXT[entry.accent]">{{ entry.creator }}</span>
-              <span
-                v-if="entry.routable"
-                class="border border-primary-500/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-primary-700 dark:text-primary-300"
-              >
-                {{ t('homeV2.leaderboardRoutable') }}
-              </span>
-            </span>
+            <span class="mt-0.5 block font-mono text-xs" :class="ACCENT_TEXT[entry.accent]">{{ entry.creator }}</span>
           </span>
 
           <span class="text-right font-mono text-sm font-semibold text-gray-900 sm:col-start-4 dark:text-white">
