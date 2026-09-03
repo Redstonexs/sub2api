@@ -465,7 +465,6 @@ export default {
     ctaBandBtn: '创建你的密钥',
     ctaKicker: '为你的技术栈准备就绪',
     footerRights: '保留所有权利。',
-    footerDocs: '文档',
-    footerGithub: 'GitHub'
+    footerDocs: '文档'
   },
 }

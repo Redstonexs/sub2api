@@ -466,7 +466,6 @@ export default {
     ctaBandBtn: 'Create your key',
     ctaKicker: 'Ready when your stack is',
     footerRights: 'All rights reserved.',
-    footerDocs: 'Docs',
-    footerGithub: 'GitHub'
+    footerDocs: 'Docs'
   },
 }

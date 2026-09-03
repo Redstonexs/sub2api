@@ -183,14 +183,6 @@
           >
             {{ t('homeV2.footerDocs') }}
           </a>
-          <a
-            :href="githubUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-mono text-xs text-gray-500 transition-colors hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:text-primary-300"
-          >
-            {{ t('homeV2.footerGithub') }}
-          </a>
         </div>
       </div>
       <div class="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
@@ -246,7 +238,6 @@ const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
 const userInitial = computed(() => authStore.user?.email?.charAt(0).toUpperCase() || '')
 const currentYear = computed(() => new Date().getFullYear())
-const githubUrl = 'https://github.com/Redstonexs/sub2api'
 const { isDark, toggleTheme } = useTheme()
 
 onMounted(() => {
