@@ -30,9 +30,10 @@ func newSessionIDUsageLog(sessionID *string) *service.UsageLog {
 
 // TestPrepareUsageLogInsert_SessionIDArgWiring pins the session_id column to the
 // arg slice / arg-type table so the five INSERT column lists stay in sync. session_id
-// is followed by the three group QoS columns, then native_compaction_v2; created_at is always last.
+// follows upstream_request_id and is followed by the three group QoS columns, then
+// native_compaction_v2; created_at is always last.
 func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
-	require.Len(t, usageLogInsertArgTypes, 64, "arg-type table must include session_id, requested_reasoning_effort, the group QoS snapshot columns and native_compaction_v2")
+	require.Len(t, usageLogInsertArgTypes, 65, "arg-type table must include upstream_request_id, session_id, requested_reasoning_effort, the group QoS snapshot columns and native_compaction_v2")
 
 	sessionID := "sess-persisted-123"
 	prepared := prepareUsageLogInsert(newSessionIDUsageLog(&sessionID))

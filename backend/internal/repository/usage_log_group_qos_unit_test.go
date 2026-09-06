@@ -121,6 +121,7 @@ func TestScanUsageLog_GroupQoSSnapshotRoundTrip(t *testing.T) {
 		sql.NullString{},                     // billing_tier
 		sql.NullString{},                     // billing_mode
 		sql.NullFloat64{},                    // account_stats_cost
+		sql.NullString{},                     // upstream_request_id
 		sql.NullString{},                     // session_id
 		sql.NullInt64{Valid: true, Int64: 3}, // group_qos_tier
 		sql.NullString{Valid: true, String: "monthly"},                                                          // group_qos_window
@@ -187,6 +188,7 @@ func TestScanUsageLog_GroupQoSZeroMaskSurvives(t *testing.T) {
 		sql.NullString{},                     // billing_tier
 		sql.NullString{},                     // billing_mode
 		sql.NullFloat64{},                    // account_stats_cost
+		sql.NullString{},                     // upstream_request_id
 		sql.NullString{},                     // session_id
 		sql.NullInt64{Valid: true, Int64: 1}, // group_qos_tier
 		sql.NullString{Valid: true, String: "daily"}, // group_qos_window
@@ -253,7 +255,8 @@ func TestScanUsageLog_GroupQoSAllNullIsLegacy(t *testing.T) {
 		sql.NullString{},
 		sql.NullString{},
 		sql.NullFloat64{},
-		sql.NullString{},
+		sql.NullString{}, // upstream_request_id
+		sql.NullString{}, // session_id
 		sql.NullInt64{},  // group_qos_tier NULL
 		sql.NullString{}, // group_qos_window NULL
 		sql.NullInt64{},  // group_qos_effect_mask NULL

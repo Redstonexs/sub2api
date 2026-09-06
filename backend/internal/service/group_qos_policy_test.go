@@ -95,10 +95,21 @@ func TestNormalizeGroupQoSTiers(t *testing.T) {
 	})
 
 	t.Run("rejects reasoning effort on a platform that has none", func(t *testing.T) {
-		_, err := NormalizeGroupQoSTiers(PlatformAnthropic, []GroupQoSTier{
+		// anthropic 自上游 v0.2.1 起也支持 reasoning effort，这里改用 gemini
+		// （仍无该维度）来覆盖"平台不支持则拒绝"的分支。
+		_, err := NormalizeGroupQoSTiers(PlatformGemini, []GroupQoSTier{
 			{Window: "daily", ThresholdUSD: 1, MaxReasoningEffort: "low"},
 		})
 		require.Error(t, err)
+	})
+
+	t.Run("accepts reasoning effort on anthropic", func(t *testing.T) {
+		tiers, err := NormalizeGroupQoSTiers(PlatformAnthropic, []GroupQoSTier{
+			{Window: "daily", ThresholdUSD: 1, MaxReasoningEffort: "low"},
+		})
+		require.NoError(t, err)
+		require.Len(t, tiers, 1)
+		require.Equal(t, "low", tiers[0].MaxReasoningEffort)
 	})
 
 	t.Run("allows non-effort actions on any platform", func(t *testing.T) {

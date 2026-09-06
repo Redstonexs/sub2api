@@ -132,12 +132,17 @@ describe("validateGroupQoSTiers", () => {
   });
 
   it("rejects reasoning effort on a platform that has none", () => {
+    // anthropic 自上游 v0.2.1 起也支持 reasoning effort，这里改用 gemini
+    // （仍无该维度）来覆盖"平台不支持则拒绝"的分支。
     const row = tierRow({ block: false, maxReasoningEffort: "low" });
-    expect(validateGroupQoSTiers([row], "anthropic").tiers[row.id]).toBe(
+    expect(validateGroupQoSTiers([row], "gemini").tiers[row.id]).toBe(
       "effortUnsupported",
     );
     expect(
       validateGroupQoSTiers([row], "openai").tiers[row.id],
+    ).toBeUndefined();
+    expect(
+      validateGroupQoSTiers([row], "anthropic").tiers[row.id],
     ).toBeUndefined();
   });
 

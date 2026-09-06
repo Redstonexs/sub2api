@@ -6,6 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNormalizeKnownOpenAICodexModelGPT6Astra(t *testing.T) {
+	for _, model := range []string{"gpt-6-astra", "openai/gpt-6-astra", "gpt-6", "openai/gpt-6"} {
+		require.Equal(t, "gpt-6-astra", normalizeKnownOpenAICodexModel(model))
+	}
+}
+
 func TestNormalizeKnownOpenAICodexModel_BareGPT56RoutesToSol(t *testing.T) {
 	tests := map[string]string{
 		"gpt-5.6":            "gpt-5.6-sol",
@@ -37,7 +43,10 @@ func TestUsageBillingModelCandidates_BareGPT56IncludesSol(t *testing.T) {
 
 func TestNormalizeKnownOpenAICodexModel_PassesThroughUnknownVersions(t *testing.T) {
 	// 新版本发布当天必须透传给上游判定，而不是被兜底分支折叠成旧模型。
-	for _, model := range []string{"gpt-5.7", "gpt-5.7-codex", "gpt-5.9-sol", "gpt-6", "gpt-6.1-codex"} {
+	// gpt-6 自上游 v0.2.1 起已登记（映射到 gpt-6-astra），改由
+	// TestNormalizeKnownOpenAICodexModelGPT6Astra 覆盖；gpt-6-turbo 证明
+	// 登记版本号并不会让同版本下的其他未知系列被折叠。
+	for _, model := range []string{"gpt-5.7", "gpt-5.7-codex", "gpt-5.9-sol", "gpt-6-turbo", "gpt-6.1-codex"} {
 		require.Emptyf(t, normalizeKnownOpenAICodexModel(model),
 			"未知版本 %s 必须透传（返回空），否则用户拿到的是旧模型的回答", model)
 	}
