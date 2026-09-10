@@ -200,7 +200,7 @@
     </div>
 
     <!-- Footer -->
-    <template v-if="!backendModeEnabled" #footer>
+    <template v-if="!backendModeEnabled && publicSettingsLoaded && registrationEnabled" #footer>
       <p class="text-gray-500 dark:text-dark-400">
         {{ t('auth.dontHaveAccount') }}
         <router-link
@@ -276,6 +276,7 @@ const publicSettingsLoaded = ref<boolean>(false)
 
 // Public settings
 const captchaProvider = ref<CaptchaProvider>('none')
+const registrationEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 // fork：captcha_provider 是 Turnstile 的开关来源（resolveCaptchaProvider 已兼容仅设置
 // turnstile_enabled 的旧配置），上游按 turnstileEnabled 判断的分支据此派生。
@@ -400,6 +401,7 @@ onMounted(async () => {
   try {
     const settings = await getPublicSettings()
     captchaProvider.value = resolveCaptchaProvider(settings)
+    registrationEnabled.value = settings.registration_enabled === true
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     capAPIEndpoint.value = settings.cap_api_endpoint || ''
     capSiteKey.value = settings.cap_site_key || ''

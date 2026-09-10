@@ -122,6 +122,10 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 		return nil, ErrAnnouncementNilInput
 	}
 
+	if !isJSONTimeInRange(input.StartsAt) || !isJSONTimeInRange(input.EndsAt) {
+		return nil, ErrAnnouncementInvalidSchedule
+	}
+
 	title, err := normalizeAnnouncementTitle(input.Title)
 	if err != nil {
 		return nil, err
@@ -192,6 +196,11 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 func (s *AnnouncementService) Update(ctx context.Context, id int64, input *UpdateAnnouncementInput) (*Announcement, error) {
 	if input == nil {
 		return nil, ErrAnnouncementNilInput
+	}
+
+	if (input.StartsAt != nil && !isJSONTimeInRange(*input.StartsAt)) ||
+		(input.EndsAt != nil && !isJSONTimeInRange(*input.EndsAt)) {
+		return nil, ErrAnnouncementInvalidSchedule
 	}
 
 	a, err := s.announcementRepo.GetByID(ctx, id)
