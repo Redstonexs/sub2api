@@ -545,6 +545,23 @@
             />
           </div>
 
+          <label class="flex items-center gap-2 sm:col-span-2">
+            <input
+              :checked="item.hide_open_button === true"
+              type="checkbox"
+              data-testid="custom-menu-hide-open-button"
+              @change="
+                updateMenuItemHideOpenButton(
+                  index,
+                  ($event.target as HTMLInputElement).checked,
+                )
+              "
+            />
+            <span class="text-sm text-gray-700 dark:text-gray-300">
+              {{ t("admin.settings.customMenu.hideOpenButton") }}
+            </span>
+          </label>
+
           <!-- SVG Icon (full width) -->
           <div class="sm:col-span-2">
             <label
@@ -707,6 +724,15 @@ function updateMenuItemField(
   } else {
     item[field] = value;
   }
+  emitCustomMenuItems();
+}
+
+function updateMenuItemHideOpenButton(index: number, value: boolean): void {
+  const item = localCustomMenuItems.value[index];
+  if (!item) {
+    return;
+  }
+  item.hide_open_button = value;
   emitCustomMenuItems();
 }
 

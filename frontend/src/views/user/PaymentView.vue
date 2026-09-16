@@ -42,6 +42,7 @@
         </template>
         <!-- Tab content (select phase) -->
         <template v-else-if="tabs.length === 0">
+          <!-- Neither top-up nor subscriptions available (balance recharge disabled while subscriptions are off) -->
           <div class="card py-16 text-center">
             <Icon name="creditCard" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
             <p class="text-gray-600 dark:text-gray-300">{{ t('payment.purchaseUnavailable') }}</p>
@@ -251,13 +252,13 @@
     <Teleport to="body">
       <Transition name="modal">
         <div v-if="showRenewalModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="closeRenewalModal">
-          <div class="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-dark-700 dark:bg-dark-900">
+          <div class="relative flex max-h-full w-full max-w-lg flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-dark-700 dark:bg-dark-900">
             <!-- Close button -->
             <button :aria-label="t('common.close')" class="absolute right-4 top-4 rounded-lg p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-gray-200" @click="closeRenewalModal">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
-            <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.selectPlan') }}</h3>
-            <div class="space-y-4">
+            <h3 class="mb-4 shrink-0 text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.selectPlan') }}</h3>
+            <div class="min-h-0 space-y-4 overflow-y-auto">
               <SubscriptionPlanCard v-for="plan in renewalPlans" :key="plan.id" :plan="plan" :active-subscriptions="activeSubscriptions" @select="selectPlanFromModal" />
             </div>
           </div>
@@ -286,6 +287,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
@@ -534,16 +536,36 @@ const renderedHelpText = computed(() => DOMPurify.sanitize(
   marked.parse(checkout.value.help_text || '', { async: false, gfm: true, breaks: false }),
 ))
 
+// 订阅功能开关（public settings 的 subscription_enabled，opt-out）。关闭后购买页只保留充值：
+// 不再渲染「订阅」tab，只剩单个 tab 时顶部切换器也随之隐藏。
+const subscriptionEnabled = computed(() => resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.subscription))
+
 const tabs = computed(() => {
   const result: { key: 'recharge' | 'subscription'; label: string }[] = []
   if (balancePurchaseAvailable.value) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
-  if (checkout.value.subscription_purchase_enabled) result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
+  if (subscriptionPurchaseAvailable.value) result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
   return result
 })
 
 const balancePurchaseAvailable = computed(
   () => checkout.value.balance_purchase_enabled && !checkout.value.balance_disabled,
 )
+
+// 订阅 tab 同时受站点开关（public settings 的 subscription_enabled）与后端 checkout 开关约束，
+// 任一关闭都不渲染订阅 tab。
+const subscriptionPurchaseAvailable = computed(
+  () => subscriptionEnabled.value && checkout.value.subscription_purchase_enabled,
+)
+
+// tab 列表随 checkout（balance_disabled / balance_purchase_enabled）与订阅开关变化。当前 tab 不在列表里时
+// 收敛到第一个可用 tab，两个方向都覆盖：关闭订阅 → 回到充值；仅订阅站点重新打开订阅 → 进入订阅。
+// 列表为空时模板展示不可用提示。
+watch(tabs, (available) => {
+  if (available.some((tab) => tab.key === activeTab.value)) return
+  const leavingSubscription = activeTab.value === 'subscription'
+  activeTab.value = available[0]?.key ?? 'recharge'
+  if (leavingSubscription) selectedPlan.value = null
+})
 
 const showPurchaseTabs = computed(
   () =>
@@ -1198,11 +1220,9 @@ onMounted(async () => {
       }
     }
     await resumeWechatPaymentFromQuery()
-    if (!balancePurchaseAvailable.value && checkout.value.subscription_purchase_enabled) {
-      activeTab.value = 'subscription'
-    }
-    // Handle renewal navigation: ?tab=subscription&group=123
-    if (route.query.tab === 'subscription' && checkout.value.subscription_purchase_enabled) {
+    // balance_disabled / 订阅开关变化后，由上面的 tabs watcher 收敛 activeTab。
+    // Handle renewal navigation: ?tab=subscription&group=123 (ignored when subscriptions are disabled)
+    if (route.query.tab === 'subscription' && subscriptionPurchaseAvailable.value) {
       activeTab.value = 'subscription'
       if (route.query.group) {
         const groupId = Number(route.query.group)
@@ -1217,7 +1237,9 @@ onMounted(async () => {
     }
   } catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
   finally { loading.value = false }
-  // Fetch active subscriptions (uses cache, non-blocking)
-  subscriptionStore.fetchActiveSubscriptions().catch(() => {})
+  // Fetch active subscriptions (uses cache, non-blocking); skipped when the subscription feature is off
+  if (subscriptionEnabled.value) {
+    subscriptionStore.fetchActiveSubscriptions().catch(() => {})
+  }
 })
 </script>
