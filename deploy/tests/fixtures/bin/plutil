@@ -7,9 +7,17 @@ path=${2-}
 json=$(</dev/stdin)
 
 case "${path}" in
+    0.id)
+        [[ "${json}" =~ \"id\":\"([^\"]+)\" ]] || exit 1
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        ;;
     0.configuration.labels)
         [[ "${json}" =~ \"org.sub2api.stack\":\"([^\"]+)\" ]] || exit 1
         printf '{"org.sub2api.stack":"%s"}\n' "${BASH_REMATCH[1]}"
+        ;;
+    0.configuration.ipv4Subnet)
+        [[ "${json}" =~ \"ipv4Subnet\":\"([^\"]+)\" ]] || exit 1
+        printf '%s\n' "${BASH_REMATCH[1]}"
         ;;
     0.status.networks.0.ipv4Address)
         [[ "${json}" =~ \"ipv4Address\":\"([^\"]+)\" ]] || exit 1
