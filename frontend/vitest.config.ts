@@ -16,6 +16,10 @@ export default defineConfig({
       'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js'
     }
   },
+  define: {
+    // Match vite.config.ts: runtime-only vue-i18n needs JIT for string messages.
+    __INTLIFY_JIT_COMPILATION__: true
+  },
   test: {
     globals: true,
     environment: 'jsdom',

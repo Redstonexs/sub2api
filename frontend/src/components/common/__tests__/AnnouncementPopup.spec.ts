@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { readFileSync } from 'node:fs'
@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 
 import AnnouncementPopup from '../AnnouncementPopup.vue'
 import { useAnnouncementStore } from '@/stores/announcements'
+import { initI18n } from '@/i18n'
 
 const announcementMarkdownStyles = readFileSync(
   resolve(process.cwd(), 'src/styles/announcement-markdown.css'),
@@ -34,6 +35,8 @@ const announcement = {
 }
 
 describe('AnnouncementPopup', () => {
+  beforeAll(initI18n)
+
   beforeEach(() => {
     setActivePinia(createPinia())
   })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -105,6 +105,10 @@ async function mountView() {
 }
 
 describe('AnnouncementsView', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     // AnnouncementPopup (rendered for the admin preview) reads the announcement store.
@@ -123,15 +127,20 @@ describe('AnnouncementsView', () => {
   it('surfaces the backend error code instead of a generic message', async () => {
     // The API client rejects with a flat {code, reason} object — the old
     // error.response?.data?.detail read was always undefined.
-    listAnnouncements.mockRejectedValueOnce({
+    const apiError = {
       status: 400,
       code: 'ANNOUNCEMENT_CONTENT_TOO_LONG',
       reason: 'ANNOUNCEMENT_CONTENT_TOO_LONG',
       message: 'announcement content is too long',
-    })
-    await mountView()
+    }
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {})
+    listAnnouncements.mockRejectedValueOnce(apiError)
+    const wrapper = await mountView()
 
     expect(showError).toHaveBeenCalledWith('admin.announcements.errors.ANNOUNCEMENT_CONTENT_TOO_LONG')
+    expect(errorLog).toHaveBeenCalledTimes(1)
+    expect(errorLog).toHaveBeenCalledWith('Error loading announcements:', apiError)
+    wrapper.unmount()
   })
 
   it('renders a Markdown editor rather than a bare textarea', async () => {

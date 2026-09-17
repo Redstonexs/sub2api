@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
-import { flushPromises, mount } from "@vue/test-utils";
+import { enableAutoUnmount, flushPromises, mount, RouterLinkStub } from "@vue/test-utils";
 
 import enCommon from "@/i18n/locales/en/common";
 import enSettings from "@/i18n/locales/en/admin/settings";
 import zhCommon from "@/i18n/locales/zh/common";
 import zhSettings from "@/i18n/locales/zh/admin/settings";
 import SettingsView from "../SettingsView.vue";
+
+enableAutoUnmount(afterEach);
 
 const {
   getSettings,
@@ -30,6 +32,7 @@ const {
   getOllamaCloudUsageSettings,
   updateOllamaCloudUsageSettings,
   getGroups,
+  listAffiliateUsers,
   listProxies,
   getProviders,
   updateProvider,
@@ -74,6 +77,7 @@ const {
   }),
   updateOllamaCloudUsageSettings: vi.fn().mockImplementation(async (payload) => payload),
   getGroups: vi.fn(),
+  listAffiliateUsers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   listProxies: vi.fn(),
   getProviders: vi.fn(),
   updateProvider: vi.fn(),
@@ -87,11 +91,17 @@ const {
 
 const localeRef = vi.hoisted(() => ({ value: "zh-CN" }));
 
+vi.mock("@/api/admin/affiliates", () => ({
+  affiliatesAPI: { listUsers: listAffiliateUsers },
+  default: { listUsers: listAffiliateUsers },
+}));
+
 vi.mock("@/api", () => ({
   adminAPI: {
     settings: {
       getSettings,
       updateSettings,
+      getEmailTemplates: vi.fn().mockResolvedValue({ events: [], locales: ["en", "zh"] }),
       getAntigravityOAuthCredentials,
       updateAntigravityOAuthCredentials,
       deleteAntigravityOAuthCredentials,
@@ -562,6 +572,7 @@ function mountView() {
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
+        RouterLink: RouterLinkStub,
         Select: SelectStub,
         Toggle: ToggleStub,
         Icon: true,
@@ -681,6 +692,7 @@ describe("admin SettingsView payment visible method controls", () => {
     getOllamaCloudUsageSettings.mockReset();
     updateOllamaCloudUsageSettings.mockReset();
     getGroups.mockReset();
+    listAffiliateUsers.mockClear();
     listProxies.mockReset();
     getProviders.mockReset();
     updateProvider.mockReset();
@@ -1302,6 +1314,8 @@ describe("admin SettingsView payment visible method controls", () => {
         affiliate_admin_recharge_enabled: true,
       }),
     );
+    expect(listAffiliateUsers).toHaveBeenCalledWith({ page: 1, page_size: 20, search: "" });
+    expect(showError).not.toHaveBeenCalled();
   });
 
   it("submits Anthropic cache TTL injection gateway setting", async () => {
@@ -1444,6 +1458,7 @@ describe("admin SettingsView payment visible method controls", () => {
           Icon: true,
           ConfirmDialog: true,
           PaymentProviderList: PaymentProviderListStub,
+          RouterLink: RouterLinkStub,
           PaymentProviderDialog: true,
           GroupBadge: true,
           GroupOptionItem: true,
@@ -1742,6 +1757,7 @@ describe("admin SettingsView payment visible method controls", () => {
           Icon: true,
           ConfirmDialog: true,
           PaymentProviderList: PaymentProviderListCapture,
+          RouterLink: RouterLinkStub,
           PaymentProviderDialog: true,
           GroupBadge: true,
           GroupOptionItem: true,

@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import AnnouncementsView from '../AnnouncementsView.vue'
+import { initI18n } from '@/i18n'
 
 const { listArchive } = vi.hoisted(() => ({ listArchive: vi.fn() }))
 
@@ -52,6 +53,8 @@ async function mountView() {
 }
 
 describe('user AnnouncementsView (archive)', () => {
+  beforeAll(initI18n)
+
   beforeEach(() => {
     vi.clearAllMocks()
     // AnnouncementPopup reads the announcement store.
