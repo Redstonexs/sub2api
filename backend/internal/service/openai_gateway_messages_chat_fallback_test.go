@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,7 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 		effortJSON string
 		wantEffort string
 		maxPolicy  string
+		forceFast  bool
 	}{
 		{
 			name:       "policy caps converted effort",
@@ -63,6 +65,15 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 			effortJSON: `,"output_config":{"effort":"max"}`,
 			wantEffort: "medium",
 			maxPolicy:  "medium",
+		},
+		{
+			name:       "group Fast and final reasoning policy both apply",
+			model:      "gpt-5.6-luna",
+			mapped:     "gpt-5.6-luna",
+			effortJSON: `,"output_config":{"effort":"max"}`,
+			wantEffort: "medium",
+			maxPolicy:  "medium",
+			forceFast:  true,
 		},
 		{
 			name:       "GPT56 max",
@@ -116,6 +127,11 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 			if tt.maxPolicy != "" {
 				ctx = WithOpenAIReasoningEffortPolicy(ctx, tt.maxPolicy, nil, "")
 			}
+			if tt.forceFast {
+				ctx = context.WithValue(ctx, ctxkey.Group, &Group{
+					ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true,
+				})
+			}
 			result, err := svc.ForwardAsAnthropic(ctx, c, account, []byte(body), "", "")
 			require.NoError(t, err)
 			require.NotNil(t, result)
@@ -123,6 +139,11 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 			require.Equal(t, tt.wantEffort, gjson.GetBytes(upstream.lastBody, "reasoning_effort").String())
 			require.NotNil(t, result.ReasoningEffort)
 			require.Equal(t, tt.wantEffort, *result.ReasoningEffort)
+			if tt.forceFast {
+				require.Equal(t, OpenAIFastTierPriority, gjson.GetBytes(upstream.lastBody, "service_tier").String())
+				require.NotNil(t, result.ServiceTier)
+				require.Equal(t, OpenAIFastTierPriority, *result.ServiceTier)
+			}
 		})
 	}
 }

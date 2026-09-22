@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g., 1.4.1)'
+        description: 'Fork tag to release (1.x.y), or a branch/ref for dry run'
         required: true
         type: string
       simple_release:
@@ -15,52 +15,78 @@ on:
         required: false
         type: boolean
         default: false
-
-# 环境变量：合并 workflow_dispatch 输入和 repository variable
-# tag push 触发时读取 vars.SIMPLE_RELEASE，workflow_dispatch 时使用输入参数
-env:
-  SIMPLE_RELEASE: ${{ github.event.inputs.simple_release == 'true' || vars.SIMPLE_RELEASE == 'true' }}
-
-permissions:
-  contents: write
-  packages: write
+      dry_run:
+        description: 'Build and verify all selected artifacts without publishing'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.repository }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
+env:
+  SIMPLE_RELEASE: ${{ inputs.simple_release == true || vars.SIMPLE_RELEASE == 'true' }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+
 jobs:
-  validate-release-tag:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.validated_tag.outputs.tag }}
+      sha: ${{ steps.plan.outputs.sha }}
+      owner_lower: ${{ steps.plan.outputs.owner_lower }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      date: ${{ steps.plan.outputs.date }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      simple: ${{ steps.plan.outputs.simple }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Validate release tag
-        id: validated_tag
-        env:
-          RELEASE_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-        run: |
-          TAG_NAME="$RELEASE_TAG_INPUT"
-          VERSION=${TAG_NAME#v}
-          if ! [[ "$VERSION" =~ ^1\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Unsupported release tag: $TAG_NAME"
-            echo "Fork releases must use the 1.x.y version line. Upstream v0.1.x tags are ignored."
-            exit 1
-          fi
-          printf 'tag=%s\n' "$TAG_NAME" >> "$GITHUB_OUTPUT"
-
-  build-frontend:
-    needs: [validate-release-tag]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
+      - name: Checkout workflow tooling
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate-release-tag.outputs.tag }}
+          ref: ${{ github.sha }}
+      - name: Preserve tooling for releases of older tags
+        run: cp -R .github/release-tools "$RUNNER_TEMP/release-tools"
+      - name: Checkout selected application source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r "$RUNNER_TEMP/release-tools/requirements-release.txt"
+      - name: Resolve one source commit and target matrix
+        id: plan
+        env:
+          REQUESTED_REF: ${{ inputs.tag || github.ref_name }}
+        run: |
+          args=(--ref "$REQUESTED_REF")
+          if [[ "$SIMPLE_RELEASE" == true ]]; then args+=(--simple); fi
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          python "$RUNNER_TEMP/release-tools/release_matrix.py" plan "${args[@]}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-tooling
+          path: ${{ runner.temp }}/release-tools/
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: version-file
+          path: backend/cmd/server/VERSION
+          retention-days: 1
 
+  build-frontend:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       # `dist` is a pure function of the frontend sources (no version or git
       # metadata is injected), so the build the CI `frontend` job already ran on
       # this commit is byte-for-byte the one we want. Keep this key identical to
@@ -107,40 +133,45 @@ jobs:
         run: pnpm run build
         working-directory: frontend
 
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: backend/internal/web/dist/
           retention-days: 1
 
-  release:
-    needs: [validate-release-tag, build-frontend]
+  build-binaries:
+    needs: [prepare, build-frontend]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_DATE: ${{ needs.prepare.outputs.date }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
-          ref: ${{ needs.validate-release-tag.outputs.tag }}
-
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tooling
+          path: ${{ runner.temp }}/release-tools/
+      - uses: actions/download-artifact@v8
+        with:
+          name: version-file
+          path: backend/cmd/server/
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: backend/internal/web/dist/
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           check-latest: false
-          # setup-go's bundled cache would restore ~1 GB into the *native*
-          # GOCACHE, which GoReleaser never reads (it builds into a dedicated
-          # GOCACHE below). ./.github/actions/go-cache restores the module cache
-          # -- which GoReleaser does need -- plus the cross-compile build cache.
           cache: false
-
+      - name: Verify Go version
+        run: go version | grep -q 'go1.27.0'
       # Restore-only: a cache written under a tag ref is scoped to that tag and
       # no later release could read it. The producer is release-cache.yml, which
       # warms this namespace nightly on the default branch. Restore-keys walk
@@ -155,129 +186,150 @@ jobs:
           build-hash: ${{ hashFiles('backend/go.mod', 'backend/go.sum', '.goreleaser.yaml', '.goreleaser.simple.yaml') }}
           gocache-path: ${{ runner.temp }}/goreleaser-go-build
 
-      - name: Verify Go version
-        run: |
-          go version | grep -q 'go1.27.0'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r "$RUNNER_TEMP/release-tools/requirements-release.txt"
+      - name: Select one GoReleaser target
+        env:
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
+        run: python "$RUNNER_TEMP/release-tools/release_matrix.py" config build --goos "$TARGET_OS" --goarch "$TARGET_ARCH" --output "$RUNNER_TEMP/goreleaser.matrix.yaml"
+      - name: Build and archive without publishing
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --snapshot --clean --skip=validate,publish,docker,announce --config=${{ runner.temp }}/goreleaser.matrix.yaml
+        env:
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_OWNER_LOWER: ${{ needs.prepare.outputs.owner_lower }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+          DOCKERHUB_USERNAME: skip
+          TAG_MESSAGE: ''
+      - name: Verify and collect the target archive
+        env:
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: python "$RUNNER_TEMP/release-tools/release_matrix.py" collect --version "$RELEASE_VERSION" --sha "$RELEASE_SHA" --goos "$TARGET_OS" --goarch "$TARGET_ARCH" --output matrix-output
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: matrix-output/
+          if-no-files-found: error
+          retention-days: 1
 
-      # Docker setup for GoReleaser
+  release:
+    needs: [prepare, build-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      SIMPLE_RELEASE: ${{ needs.prepare.outputs.simple }}
+      DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tooling
+          path: ${{ runner.temp }}/release-tools/
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-binary-*
+          path: release-input
+          merge-multiple: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r "$RUNNER_TEMP/release-tools/requirements-release.txt"
+      - name: Verify complete matrix and prepare Docker contexts
+        run: |
+          args=(--version "$RELEASE_VERSION" --sha "$RELEASE_SHA" --input release-input --output .release-context)
+          if [[ "$SIMPLE_RELEASE" == true ]]; then args+=(--simple); fi
+          python "$RUNNER_TEMP/release-tools/release_matrix.py" contexts "${args[@]}"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache: false
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Login to DockerHub
-        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        if: ${{ env.DRY_RUN != 'true' && env.SIMPLE_RELEASE != 'true' && env.DOCKERHUB_USERNAME != '' }}
         uses: docker/login-action@v3
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Login to GitHub Container Registry
+        if: ${{ env.DRY_RUN != 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fetch tags with annotations
-        run: |
-          # 确保获取完整的 annotated tag 信息
-          git fetch --tags --force
-
-      - name: Get tag message
-        id: tag_message
+      - name: Build images and publish manifests
         env:
-          RELEASE_TAG: ${{ needs.validate-release-tag.outputs.tag }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
+        run: bash "$RUNNER_TEMP/release-tools/retry-transient.sh" bash "$RUNNER_TEMP/release-tools/release-images.sh"
+      - name: Get annotated tag notes
+        id: tag_message
         run: |
-          TAG_NAME="$RELEASE_TAG"
-          echo "Processing tag: $TAG_NAME"
-
-          # 获取完整的 tag message（跳过第一行标题）
-          TAG_MESSAGE=$(git tag -l --format='%(contents:body)' "$TAG_NAME")
-
-          # 调试输出
-          echo "Tag message length: ${#TAG_MESSAGE}"
-          echo "Tag message preview:"
-          echo "$TAG_MESSAGE" | head -10
-
-          # 使用 EOF 分隔符处理多行内容
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Set lowercase owner for GHCR
-        id: lowercase
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
+          TAG_MESSAGE=$(git tag -l --format='%(contents:body)' "$RELEASE_TAG")
+          DELIMITER="TAG_MESSAGE_$(openssl rand -hex 16)"
+          {
+            echo "message<<$DELIMITER"
+            echo "$TAG_MESSAGE"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
+      - name: Prepare publication-only GoReleaser config
+        run: |
+          args=(publish --output "$RUNNER_TEMP/goreleaser.publisher.yaml")
+          if [[ "$SIMPLE_RELEASE" == true ]]; then args+=(--simple); fi
+          python "$RUNNER_TEMP/release-tools/release_matrix.py" config "${args[@]}"
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
           install-only: true
-
-      # GoReleaser 只重试它自己识别的瞬时错误（internal/pipe/docker/v2 的
-      # IsRetriableBuild + retryx.IsNetworkError）。GHCR 触发二级速率限制时
-      # buildx 输出的是 `denied: permission_denied` + HTTP 403，不在这些名单内，
-      # 因此一次 push 被拒就会中断整轮 release（二进制与 GitHub Release 一并作废）。
-      # 这里按输出特征识别瞬时故障并整轮重跑；非瞬时错误立即失败，不浪费构建时间。
-      - name: Run GoReleaser
+      - name: Publish existing archives and release notes
         shell: bash
+        run: |
+          args=(release --clean "--skip=validate,before,docker" --config="$RUNNER_TEMP/goreleaser.publisher.yaml")
+          if [[ "$DRY_RUN" == true ]]; then args+=(--snapshot "--skip=publish,announce"); fi
+          bash "$RUNNER_TEMP/release-tools/retry-transient.sh" goreleaser "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.prepare.outputs.tag }}
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO_OWNER_LOWER: ${{ steps.lowercase.outputs.owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+          GITHUB_REPO_OWNER_LOWER: ${{ needs.prepare.outputs.owner_lower }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
-          GOCACHE: ${{ runner.temp }}/goreleaser-go-build
-        run: |
-          # 关闭 errexit：失败要由下面的重试逻辑决定是重跑还是退出。
-          set +e
-          set -uo pipefail
-
-          ARGS=(release --clean)
-          if [ "${SIMPLE_RELEASE}" = "true" ]; then
-            ARGS+=(--config=.goreleaser.simple.yaml)
-          fi
-
-          # 仅匹配到这些特征才重跑；编译失败、模板错误、认证失败等立即退出。
-          TRANSIENT='secondary rate limit|toomanyrequests|too many requests|HTTP status code 5[0-9][0-9]|internal server error|bad gateway|service unavailable|gateway time-?out|unexpected EOF|connection reset by peer|TLS handshake timeout|i/o timeout'
-
-          LOG="${RUNNER_TEMP}/goreleaser.log"
-          MAX_ATTEMPTS=3
-          DELAY=180
-
-          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
-            echo "::group::GoReleaser attempt ${attempt}/${MAX_ATTEMPTS}"
-            goreleaser "${ARGS[@]}" 2>&1 | tee "${LOG}"
-            status=${PIPESTATUS[0]}
-            echo "::endgroup::"
-
-            if [ "${status}" -eq 0 ]; then
-              exit 0
-            fi
-
-            if [ "${attempt}" -ge "${MAX_ATTEMPTS}" ]; then
-              echo "::error::GoReleaser failed after ${MAX_ATTEMPTS} attempt(s) (exit ${status})"
-              exit "${status}"
-            fi
-
-            if ! grep -Eiq "${TRANSIENT}" "${LOG}"; then
-              echo "::error::GoReleaser failed with a non-transient error (exit ${status}); not retrying"
-              exit "${status}"
-            fi
-
-            echo "::warning::Transient registry/API failure detected, retrying in ${DELAY}s"
-            sleep "${DELAY}"
-            DELAY=$(( DELAY * 2 ))
-          done
+      - name: Upload dry-run checksums and metadata
+        if: ${{ env.DRY_RUN == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-dry-run-report
+          path: |
+            dist/checksums.txt
+            dist/artifacts.json
+            dist/metadata.json
+          if-no-files-found: error
+          retention-days: 3
 
       # Update DockerHub description
       - name: Update DockerHub description
-        if: ${{ env.SIMPLE_RELEASE != 'true' && env.DOCKERHUB_USERNAME != '' }}
+        if: ${{ env.DRY_RUN != 'true' && env.SIMPLE_RELEASE != 'true' && env.DOCKERHUB_USERNAME != '' }}
         uses: peter-evans/dockerhub-description@v5
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -290,13 +342,12 @@ jobs:
 
       # Send Telegram notification
       - name: Send Telegram Notification
-        if: ${{ env.SIMPLE_RELEASE != 'true' }}
+        if: ${{ env.DRY_RUN != 'true' && env.SIMPLE_RELEASE != 'true' }}
         env:
+          TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          RELEASE_TAG: ${{ needs.validate-release-tag.outputs.tag }}
-          RELEASE_TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
         continue-on-error: true
         run: |
           # 检查必要的环境变量
@@ -311,7 +362,7 @@ jobs:
           GHCR_IMAGE="ghcr.io/${REPO,,}"  # ${,,} converts to lowercase
 
           # 获取 tag message 内容并转义 Markdown 特殊字符
-          TAG_MESSAGE="$RELEASE_TAG_MESSAGE"
+          # shellcheck disable=SC2001
           TAG_MESSAGE=$(echo "$TAG_MESSAGE" | sed 's/\([_*`\[]\)/\\\1/g')
 
           # 限制消息长度（Telegram 消息限制 4096 字符，预留空间给头尾固定内容）
@@ -361,9 +412,13 @@ jobs:
               }')"
 
   sync-version-file:
-    needs: [release, validate-release-tag]
-    if: ${{ needs.release.result == 'success' }}
+    needs: [prepare, release]
+    if: ${{ needs.release.result == 'success' && needs.prepare.outputs.dry_run != 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout default branch
         uses: actions/checkout@v6
@@ -371,11 +426,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Sync VERSION file to released tag
-        env:
-          RELEASE_TAG: ${{ needs.validate-release-tag.outputs.tag }}
         run: |
-          TAG_NAME="$RELEASE_TAG"
-          VERSION=${TAG_NAME#v}
+          VERSION="$RELEASE_VERSION"
 
           CURRENT_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION || true)
           if [ "$CURRENT_VERSION" = "$VERSION" ]; then
