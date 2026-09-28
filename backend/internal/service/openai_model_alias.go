@@ -61,6 +61,13 @@ func normalizeKnownOpenAICodexModel(model string) string {
 		}
 	}
 
+	if openai.IsGPT6SolOrLunaModelSpelling(normalized) {
+		if strings.HasPrefix(normalized, "gpt-6-sol") {
+			return "gpt-6-sol"
+		}
+		return "gpt-6-luna"
+	}
+
 	// 未知版本号（新发布的 gpt-5.7 / gpt-6 等）必须原样透传给上游判定。
 	// 否则下面的 Contains("gpt-5") / Contains("codex") 兜底分支会在新模型发布当天
 	// 把它静默重写成旧模型：用户拿到的是旧模型的回答，没有任何报错提示。
@@ -183,4 +190,8 @@ func firstUsageBillingModel(candidates []string) string {
 		}
 	}
 	return ""
+}
+
+func isOpenAIGPT6Model(model string) bool {
+	return isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model)
 }
