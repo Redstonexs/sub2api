@@ -1990,7 +1990,9 @@ func TestMessageStartSSE_StopReasonIsJSONNull(t *testing.T) {
 
 func TestAnthropicThinkingToEffort_InvertsDefaultThinkingBudget(t *testing.T) {
 	// 反向映射 defaultThinkingBudget 的档位，保证 Anthropic→Responses→Anthropic
-	// 往返回到出发档位。该函数当前未接入 AnthropicToResponses（见其注释）。
+	// 往返回到出发档位。该函数当前未接入 AnthropicToResponses（见其注释）：
+	// 分派走 anthropicReasoningEffort，只认显式 disabled + output_config.effort，
+	// 不会由 budget_tokens 反推 effort 档位。
 	for _, effort := range []string{"low", "medium", "high", "max"} {
 		budget := defaultThinkingBudget(effort)
 		got := AnthropicThinkingToEffort(&AnthropicThinking{Type: "enabled", BudgetTokens: budget})
@@ -1999,4 +2001,17 @@ func TestAnthropicThinkingToEffort_InvertsDefaultThinkingBudget(t *testing.T) {
 	assert.Equal(t, "none", AnthropicThinkingToEffort(&AnthropicThinking{Type: "disabled"}))
 	assert.Equal(t, "medium", AnthropicThinkingToEffort(&AnthropicThinking{Type: "adaptive"}))
 	assert.Equal(t, "medium", AnthropicThinkingToEffort(nil))
+}
+
+func TestGPT61SolCacheOptionsAndBreakpointsSurviveChatBridge(t *testing.T) {
+	sampling := 0.7
+	for _, effort := range []string{"low", "medium", "high", "xhigh", "max"} {
+		out, err := ChatCompletionsToResponses(&ChatCompletionsRequest{Model: "gpt-6.1-sol", ReasoningEffort: effort, Temperature: &sampling, TopP: &sampling, PromptCacheOptions: json.RawMessage(`{"ttl":"30m","mode":"explicit"}`), Messages: []ChatMessage{{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"prefix","prompt_cache_breakpoint":{"mode":"explicit"}}]`)}}})
+		require.NoError(t, err)
+		require.Nil(t, out.Temperature)
+		require.Nil(t, out.TopP)
+		require.Equal(t, effort, out.Reasoning.Effort)
+		require.JSONEq(t, `{"ttl":"30m","mode":"explicit"}`, string(out.PromptCacheOptions))
+		require.Contains(t, string(out.Input), "prompt_cache_breakpoint")
+	}
 }
