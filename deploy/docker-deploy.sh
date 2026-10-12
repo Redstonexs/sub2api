@@ -5,6 +5,7 @@
 # This script prepares deployment files for Sub2API:
 #   - Downloads docker-compose.local.yml and .env.example
 #   - Generates secure secrets (ADMIN_PASSWORD, JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
+#   - Generates a random admin login email (ADMIN_EMAIL)
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
@@ -43,6 +44,14 @@ print_error() {
 # Generate random secret
 generate_secret() {
     openssl rand -hex 32
+}
+
+# Generate a random admin login email so new installs never use a guessable default
+generate_admin_email() {
+    local suffix
+    suffix=$(openssl rand -hex 6) || return 1
+    [ -n "$suffix" ] || return 1
+    echo "admin-${suffix}@sub2api.local"
 }
 
 # Check if command exists
@@ -113,6 +122,8 @@ main() {
     TOTP_ENCRYPTION_KEY=$(generate_secret)
     POSTGRES_PASSWORD=$(generate_secret)
     ADMIN_PASSWORD=$(generate_secret)
+    # v0.2.14: 随机登录邮箱，取代可猜测的默认值
+    ADMIN_EMAIL=$(generate_admin_email)
 
     # Create .env from .env.example with restricted permissions
     # umask 077 prevents other users from reading the file during creation
@@ -130,6 +141,7 @@ main() {
 	s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY/
 	s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$POSTGRES_PASSWORD/
 	s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=$ADMIN_PASSWORD/
+	s/^ADMIN_EMAIL=.*/ADMIN_EMAIL=$ADMIN_EMAIL/
 	SEDEOF
 
     if sed --version >/dev/null 2>&1; then
@@ -154,6 +166,10 @@ main() {
     echo "=========================================="
     echo "  Preparation Complete!"
     echo "=========================================="
+    echo ""
+    # 只回显登录邮箱（用户名，不是凭据）；密钥一律只落在 mode-600 的 .env 里，
+    # 不打印到 stdout，避免进入终端记录 / docker logs / CI 日志。
+    echo "Admin login username (email): ${ADMIN_EMAIL}"
     echo ""
     print_warning "Secure credentials have been saved to the mode-600 .env file."
     print_warning "Do not print, commit, or share that file."

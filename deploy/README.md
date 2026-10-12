@@ -79,6 +79,9 @@ docker compose -f docker-compose.local.yml up -d
 # View logs
 docker compose -f docker-compose.local.yml logs -f sub2api
 
+# If the admin email was auto-generated, the login username appears in the first startup log:
+docker compose -f docker-compose.local.yml logs sub2api | grep "Generated admin"
+
 # Access Web UI
 # http://localhost:8080
 ```
@@ -109,7 +112,7 @@ mkdir -p data postgres_data redis_data migration_artifacts
 # Start all services using local directory version
 docker compose -f docker-compose.local.yml up -d
 
-# View logs
+# View logs (admin email is printed there if auto-generated)
 docker compose -f docker-compose.local.yml logs -f sub2api
 
 # Access Web UI
@@ -133,10 +136,16 @@ When using Docker Compose with `AUTO_SETUP=true`:
    - Connects to PostgreSQL and Redis
    - Applies database migrations (SQL files in `backend/migrations/*.sql`) and records them in `schema_migrations`
    - Generates JWT secret (if not provided)
-   - Creates the admin account using the required `ADMIN_PASSWORD`
+   - Creates the admin account using the required `ADMIN_PASSWORD`; the login email is
+     auto-generated when `ADMIN_EMAIL` is empty (upstream v0.2.14)
    - Writes config.yaml
 
 2. No manual Setup Wizard needed - just configure `.env` and start
+
+3. If `ADMIN_EMAIL` is not set, check logs for the generated admin login username:
+   ```bash
+   docker compose logs sub2api | grep "Generated admin"
+   ```
 
 ### Startup and Database Recovery
 
@@ -249,8 +258,8 @@ docker compose down -v
 | `JWT_SECRET` | **Recommended** | *(auto-generated)* | JWT secret (fixed for persistent sessions) |
 | `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
 | `SERVER_PORT` | No | `8080` | Server port |
-| `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
-| `ADMIN_PASSWORD` | **Yes** | - | Initial admin password |
+| `ADMIN_EMAIL` | No | *(auto-generated)* | Admin login email; empty generates `admin-<hex>@sub2api.local` (never a guessable default) |
+| `ADMIN_PASSWORD` | **Yes** | - | Initial admin password (8-72 bytes); the fork's compose files refuse to start without it |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
@@ -260,7 +269,7 @@ docker compose down -v
 
 See `.env.example` for all available options.
 
-> **Note:** The `docker-deploy.sh` script automatically generates `ADMIN_PASSWORD`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` into the mode-600 `.env` file for you.
+> **Note:** The `docker-deploy.sh` script automatically generates `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` into the mode-600 `.env` file for you.
 
 ### Easy Migration (Local Directory Version)
 

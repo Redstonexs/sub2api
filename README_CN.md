@@ -219,8 +219,21 @@ JWT_SECRET=
 TOTP_ENCRYPTION_KEY=
 
 # 管理员账号（必需 — 粘贴生成的值，勿留空）
-ADMIN_EMAIL=admin@example.com
+# 请勿使用 admin@example.com 这类可被猜中的值；留空则由后端生成随机登录邮箱
+# （admin-<hex>@sub2api.local）并输出到首次启动日志——v0.2.14 的安全修复。
+ADMIN_EMAIL=
 ADMIN_PASSWORD=
+
+# 可选：自定义端口
+SERVER_PORT=8080
+# 可选：管理员账号
+# 留空则首次启动时自动生成随机邮箱（登录用户名）和密码，并输出到日志。
+# 请勿使用 admin@example.com 这类可被猜中的值，它们是暴力破解的目标。
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+
+# 可选：自定义端口
+SERVER_PORT=8080
 ```
 
 **生成安全密钥：**
@@ -285,7 +298,9 @@ Docker Compose 部署在首次运行时自动初始化（`AUTO_SETUP=true`）：
 
 端口默认只发布到回环地址（`127.0.0.1`）。远程访问请使用 SSH 隧道（`ssh -L 8080:localhost:8080 user@your-server`），或在服务启动后配置 TLS 反向代理。
 
-> **注意：** 管理员密码通过 `.env` 中的 `ADMIN_PASSWORD` 设置。如果是从旧版本升级，在 `.env` 中添加或修改 `ADMIN_PASSWORD` **不会重置**已有管理员账户的密码——该密码仅在首次运行时创建初始管理员时使用。如需修改已有管理员密码，请使用管理后台或密码重置流程。
+本 fork 的 compose 文件要求 `ADMIN_PASSWORD` 必填。`ADMIN_EMAIL` 留空时，后端会生成随机登录邮箱（`admin-<hex>@sub2api.local`）；自动部署脚本会把生成的登录邮箱与全部密钥一并写入权限为 600 的 `.env` 文件，终端不会打印任何密钥。
+
+> **注意：** 在 `.env` 中添加或修改 `ADMIN_PASSWORD` **不会重置**已有管理员账户的密码——该密码仅在首次运行时创建初始管理员时使用。如需修改已有管理员密码，请使用管理后台或密码重置流程。
 
 #### 升级
 

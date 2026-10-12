@@ -74,7 +74,10 @@ services:
       # =======================================================================
       # Admin Account (auto-created on first run)
       # =======================================================================
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
+      # 上游 v0.2.14：不再回退到可猜测的 admin@sub2api.local；留空则由后端生成
+      # 随机登录邮箱（admin-<hex>@sub2api.local）并输出到启动日志。
+      # fork 保留 ADMIN_PASSWORD 必填的严格要求，避免装出一个无人能登录的实例。
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
 
       # =======================================================================

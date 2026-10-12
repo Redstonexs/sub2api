@@ -174,6 +174,7 @@ func TestWebSearch_RejectsWhenInflightExceedsBalance(t *testing.T) {
 	gw := service.NewGatewayService(
 		nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil, nil, billing, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, service.NewModelPricingResolver(nil, billing), nil, nil, nil,
+		nil, // groupQoSService（fork 追加的形参，本用例不涉及组级 QoS）
 	)
 	h := &GatewayHandler{gatewayService: gw, billingCacheService: billingCache}
 

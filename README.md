@@ -219,8 +219,21 @@ JWT_SECRET=
 TOTP_ENCRYPTION_KEY=
 
 # Admin account (REQUIRED — paste a generated value; do not leave empty)
-ADMIN_EMAIL=admin@example.com
+# 不要使用 admin@example.com 这类可猜测值；留空则由后端生成随机登录邮箱
+# （admin-<hex>@sub2api.local）并输出到首次启动日志——v0.2.14 的安全修复。
+ADMIN_EMAIL=
 ADMIN_PASSWORD=
+
+# Optional: Custom port
+SERVER_PORT=8080
+# Optional: Admin account
+# Leave empty to auto-generate a random email (login username) and password, shown in logs on first startup.
+# Avoid guessable values such as admin@example.com: they are brute-force targets.
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+
+# Optional: Custom port
+SERVER_PORT=8080
 ```
 
 **Generate secure secrets:**
@@ -273,7 +286,9 @@ Docker Compose deployments auto-initialize on first run (`AUTO_SETUP=true`): dat
 
 The port is published on the loopback interface (`127.0.0.1`) by default. For remote access, use an SSH tunnel (`ssh -L 8080:localhost:8080 user@your-server`) or configure a TLS reverse proxy **after** the stack is up.
 
-> **Note:** The admin password is set via `ADMIN_PASSWORD` in `.env`. If you are upgrading from a previous version, adding or changing `ADMIN_PASSWORD` in `.env` **does not reset** an existing administrator account — the password is only used when creating the initial admin on first run. To change an existing admin password, use the admin dashboard or the password reset flow.
+`ADMIN_PASSWORD` is required by this fork's compose files. Leave `ADMIN_EMAIL` empty and the backend generates a random login username (`admin-<hex>@sub2api.local`); the prep script writes it — along with every secret — into the mode-600 `.env` file, and nothing is printed to the terminal.
+
+> **Note:** Adding or changing `ADMIN_PASSWORD` in `.env` **does not reset** an existing administrator account — it is only used when creating the initial admin on first run. To change an existing admin password, use the admin dashboard or the password reset flow.
 
 #### Upgrade
 

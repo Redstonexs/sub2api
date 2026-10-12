@@ -133,6 +133,7 @@ func TestGatewayOpenAICompatibleHandlersClaudeCodeOnlyFallback(t *testing.T) {
 					}}, nil, nil, nil, nil, nil, nil, nil,
 					service.NewSchedulerSnapshotService(schedulerCache, nil, nil, nil, nil),
 					nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+					nil, // groupQoSService（fork 追加的形参，本用例不涉及组级 QoS）
 				)
 				cfg := &config.Config{RunMode: config.RunModeSimple}
 				billingCacheService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)

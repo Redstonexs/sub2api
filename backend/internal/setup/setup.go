@@ -440,6 +440,10 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	return bootstrapAdminUser(ctx, db, cfg)
+}
+
+func bootstrapAdminUser(ctx context.Context, db *sql.DB, cfg *SetupConfig) (bool, string, error) {
 	var totalUsers int64
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(1) FROM users").Scan(&totalUsers); err != nil {
 		return false, "", err
@@ -451,6 +455,27 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 	decision := decideAdminBootstrap(totalUsers, adminUsers)
 	if !decision.shouldCreate {
 		return false, decision.reason, nil
+	}
+
+	// 上游 v0.2.14：空 ADMIN_EMAIL 生成随机登录邮箱（admin-<hex>@sub2api.local），
+	// 取代可猜测的固定默认值；显式给出时按登录邮箱格式校验。
+	// 密码为空时这里也会生成，但正常流程根本走不到：Install 与 AutoSetupFromEnv
+	// 都在产生副作用前就拒绝空 ADMIN_PASSWORD（fork 的严格要求，见
+	// TestInstallRejectsMissingAdminPasswordBeforeSideEffects /
+	// TestAutoSetupFromEnvRejectsMissingAdminPasswordBeforeSideEffects），
+	// 而 bootstrapAdminUser 的直连用例（TestBootstrapAdminUserCreates…）依赖这条
+	// 生成路径存在，故保留上游原样，不做「生成即报错」的改写。
+	emailGenerated, passwordGenerated, err := prepareAdminCredentials(&cfg.Admin)
+	if err != nil {
+		return false, "", err
+	}
+	if emailGenerated {
+		// 登录名必须让用户知道，回显邮箱不构成凭据泄露。
+		fmt.Printf("Generated admin email (login username): %s\n", cfg.Admin.Email)
+	}
+	if passwordGenerated {
+		fmt.Printf("Generated admin password (one-time): %s\n", cfg.Admin.Password)
+		fmt.Println("IMPORTANT: Save this password! It will not be shown again.")
 	}
 
 	admin := &service.User{
@@ -484,6 +509,47 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 		return false, "", err
 	}
 	return true, decision.reason, nil
+}
+
+// prepareAdminCredentials fills in missing admin credentials with random values
+// and rejects invalid user-supplied emails and weak passwords. It only runs
+// when an admin is actually about to be created, so existing deployments are
+// never affected. A random email keeps fresh installs off the well-known
+// default username that brute-force scanners target (issue #7850).
+func prepareAdminCredentials(admin *AdminConfig) (emailGenerated, passwordGenerated bool, err error) {
+	admin.Email = strings.TrimSpace(admin.Email)
+	if admin.Email == "" {
+		email, genErr := generateAdminEmail()
+		if genErr != nil {
+			return false, false, genErr
+		}
+		admin.Email = email
+		emailGenerated = true
+	} else if !validateEmail(admin.Email) {
+		return false, false, fmt.Errorf("invalid admin email: %q is not a valid login email", admin.Email)
+	}
+
+	if strings.TrimSpace(admin.Password) == "" {
+		password, genErr := generateSecret(16)
+		if genErr != nil {
+			return false, false, fmt.Errorf("failed to generate admin password: %w", genErr)
+		}
+		admin.Password = password
+		passwordGenerated = true
+	} else if validateErr := validatePassword(admin.Password); validateErr != nil {
+		return false, false, fmt.Errorf("invalid admin password: %w", validateErr)
+	}
+
+	return emailGenerated, passwordGenerated, nil
+}
+
+// generateAdminEmail returns a random, non-guessable admin login email.
+func generateAdminEmail() (string, error) {
+	suffix, err := generateSecret(6)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate admin email: %w", err)
+	}
+	return fmt.Sprintf("admin-%s@sub2api.local", suffix), nil
 }
 
 func writeConfigFile(cfg *SetupConfig) error {
@@ -609,7 +675,7 @@ func AutoSetupFromEnv() error {
 			EnableTLS: getEnvOrDefault("REDIS_ENABLE_TLS", "false") == "true",
 		},
 		Admin: AdminConfig{
-			Email:    getEnvOrDefault("ADMIN_EMAIL", "admin@sub2api.local"),
+			Email:    getEnvOrDefault("ADMIN_EMAIL", ""),
 			Password: getEnvOrDefault("ADMIN_PASSWORD", ""),
 		},
 		Server: ServerConfig{
