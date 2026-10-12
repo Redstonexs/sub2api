@@ -4799,10 +4799,10 @@ const copyAccountsGroupLabel = (g: AdminGroup) => {
   const count = g.account_count || 0;
   // 平台名缺失时回退到 platformLabel（上游 v0.2.15 的兜底）。
   const platform = t("admin.groups.platforms." + g.platform, platformLabel(g.platform));
-  // 计数文案沿用 fork 的 admin.groups.accountCountLabel：上游侧引用的
-  // admin.groups.accountsCount 在本 fork 的语言包里并不存在（同名槽位已被 fork 改名），
-  // 照抄会让界面直接渲染出 key 本身。
-  return `${g.name} - ${platform} (${t("admin.groups.accountCountLabel", { count })})`;
+  // 计数文案用 admin.groups.accountsCount：该键在两个语言包里都存在
+  // （见 admin/overview.ts 的 groups.accountsCount），且 ProxiesView.vue 已有两处
+  // 同名调用，属于本仓库既有约定。
+  return `${g.name} - ${platform} (${t("admin.groups.accountsCount", { count })})`;
 };
 
 // 复制账号的源分组选项（创建时）- 相同平台；composite 分组可汇总各平台账号
