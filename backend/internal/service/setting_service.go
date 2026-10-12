@@ -146,6 +146,8 @@ type SettingService struct {
 	antigravityOAuthEncryptionKeyConfiguredValue bool
 	antigravityOAuthCredentialStateSet           bool
 
+	// 上游 v0.2.10：保存成功后先行写入白名单快照，DB 刷新失败也不丢该结果。
+	cyberSessionBlockRuntimeMu    sync.Mutex
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group
 
