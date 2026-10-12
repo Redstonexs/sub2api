@@ -171,7 +171,7 @@ jobs:
           check-latest: false
           cache: false
       - name: Verify Go version
-        run: go version | grep -q 'go1.27.0'
+        run: go version | grep -q 'go1.27.2'
       # Restore-only: a cache written under a tag ref is scoped to that tag and
       # no later release could read it. The producer is release-cache.yml, which
       # warms this namespace nightly on the default branch. Restore-keys walk

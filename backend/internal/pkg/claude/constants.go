@@ -20,6 +20,9 @@ const (
 	BetaFastMode                 = "fast-mode-2026-02-01"
 	// Legacy structured output compatibility; forwarded only when explicitly requested.
 	BetaStructuredOutputs = "structured-outputs-2025-11-13"
+	// Tool-change compatibility tokens; never enabled without an explicit client request.
+	BetaMidConversationToolChanges = "mid-conversation-tool-changes-2026-07-01"
+	BetaInlineTools                = "inline-tools-2026-09-15"
 
 	// 新增（对齐官方 CLI 2.1.9x 以来的流量）
 	BetaPromptCachingScope          = "prompt-caching-scope-2026-01-05"
@@ -128,6 +131,10 @@ func ClientCapabilityBetas() []string {
 		// 上游 v0.2.9 为结构化输出在 mimic 路径开了窄口子；本 fork 统一走能力 beta 继承，
 		// 收录该 token 后同样的请求形态得到同样的结果，且管理端 drop set 依旧优先。
 		BetaStructuredOutputs,
+		// 上游 v0.2.15 把同一口子扩到 mid-conversation 工具变更与 inline tools：
+		// 这两个 token 也必须随 body 一起转发，否则头部与请求体语义不一致。
+		BetaMidConversationToolChanges,
+		BetaInlineTools,
 	}
 }
 

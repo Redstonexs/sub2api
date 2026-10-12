@@ -48,7 +48,8 @@ jobs:
           cache: false
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          # 与 backend/go.mod 保持同步（上游 v0.2.15 起为 go1.27.2）
+          go version | grep -q 'go1.27.2'
       # deps-hash / build-hash are evaluated here and frozen into the environment,
       # so GoReleaser's `go mod tidy -C backend` before-hook cannot change the key
       # between restore and save.

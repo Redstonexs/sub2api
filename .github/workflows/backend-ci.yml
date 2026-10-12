@@ -54,7 +54,7 @@ jobs:
           cache: false
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       - name: Restore Go caches
         uses: ./.github/actions/go-cache
         with:
@@ -157,7 +157,7 @@ jobs:
           cache: false
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       # Restore-only consumer of the `test` build cache: the 200-odd dependency
       # packages compile identically for both workloads, so lint gets that for
       # free without adding a second ~GB entry that would race `test` on save.
@@ -172,7 +172,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13
+          version: v2.14.0
           args: --timeout=30m
           working-directory: backend
 

@@ -32,7 +32,7 @@ jobs:
           cache: false
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       # Restore-only consumer of the `test` namespace -- govulncheck compiles the
       # same packages the test job does, so it rides along for free rather than
       # adding a fourth ~GB entry that races the others on save.

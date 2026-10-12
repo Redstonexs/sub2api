@@ -577,10 +577,11 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 			// mimic 路径跳过白名单透传；所有模型都必须携带完整 Claude Code beta 集合，
 			// 避免 Haiku 被识别为第三方客户端。
 			//
-			// 例外：客户端显式请求的纯能力 beta（1M 上下文、细粒度工具流式、结构化输出等）
-			// 需要继承，否则是静默降级，且 Beta 策略里针对这些 token 的 pass 规则永远不生效。
-			// 可继承清单见 claude.ClientCapabilityBetas。继承后仍会过 effectiveDropSet，
-			// 管理端策略依旧是最终决定方。
+			// 例外：客户端显式请求的纯能力 beta（1M 上下文、细粒度工具流式、结构化输出、
+			// mid-conversation 工具变更、inline tools 等）需要继承，否则是静默降级，且 Beta
+			// 策略里针对这些 token 的 pass 规则永远不生效。上游 v0.2.9/v0.2.15 为这些 token
+			// 逐项开的窄口子，在本 fork 统一由 claude.ClientCapabilityBetas 承载（见其清单）。
+			// 继承后仍会过 effectiveDropSet，管理端策略依旧是最终决定方。
 			required := append(claude.FullClaudeCodeMimicryBetas(), inheritedClientCapabilityBetas(clientBeta)...)
 			return mergeAnthropicBetaDropping(required, "", effectiveDropSet), true
 		}
