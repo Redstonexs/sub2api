@@ -57,22 +57,22 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
 		out.Tools = convertAnthropicToolsToResponses(req.Tools)
 	}
 
-	// Determine reasoning effort: only output_config.effort controls the
-	// level; thinking.type is ignored. Default follows Codex CLI / airgate's
-	// Anthropic bridge shape, which uses medium when unset.
-	// Anthropic levels map 1:1 to OpenAI: low→low, medium→medium, high→high, max→xhigh.
+	// Determine reasoning effort. Levels map 1:1 to OpenAI: low→low,
+	// medium→medium, high→high, max→xhigh; the default follows Codex CLI /
+	// airgate's Anthropic bridge shape, which uses medium when unset.
 	//
-	// 注意：thinking.budget_tokens 目前不参与 effort 推导（见
-	// TestAnthropicToResponses_NoOutputConfig / _ThinkingDisabled）。反向映射
-	// defaultThinkingBudget 已存在，若要开启正向推导可用 anthropicThinkingToEffort，
-	// 但那会改变既有计费档位，属于产品决策而非缺陷修复。
-	effort := "medium"
-	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {
-		effort = req.OutputConfig.Effort
-	}
+	// 注意：thinking.budget_tokens 不参与 effort 推导（见
+	// TestAnthropicToResponses_NoOutputConfig / _ThinkingEnabled），阈值反推
+	// 只保留在 AnthropicThinkingToEffort 里按需取用——把预算换算成 effort 会
+	// 改变既有计费档位，属于产品决策而非缺陷修复。但显式 thinking.type=disabled
+	// 是客户端的明确意图，必须优先于 output_config.effort 并产出 none，
+	// 否则就是静默降级。
+	effort := anthropicReasoningEffort(req)
 	out.Reasoning = &ResponsesReasoning{
-		Effort:  mapAnthropicEffortToResponses(effort),
-		Summary: "auto",
+		Effort: effort,
+	}
+	if effort != "none" {
+		out.Reasoning.Summary = "auto"
 	}
 	if responsesInputHasReasoning(input) {
 		out.Reasoning.Context = "all_turns"
@@ -470,8 +470,11 @@ func extractAnthropicTextFromBlocks(blocks []AnthropicContentBlock) string {
 }
 
 // AnthropicThinkingToEffort derives an Anthropic effort level from a thinking
-// block. It is NOT wired into AnthropicToResponses: that bridge deliberately
-// keys off output_config.effort only. Exposed so the effort-derivation policy
+// block's budget. It is NOT wired into AnthropicToResponses: that bridge keeps
+// its own resolver (anthropicReasoningEffort, which only honors an explicit
+// thinking disable and otherwise follows output_config.effort), because
+// turning budget_tokens into an effort tier would change existing billing
+// tiers — a product decision, not a bug fix. Exposed so the threshold policy
 // lives next to its inverse and can be enabled deliberately.
 //
 // Thresholds are the inverse of defaultThinkingBudget (responses_to_anthropic_request.go),
@@ -498,6 +501,22 @@ func AnthropicThinkingToEffort(thinking *AnthropicThinking) string {
 	}
 }
 
+// anthropicReasoningEffort resolves the Anthropic request preference for both
+// OpenAI bridges. Explicitly disabled thinking overrides output_config.effort;
+// otherwise the bridge keeps its medium default.
+func anthropicReasoningEffort(req *AnthropicRequest) string {
+	if req.Thinking != nil && req.Thinking.Type == "disabled" {
+		return "none"
+	}
+	effort := "medium"
+	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {
+		effort = req.OutputConfig.Effort
+	}
+	return mapAnthropicEffortToResponses(effort)
+}
+
+// mapAnthropicEffortToResponses maps shared effort levels directly and maps
+// Anthropic's max to OpenAI's xhigh.
 func mapAnthropicEffortToResponses(effort string) string {
 	if effort == "max" {
 		return "xhigh"
@@ -533,10 +552,38 @@ func boolPtr(v bool) *bool {
 
 // isReasoningModel reports whether model is a reasoning model that does not
 // support sampling parameters (temperature, top_p) via the Responses API.
-// All gpt-5.x models are reasoning-only; the Responses API returns
-// "Unsupported parameter: temperature" if these fields are present.
+// GPT-5 and every later generation are reasoning-only; the Responses API
+// returns "Unsupported parameter: temperature" if these fields are present.
+//
+// Keyed on the generation number instead of a "gpt-5" prefix: pinning the
+// prefix meant each new family (gpt-6-astra and whatever follows) silently
+// fell through to the sampling branch and failed upstream on every compat
+// request until someone edited this line.
 func isReasoningModel(model string) bool {
-	return strings.HasPrefix(model, "gpt-5") || openai.IsGPT6SolOrLunaModelSpelling(model)
+	major, ok := openAIModelGeneration(model)
+	return (ok && major >= 5) || openai.IsGPT6SolOrLunaModelSpelling(model)
+}
+
+// openAIModelGeneration extracts N from a "gpt-N[.M][-suffix]" model id.
+// ok is false for non-GPT ids and for GPT families that carry no numeric
+// generation (gpt-image-1, gpt-audio, ...).
+func openAIModelGeneration(model string) (int, bool) {
+	rest, ok := strings.CutPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-")
+	if !ok {
+		return 0, false
+	}
+	major, digits := 0, 0
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			break
+		}
+		major = major*10 + int(r-'0')
+		digits++
+	}
+	if digits == 0 {
+		return 0, false
+	}
+	return major, true
 }
 
 // normalizeToolParameters ensures the tool parameter schema is valid for

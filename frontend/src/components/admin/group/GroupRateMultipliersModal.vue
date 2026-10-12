@@ -491,7 +491,10 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside)
 })
 
+// onBeforeUnmount 而非 onUnmounted：与 AppHeader 已有的清理时机保持一致，
+// 卸载前就摘掉 document 监听，避免销毁过程中仍能触发回调。
 onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

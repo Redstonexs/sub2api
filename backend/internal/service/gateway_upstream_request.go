@@ -97,8 +97,8 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
 	//
 	// 顺序约束：
-	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径会忽略客户端 beta，
-	//      与原“OAuth + mimicClaudeCode 跳过白名单透传”行为对齐）
+	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径仅保留明确支持的
+	//      客户端兼容性 beta，其余使用固定列表）
 	//   2) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
 	//      strip body.context_management，与 Bedrock 路径对称）
 	//   3) CCH 签名（必须使用 strip 后的 body，否则 hash 与最终 body 不一致 →
@@ -538,12 +538,13 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 
 	if tokenType == "oauth" {
 		if mimicClaudeCode {
-			// mimic 路径跳过白名单透传，incomingBeta 始终为空；所有模型都必须
-			// 携带完整 Claude Code beta 集合，避免 Haiku 被识别为第三方客户端。
+			// mimic 路径跳过白名单透传；所有模型都必须携带完整 Claude Code beta 集合，
+			// 避免 Haiku 被识别为第三方客户端。
 			//
-			// 例外：客户端显式请求的纯能力 beta（1M 上下文、细粒度工具流式等）需要继承，
-			// 否则是静默降级，且 Beta 策略里针对这些 token 的 pass 规则永远不生效。
-			// 继承后仍会过 effectiveDropSet，管理端策略依旧是最终决定方。
+			// 例外：客户端显式请求的纯能力 beta（1M 上下文、细粒度工具流式、结构化输出等）
+			// 需要继承，否则是静默降级，且 Beta 策略里针对这些 token 的 pass 规则永远不生效。
+			// 可继承清单见 claude.ClientCapabilityBetas。继承后仍会过 effectiveDropSet，
+			// 管理端策略依旧是最终决定方。
 			required := append(claude.FullClaudeCodeMimicryBetas(), inheritedClientCapabilityBetas(clientBeta)...)
 			return mergeAnthropicBetaDropping(required, "", effectiveDropSet), true
 		}
@@ -570,7 +571,7 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 // 两条特殊规则：
 //
 //   - OAuth mimic：requiredBetas 为 FullClaudeCodeMimicryBetas + BetaTokenCounting；
-//     count_tokens 另外保留客户端 beta，而 messages mimic 会忽略客户端 beta。
+//     count_tokens 另外保留客户端 beta，而 messages mimic 仅保留明确支持的兼容性 token。
 //   - OAuth 透传 + 客户端未传 anthropic-beta：补齐 CountTokensBetaHeader
 //   - OAuth 透传 + 客户端传了：补齐 BetaTokenCounting（如果未含）
 //

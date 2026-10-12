@@ -1462,11 +1462,18 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Del("conversation_id")
 		req.Header.Del("session_id")
 
+		if compatMessagesBridge {
+			req.Header.Del("OpenAI-Beta")
+		} else {
+			// 剥掉透传进来的 responses=experimental 实验位，但保留其它 OpenAI-Beta 取值：
+			// 客户端协商的实验位不必原样带出站，而完全删头又会丢掉客户端真正需要的 beta。
+			stripOpenAILegacyResponsesBeta(req.Header)
+		}
 		// OAuth 一律出站到 chatgptCodexURL，因此 compat bridge 也必须带完整 Codex 身份。
-		// 历史实现在这里删掉 originator，使 enforceCodexIdentityHeadersWithUA 的
+		// 历史实现在 bridge 分支删掉 originator，使 enforceCodexIdentityHeadersWithUA 的
 		// `originator == ""` 卫语句提前返回（既无 version，UA 也未归一），再由
 		// openai_gateway_messages.go 事后补回——只有那一个调用方补，其余调用方遇到
-		// bridge 形态的 body 就会漏出不完整身份。改为不删，让收口在此处直接生效。
+		// bridge 形态的 body 就会漏出不完整身份。改为两个分支都设置，让收口在此处直接生效。
 		req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		apiKeyID := getAPIKeyIDFromContext(c)
 		// 账号 namespace（上游 v0.1.18x）：先按选中账号隔离客户端自带的身份头，

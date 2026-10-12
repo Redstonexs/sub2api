@@ -18,6 +18,8 @@ const (
 	BetaTokenCounting            = "token-counting-2024-11-01"
 	BetaContext1M                = "context-1m-2025-08-07"
 	BetaFastMode                 = "fast-mode-2026-02-01"
+	// Legacy structured output compatibility; forwarded only when explicitly requested.
+	BetaStructuredOutputs = "structured-outputs-2025-11-13"
 
 	// 新增（对齐官方 CLI 2.1.9x 以来的流量）
 	BetaPromptCachingScope          = "prompt-caching-scope-2026-01-05"
@@ -110,9 +112,9 @@ func FullClaudeCodeMimicryBetas() []string {
 // ClientCapabilityBetas 是 OAuth mimic 路径允许从客户端 anthropic-beta 继承的 token。
 //
 // mimic 路径默认整份丢弃客户端 beta（未知 token 会让上游判第三方），但纯能力型 beta 被
-// 丢弃属于静默降级：客户端显式要 1M 上下文或细粒度工具流式却拿不到，且管理端 Beta 策略
-// 里 context-1m 的 pass 规则（见 DefaultBetaPolicySettings）在 mimic 路径上永远不会生效，
-// 因为该 token 根本没进入最终 header。
+// 丢弃属于静默降级：客户端显式要 1M 上下文、细粒度工具流式或结构化输出却拿不到，且管理端
+// Beta 策略里针对这些 token 的 pass 规则（见 DefaultBetaPolicySettings）在 mimic 路径上
+// 永远不会生效，因为该 token 根本没进入最终 header。
 //
 // 这里只放行真实 Claude Code CLI 自身也会发送、且不参与客户端身份判定的 token；
 // 是否真正下发仍由 Beta 策略的 drop set 决定，因此放行不等于绕过管理端策略。
@@ -123,6 +125,9 @@ func ClientCapabilityBetas() []string {
 		BetaTokenCounting,
 		BetaRedactThinking,
 		BetaFastMode,
+		// 上游 v0.2.9 为结构化输出在 mimic 路径开了窄口子；本 fork 统一走能力 beta 继承，
+		// 收录该 token 后同样的请求形态得到同样的结果，且管理端 drop set 依旧优先。
+		BetaStructuredOutputs,
 	}
 }
 
