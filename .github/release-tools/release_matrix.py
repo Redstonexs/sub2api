@@ -149,6 +149,11 @@ def contexts(args):
             with archive.extractfile(members[0]) as source, (dest / 'sub2api').open('wb') as output:
                 shutil.copyfileobj(source, output)
         (dest / 'sub2api').chmod(0o755)
+        # Match GoReleaser's TARGETPLATFORM layout while retaining the root
+        # binary for older application tags whose Dockerfile uses COPY sub2api.
+        platform = dest / target['goos'] / target['goarch']
+        platform.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dest / 'sub2api', platform / 'sub2api')
         shutil.copy2('Dockerfile.goreleaser', dest / 'Dockerfile')
         (dest / 'deploy').mkdir(exist_ok=True)
         shutil.copy2('deploy/docker-entrypoint.sh', dest / 'deploy/docker-entrypoint.sh')

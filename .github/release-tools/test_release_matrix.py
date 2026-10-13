@@ -5,7 +5,9 @@ import io
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
+from string import Template
 import subprocess
 import tarfile
 import tempfile
@@ -39,11 +41,12 @@ class ReleaseMatrixTest(unittest.TestCase):
             name = release.archive_name('9.8.7', target)
             archive = directory / name
             if target['goos'] == 'linux':
+                binary = f"fixture-{target['goarch']}".encode()
                 with tarfile.open(archive, 'w:gz') as out:
                     info = tarfile.TarInfo('sub2api')
-                    info.size = 7
+                    info.size = len(binary)
                     info.mode = 0o755
-                    out.addfile(info, io.BytesIO(b'fixture'))
+                    out.addfile(info, io.BytesIO(binary))
             else:
                 archive.write_bytes(b'fixture archive')
             metadata = {'version': '9.8.7', 'sha': 'a' * 40, 'target': target,
@@ -108,18 +111,39 @@ class ReleaseMatrixTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             release.verify(args)
 
-    def test_linux_context_preserves_binary_executable_mode(self):
-        args = self.fixture_artifacts()
-        Path('Dockerfile.goreleaser').write_text('FROM scratch\nCOPY sub2api /sub2api\n')
+    def assert_linux_contexts_match_dockerfile(self, simple):
+        args = self.fixture_artifacts(simple)
+        shutil.copyfile(ROOT / 'Dockerfile.goreleaser', 'Dockerfile.goreleaser')
         Path('deploy').mkdir()
-        Path('deploy/docker-entrypoint.sh').write_text('#!/bin/sh\nexec /app/sub2api\n')
+        shutil.copyfile(ROOT / 'deploy/docker-entrypoint.sh', 'deploy/docker-entrypoint.sh')
         Path('backend/resources').mkdir()
         Path('backend/resources/data').write_text('fixture')
         release.contexts(args)
-        for arch in ('amd64', 'arm64'):
-            binary = Path('contexts') / arch / 'sub2api'
-            self.assertEqual(binary.read_bytes(), b'fixture')
-            self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+        for arch in ('amd64',) if simple else ('amd64', 'arm64'):
+            context = Path(args.output) / arch
+            for line in (context / 'Dockerfile').read_text().splitlines():
+                if not line.startswith('COPY '):
+                    continue
+                words = shlex.split(line)
+                if any(word.startswith('--from=') for word in words):
+                    continue
+                for source in (word for word in words[1:-1] if not word.startswith('--')):
+                    path = context / Template(source).substitute(TARGETPLATFORM=f'linux/{arch}')
+                    self.assertTrue(path.exists(), f'{path} required by {line}')
+                    if words[-1] == '/app/sub2api':
+                        self.assertEqual(path.read_bytes(), f'fixture-{arch}'.encode())
+                        self.assertEqual(path.stat().st_mode & 0o777, 0o755)
+            # Older application tags use COPY sub2api from the context root.
+            self.assertEqual((context / 'sub2api').read_bytes(), f'fixture-{arch}'.encode())
+            self.assertEqual((context / 'sub2api').stat().st_mode & 0o777, 0o755)
+        if simple:
+            self.assertFalse((Path(args.output) / 'arm64').exists())
+
+    def test_linux_contexts_match_real_dockerfile_and_preserve_executable_mode(self):
+        self.assert_linux_contexts_match_dockerfile(False)
+
+    def test_simple_context_matches_real_dockerfile(self):
+        self.assert_linux_contexts_match_dockerfile(True)
 
     def test_plan_requires_a_tag_for_publication(self):
         args = argparse.Namespace(ref='main', dry_run=False, simple=False)
@@ -219,6 +243,11 @@ fi
         self.assertNotIn('imagetools', log)
         self.assertNotIn('skip/sub2api', log)
         self.assertIn('ghcr.io/exampleowner/sub2api', log)
+        for line in log.splitlines():
+            args = shlex.split(line)
+            self.assertIn('--build-arg', args)
+            self.assertEqual(args[args.index('--build-arg') + 1], 'VERSION=9.8.7')
+            self.assertIn('--provenance=false', args)
 
 
     def test_published_full_and_simple_image_tags(self):
@@ -238,6 +267,12 @@ fi
                 log = log_path.read_text()
                 self.assertIn('--push', log)
                 self.assertEqual(log.count('buildx build'), 1 if simple else 2)
+                for line in log.splitlines():
+                    args = shlex.split(line)
+                    if args[:2] == ['buildx', 'build']:
+                        self.assertIn('--build-arg', args)
+                        self.assertEqual(args[args.index('--build-arg') + 1], 'VERSION=9.8.7')
+                        self.assertIn('--provenance=false', args)
                 if simple:
                     self.assertNotIn('fixturehub', log)
                     self.assertNotIn('imagetools', log)

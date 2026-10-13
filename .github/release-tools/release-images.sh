@@ -10,6 +10,7 @@ arches=(amd64 arm64)
 if [[ ${SIMPLE_RELEASE:-false} == true ]]; then arches=(amd64); fi
 for arch in "${arches[@]}"; do
   args=(--platform "linux/$arch" --file ".release-context/$arch/Dockerfile"
+    --build-arg "VERSION=$RELEASE_VERSION" --provenance=false
     --label "org.opencontainers.image.version=$RELEASE_VERSION"
     --label "org.opencontainers.image.revision=$RELEASE_SHA"
     --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY")
